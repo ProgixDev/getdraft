@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Globe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: transparent;
+        }
+        #globe {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="globe"></div>
+    
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three-globe@2.45.0/dist/three-globe.min.js"></script>
+    
+    <script>
+        const Globe = new ThreeGlobe()
+            .globeImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg')
+            .bumpImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png')
+            .backgroundImageUrl('//unpkg.com/three-globe@2.31.0/example/img/night-sky.png');
+
+        // Setup renderer
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('globe').appendChild(renderer.domElement);
+
+        // Setup scene
+        const scene = new THREE.Scene();
+        scene.add(Globe);
+        scene.add(new THREE.AmbientLight(0xcccccc, 0.8));
+        scene.add(new THREE.DirectionalLight(0xffffff, 0.6));
+
+        // Setup camera
+        const camera = new THREE.PerspectiveCamera();
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        camera.position.z = 300;
+
+        // Auto rotation
+        let autoRotate = true;
+        let targetLat = 0;
+        let targetLng = 0;
+        let selectedMarker = null;
+
+        // Handle messages from React Native
+        window.addEventListener('message', (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'selectLocation') {
+                autoRotate = false;
+                targetLat = data.lat;
+                targetLng = data.lng;
+                
+                // Remove old marker
+                if (selectedMarker) {
+                    Globe.htmlElementsData([]);
+                }
+                
+                // Add marker
+                Globe.htmlElementsData([{
+                    lat: data.lat,
+                    lng: data.lng,
+                    size: 20,
+                    color: '#FF3B30'
+                }])
+                .htmlElement(d => {
+                    const el = document.createElement('div');
+                    el.innerHTML = '📍';
+                    el.style.fontSize = '32px';
+                    el.style.cursor = 'pointer';
+                    return el;
+                });
+            }
+        });
+
+        // Animation loop
+        function animate() {
+            if (autoRotate) {
+                Globe.rotation.y += 0.002;
+            } else {
+                // Rotate to selected location
+                const targetRotY = -targetLng * Math.PI / 180;
+                const currentRotY = Globe.rotation.y;
+                const diff = targetRotY - currentRotY;
+                Globe.rotation.y += diff * 0.05;
+                
+                // Tilt to show latitude
+                const targetRotX = (targetLat - 10) * Math.PI / 180;
+                const currentRotX = Globe.rotation.x;
+                const diffX = targetRotX - currentRotX;
+                Globe.rotation.x += diffX * 0.05;
+            }
+            
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
