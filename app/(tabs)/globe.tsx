@@ -204,7 +204,7 @@ export default function GlobeTab() {
         )}
       </View>
 
-      {/* Instruction hint */}
+      {/* Instruction hint — centered above bottom panel */}
       {!showStats && (
         <View style={styles.hint}>
           <Ionicons name="hand-left-outline" size={14} color="rgba(255,255,255,0.4)" />
@@ -268,15 +268,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 14,
-    paddingVertical: 10,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.06)',
+    alignSelf: 'center',
   },
   toggleText: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
     color: 'rgba(255, 255, 255, 0.7)',
   },
@@ -319,15 +321,13 @@ const styles = StyleSheet.create({
   },
   hint: {
     position: 'absolute',
-    bottom: 100,
-    alignSelf: 'center',
+    bottom: 140,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
   },
   hintText: {
     fontSize: 12,
