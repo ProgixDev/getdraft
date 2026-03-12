@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,7 +6,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import { Video, AVPlaybackStatus } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { brand, neutral, semantic } from '@/config/colors';
+import { brand, neutral, semantic, theme } from '@/config/colors';
 import { AthleteProfile } from '@/constants/discoverData';
 
 type MediaPhase = 'video' | 'image';
@@ -44,7 +44,6 @@ export function AthleteCard({
 }: AthleteCardProps) {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
-  const videoRef = useRef<Video>(null);
   const active = isActive ?? isTop;
 
   const hasVideo = athlete.videos.length > 0;
@@ -57,18 +56,35 @@ export function AthleteCard({
   );
   const [videoReady, setVideoReady] = useState(false);
 
+  const videoSource = hasVideo
+    ? typeof firstVideo === 'string' ? firstVideo : firstVideo?.uri ?? ''
+    : '';
+
+  const player = useVideoPlayer(videoSource, (p) => {
+    p.loop = false;
+    p.muted = true;
+  });
+
   useEffect(() => {
     setVideoReady(false);
     setPhase(active && hasVideo ? 'video' : 'image');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (active && hasVideo && player) {
+      player.play();
+    }
   }, [athlete.id, active, hasVideo]);
 
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    if (status.didJustFinish && !status.isLooping && hasPhoto) {
-      setPhase('image');
-    }
-  };
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('statusChange', (e) => {
+      if (e.status === 'readyToPlay') {
+        setVideoReady(true);
+      }
+    });
+    const endSub = player.addListener('playToEnd', () => {
+      if (hasPhoto) setPhase('image');
+    });
+    return () => { sub.remove(); endSub.remove(); };
+  }, [player, hasPhoto]);
 
   const swipeThreshold = Math.min(140, Math.max(90, cardWidth * 0.28));
   const overlayDivisor = Math.max(80, cardWidth * 0.25);
@@ -118,24 +134,17 @@ export function AthleteCard({
     opacity: Math.min(-translateX.value / overlayDivisor, 1) * 0.9,
   }));
 
-  const getVideoSource = () =>
-    typeof firstVideo === 'string' ? { uri: firstVideo } : firstVideo;
   const getImageSource = () =>
     typeof firstPhoto === 'string' ? { uri: firstPhoto } : firstPhoto;
 
   const renderMedia = () => {
-    if (active && phase === 'video' && hasVideo) {
+    if (active && phase === 'video' && hasVideo && player) {
       return (
-        <Video
-          ref={videoRef}
-          source={getVideoSource()}
+        <VideoView
+          player={player}
           style={styles.media}
-          resizeMode="cover"
-          shouldPlay
-          isLooping={false}
-          isMuted
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          onLoad={() => setVideoReady(true)}
+          contentFit="cover"
+          nativeControls={false}
         />
       );
     }
@@ -152,7 +161,7 @@ export function AthleteCard({
 
     return (
       <View style={styles.placeholderImage}>
-        <Ionicons name="person" size={72} color={neutral.gray400} />
+        <Ionicons name="person" size={72} color={theme.textMuted} />
       </View>
     );
   };
@@ -174,7 +183,7 @@ export function AthleteCard({
           </View>
 
           <Animated.View style={[styles.overlay, styles.likeOverlay, likeOverlayStyle]}>
-            <Text style={[styles.overlayText, { color: semantic.success }]}>LIKE</Text>
+            <Text style={[styles.overlayText, { color: semantic.success }]}>DRAFT</Text>
           </Animated.View>
           <Animated.View style={[styles.overlay, styles.nopeOverlay, nopeOverlayStyle]}>
             <Text style={[styles.overlayText, { color: semantic.error }]}>PASS</Text>
@@ -207,7 +216,7 @@ export function AthleteCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: brand.white,
+    backgroundColor: theme.cardBg,
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -218,7 +227,7 @@ const styles = StyleSheet.create({
   },
   cardImage: {
     flex: 1,
-    backgroundColor: neutral.gray200,
+    backgroundColor: theme.surface,
   },
   media: {
     ...StyleSheet.absoluteFillObject,

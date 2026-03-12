@@ -7,7 +7,7 @@
  */
 
 // Screens
-export { SplashScreen } from './SplashScreen';
+export { SplashExperience as SplashScreen } from './splash';
 
 // Welcome / Onboarding
 export { WelcomeScreen, PaginationDots } from './welcome';

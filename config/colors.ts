@@ -96,11 +96,53 @@ export const Colors = {
     dark: darkTheme,
 } as const;
 
+// ─── Active UI Theme (dark-dominant, matches GetDraft logo) ────────
+// Every screen should reference `theme` for UI colors.
+// `brand`, `semantic`, and `neutral` remain available as raw palettes.
+export const theme = {
+    // Backgrounds
+    bg: '#0A0A0A',
+    bgSecondary: '#111111',
+    surface: '#1A1A1A',
+    surfaceSecondary: '#222222',
+    surfaceElevated: '#252525',
+    // Text
+    text: '#FFFFFF',
+    textSecondary: '#A0A0A0',
+    textMuted: '#666666',
+    // Borders
+    border: '#2A2A2A',
+    borderLight: '#333333',
+    // Inputs
+    inputBg: '#1A1A1A',
+    inputBorder: '#333333',
+    inputText: '#FFFFFF',
+    inputPlaceholder: '#666666',
+    // Header & tab bar
+    headerBg: '#111111',
+    tabBarBg: '#0A0A0A',
+    tabBarBorder: '#1A1A1A',
+    // Interactive
+    accent: '#FFFFFF',
+    accentText: '#000000',
+    // Cards
+    cardBg: '#1A1A1A',
+    cardBorder: '#2A2A2A',
+    // Pressed / hover
+    pressed: 'rgba(255,255,255,0.06)',
+    // Overlay
+    overlay: 'rgba(0, 0, 0, 0.7)',
+    // Badge
+    badgeBg: '#2A2A2A',
+    badgeText: '#A0A0A0',
+} as const;
+
 // Export all color groups
 export default {
     brand,
     semantic,
     neutral,
+    theme,
     light: lightTheme,
     dark: darkTheme,
 };

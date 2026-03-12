@@ -2,10 +2,12 @@ import { configureStore } from '@reduxjs/toolkit';
 
 // Import slices here
 import authReducer from './slices/authSlice';
+import discoverPreferencesReducer from './slices/discoverPreferencesSlice';
 
 export const store = configureStore({
     reducer: {
         auth: authReducer,
+        discoverPreferences: discoverPreferencesReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

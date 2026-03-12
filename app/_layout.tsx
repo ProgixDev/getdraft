@@ -5,14 +5,18 @@ import { StatusBar } from 'expo-status-bar';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
-import 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { store } from '@/store';
-import { RootState } from '@/store';
+import { theme } from '@/config/colors';
+import { store, RootState } from '@/store';
 import { SplashScreen, WelcomeScreen, AuthScreen } from '@/components';
 import { loadAuth, saveAuth, clearAuth } from '@/store/authStorage';
-import { login, logout } from '@/store/slices/authSlice';
+import { login } from '@/store/slices/authSlice';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -27,6 +31,8 @@ function RootLayoutContent() {
   const user = useSelector((state: RootState) => state.auth.user);
 
   const [appState, setAppState] = useState<AppState>('loading');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionOpacity = useSharedValue(1);
 
   // Restore auth on app start
   useEffect(() => {
@@ -56,7 +62,15 @@ function RootLayoutContent() {
   }, [appState, isAuthenticated]);
 
   const handleSplashComplete = useCallback(() => {
+    transitionOpacity.value = 1;
+    setIsTransitioning(true);
     setAppState('welcome');
+    setTimeout(() => {
+      transitionOpacity.value = withTiming(0, { duration: 800 });
+    }, 50);
+    setTimeout(() => {
+      setIsTransitioning(false);
+    }, 900);
   }, []);
 
   const handleWelcomeComplete = useCallback(() => {
@@ -67,11 +81,15 @@ function RootLayoutContent() {
     setAppState('app');
   }, []);
 
+  const transitionStyle = useAnimatedStyle(() => ({
+    opacity: transitionOpacity.value,
+  }));
+
   // Show loading while checking persisted auth
   if (appState === 'loading') {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#121212" />
+        <ActivityIndicator size="large" color="#FFFFFF" />
       </View>
     );
   }
@@ -91,10 +109,16 @@ function RootLayoutContent() {
   // Show welcome/onboarding screens
   if (appState === 'welcome') {
     return (
-      <>
-        <StatusBar style="dark" />
+      <View style={{ flex: 1 }}>
+        <StatusBar style="light" />
         <WelcomeScreen onComplete={handleWelcomeComplete} />
-      </>
+        {isTransitioning && (
+          <Animated.View
+            style={[styles.transitionOverlay, transitionStyle]}
+            pointerEvents="none"
+          />
+        )}
+      </View>
     );
   }
 
@@ -110,12 +134,20 @@ function RootLayoutContent() {
 
   // Main app
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DarkTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="preferences" options={{ headerShown: false }} />
+        <Stack.Screen name="preferences-country" options={{ headerShown: false }} />
+        <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="subscription" options={{ headerShown: false }} />
+        <Stack.Screen name="help-center" options={{ headerShown: false }} />
+        <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
+        <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }
@@ -137,6 +169,10 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0A0A0A',
+  },
+  transitionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0A0A0A',
   },
 });

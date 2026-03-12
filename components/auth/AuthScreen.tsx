@@ -97,7 +97,7 @@ const roleOptions: RoleOption[] = [
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     const dispatch = useAppDispatch();
-    
+
     // Fonts
     const [fontsLoaded] = useFonts({
         Poppins_400Regular,
@@ -299,7 +299,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     keyboardShouldPersistTaps="handled"
                 >
                     {/* Header with Logo */}
-                    <Animated.View 
+                    <Animated.View
                         entering={FadeIn.duration(800)}
                         style={styles.header}
                     >
@@ -314,7 +314,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     </Animated.View>
 
                     {/* Main Content Card */}
-                    <Animated.View 
+                    <Animated.View
                         entering={FadeInDown.duration(800).delay(200)}
                         style={styles.card}
                     >
@@ -432,6 +432,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                                             Forgot password?
                                         </Text>
                                     </Pressable>
+
+
                                 </>
                             )}
 
@@ -630,6 +632,26 @@ const styles = StyleSheet.create({
         color: brand.primary,
         fontSize: 13,
         fontFamily: 'Poppins_500Medium',
+    },
+    demoCard: {
+        marginTop: 2,
+        borderRadius: 12,
+        padding: 12,
+        backgroundColor: neutral.gray50,
+        borderWidth: 1,
+        borderColor: neutral.gray200,
+    },
+    demoTitle: {
+        fontSize: 12,
+        fontFamily: 'Poppins_600SemiBold',
+        color: brand.primary,
+        marginBottom: 4,
+    },
+    demoLine: {
+        fontSize: 12,
+        fontFamily: 'Poppins_400Regular',
+        color: neutral.gray600,
+        lineHeight: 18,
     },
     submitButton: {
         height: 54,

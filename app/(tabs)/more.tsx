@@ -1,25 +1,35 @@
 import React from 'react';
-import { View, StyleSheet, Text, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, Text, Pressable, Alert, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { useRouter } from 'expo-router';
 import {
   useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
 } from '@expo-google-fonts/poppins';
-import { brand, neutral, semantic } from '@/config/colors';
+import { brand, semantic, theme } from '@/config/colors';
 import { logout } from '@/store/slices/authSlice';
+import { RootState } from '@/store';
+import { mockAthletes, MediaSource } from '@/constants/discoverData';
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
+  const router = useRouter();
+  const user = useSelector((state: RootState) => state.auth.user);
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
     Poppins_600SemiBold,
   });
+
+  const athleteProfile = user?.role === 'athlete'
+    ? mockAthletes.find((a) => a.email === user?.email)
+    : null;
+  const avatarPhoto: MediaSource | null = athleteProfile?.photos?.[0] ?? null;
 
   const handleLogout = () => {
     Alert.alert(
@@ -34,10 +44,23 @@ export default function MoreScreen() {
 
   if (!fontsLoaded) return null;
 
+  const roleLabel =
+    user?.role === 'recruiter'
+      ? 'Agent / Recruiter'
+      : user?.role === 'coach'
+        ? 'Coach'
+        : user?.role === 'athlete' && athleteProfile
+          ? `${athleteProfile.position} · ${athleteProfile.level}`
+          : user?.role === 'parent'
+            ? 'Parent'
+            : 'User';
+
   const menuItems = [
-    { icon: 'grid-outline', label: 'Dashboard', onPress: () => {} },
-    { icon: 'help-circle-outline', label: 'Help & FAQ', onPress: () => {} },
-    { icon: 'information-circle-outline', label: 'About', onPress: () => {} },
+    { icon: 'settings-outline', label: 'Settings', onPress: () => router.push('/settings') },
+    { icon: 'diamond-outline', label: 'My Subscription', onPress: () => router.push('/subscription') },
+    { icon: 'help-circle-outline', label: 'Help Center', onPress: () => router.push('/help-center') },
+    { icon: 'people-outline', label: 'Invite Friends', onPress: () => router.push('/invite-friends') },
+    { icon: 'information-circle-outline', label: 'About GetDraft', onPress: () => router.push('/about') },
   ];
 
   return (
@@ -45,27 +68,57 @@ export default function MoreScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>More</Text>
       </View>
-      <View style={styles.content}>
-        {menuItems.map((item) => (
+
+      {user && (
+        <View style={styles.userCard}>
+          <View style={styles.userAvatar}>
+            {avatarPhoto ? (
+              <Image
+                source={typeof avatarPhoto === 'string' ? { uri: avatarPhoto } : avatarPhoto}
+                style={styles.userAvatarImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Ionicons name="person" size={28} color={brand.white} />
+            )}
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>{user.name ?? 'User'}</Text>
+            <Text style={styles.userEmail}>{user.email}</Text>
+            <View style={styles.userRoleBadge}>
+              <Text style={styles.userRoleText}>{roleLabel}</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+        </View>
+      )}
+
+      <View style={styles.menuCard}>
+        {menuItems.map((item, idx) => (
           <Pressable
             key={item.label}
-            style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}
+            style={({ pressed }) => [
+              styles.menuItem,
+              idx === menuItems.length - 1 && styles.menuItemLast,
+              pressed && styles.menuItemPressed,
+            ]}
             onPress={item.onPress}
           >
-            <Ionicons name={item.icon as any} size={24} color={brand.primary} />
+            <Ionicons name={item.icon as any} size={22} color={theme.text} />
             <Text style={styles.menuLabel}>{item.label}</Text>
-            <Ionicons name="chevron-forward" size={20} color={neutral.gray400} />
+            <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
           </Pressable>
         ))}
       </View>
-      <View style={[styles.content, styles.logoutSection]}>
+
+      <View style={styles.logoutCard}>
         <Pressable
-          style={({ pressed }) => [styles.menuItem, styles.logoutItem, pressed && styles.menuItemPressed]}
+          style={({ pressed }) => [styles.menuItem, styles.menuItemLast, pressed && styles.menuItemPressed]}
           onPress={handleLogout}
         >
-          <Ionicons name="log-out-outline" size={24} color={semantic.error} />
+          <Ionicons name="log-out-outline" size={22} color={semantic.error} />
           <Text style={styles.logoutLabel}>Log out</Text>
-          <Ionicons name="chevron-forward" size={20} color={neutral.gray400} />
+          <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
         </Pressable>
       </View>
     </View>
@@ -75,53 +128,108 @@ export default function MoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: neutral.gray50,
+    backgroundColor: theme.bg,
   },
   header: {
     paddingHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: brand.white,
+    backgroundColor: theme.headerBg,
     borderBottomWidth: 1,
-    borderBottomColor: neutral.gray200,
+    borderBottomColor: theme.border,
   },
   title: {
     fontSize: 24,
     fontFamily: 'Poppins_600SemiBold',
-    color: brand.primary,
+    color: theme.text,
   },
-  content: {
-    padding: 24,
-    backgroundColor: brand.white,
+  userCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: theme.cardBg,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 16,
+  },
+  userAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: brand.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  userAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  userInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  userName: {
+    fontSize: 17,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.text,
+  },
+  userEmail: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: theme.textSecondary,
+  },
+  userRoleBadge: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: theme.badgeBg,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  userRoleText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.badgeText,
+  },
+  menuCard: {
+    backgroundColor: theme.cardBg,
     marginTop: 16,
     marginHorizontal: 16,
     borderRadius: 16,
+    overflow: 'hidden',
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 15,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
-    borderBottomColor: neutral.gray200,
-    gap: 16,
+    borderBottomColor: theme.border,
+    gap: 14,
+  },
+  menuItemLast: {
+    borderBottomWidth: 0,
   },
   menuItemPressed: {
-    opacity: 0.7,
+    backgroundColor: theme.pressed,
   },
   menuLabel: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Poppins_500Medium',
-    color: brand.primary,
+    color: theme.text,
   },
-  logoutSection: {
+  logoutCard: {
+    backgroundColor: theme.cardBg,
     marginTop: 16,
-  },
-  logoutItem: {
-    borderBottomWidth: 0,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   logoutLabel: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Poppins_500Medium',
     color: semantic.error,
   },

@@ -1,0 +1,212 @@
+/**
+ * Major cities organized by ISO country code.
+ * Covers all countries present in countryData.ts.
+ * Empty string entry ('Any City') is handled at the UI level.
+ */
+
+export const CITIES_BY_COUNTRY: Record<string, string[]> = {
+  US: [
+    'New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix',
+    'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'San Jose',
+    'Austin', 'Jacksonville', 'Fort Worth', 'Columbus', 'Charlotte',
+    'Indianapolis', 'San Francisco', 'Seattle', 'Denver', 'Nashville',
+    'Oklahoma City', 'Washington D.C.', 'Las Vegas', 'Louisville', 'Memphis',
+    'Baltimore', 'Milwaukee', 'Albuquerque', 'Tucson', 'Atlanta',
+    'Miami', 'Minneapolis', 'Tampa', 'New Orleans', 'Portland',
+    'Pittsburgh', 'Sacramento', 'Kansas City', 'Cleveland', 'Cincinnati',
+    'Raleigh', 'Omaha', 'Virginia Beach', 'Boston', 'Detroit',
+    'Salt Lake City', 'Honolulu', 'Buffalo', 'Boise', 'Richmond',
+  ],
+  CA: [
+    'Toronto', 'Montreal', 'Vancouver', 'Calgary', 'Edmonton',
+    'Ottawa', 'Winnipeg', 'Quebec City', 'Hamilton', 'Kitchener',
+    'London', 'Victoria', 'Halifax', 'Regina', 'Saskatoon',
+    'Windsor', 'Oshawa', 'Barrie', 'Sherbrooke', 'Kelowna',
+    'Abbotsford', 'Sudbury', 'Kingston', 'Moncton', 'Fredericton',
+  ],
+  MX: [
+    'Mexico City', 'Guadalajara', 'Monterrey', 'Puebla', 'Tijuana',
+    'León', 'Juárez', 'Torreón', 'San Luis Potosí', 'Mérida',
+    'Querétaro', 'Acapulco', 'Cancún', 'Veracruz', 'Chihuahua',
+    'Hermosillo', 'Saltillo', 'Mexicali', 'Aguascalientes', 'Culiacán',
+  ],
+  BR: [
+    'São Paulo', 'Rio de Janeiro', 'Brasília', 'Salvador', 'Fortaleza',
+    'Belo Horizonte', 'Manaus', 'Curitiba', 'Recife', 'Porto Alegre',
+    'Goiânia', 'Belém', 'Florianópolis', 'Maceió', 'Natal',
+    'Campo Grande', 'Teresina', 'São Luís', 'Aracaju', 'João Pessoa',
+  ],
+  AR: [
+    'Buenos Aires', 'Córdoba', 'Rosario', 'Mendoza', 'La Plata',
+    'Tucumán', 'Mar del Plata', 'Salta', 'Santa Fe', 'San Juan',
+    'Resistencia', 'Santiago del Estero', 'Neuquén', 'Corrientes', 'Bahía Blanca',
+    'Posadas', 'Paraná', 'Formosa', 'San Luis', 'Jujuy',
+  ],
+  GB: [
+    'London', 'Birmingham', 'Manchester', 'Glasgow', 'Liverpool',
+    'Edinburgh', 'Leeds', 'Sheffield', 'Bristol', 'Cardiff',
+    'Leicester', 'Belfast', 'Coventry', 'Nottingham', 'Bradford',
+    'Stoke-on-Trent', 'Southampton', 'Newcastle upon Tyne', 'Brighton', 'Plymouth',
+    'Derby', 'Reading', 'Wolverhampton', 'Exeter', 'Cambridge',
+  ],
+  FR: [
+    'Paris', 'Marseille', 'Lyon', 'Toulouse', 'Nice',
+    'Nantes', 'Strasbourg', 'Montpellier', 'Bordeaux', 'Lille',
+    'Rennes', 'Reims', 'Saint-Étienne', 'Toulon', 'Le Havre',
+    'Grenoble', 'Dijon', 'Angers', 'Nîmes', 'Aix-en-Provence',
+  ],
+  DE: [
+    'Berlin', 'Hamburg', 'Munich', 'Cologne', 'Frankfurt',
+    'Stuttgart', 'Düsseldorf', 'Dortmund', 'Essen', 'Leipzig',
+    'Bremen', 'Dresden', 'Hanover', 'Nuremberg', 'Duisburg',
+    'Bochum', 'Wuppertal', 'Bielefeld', 'Bonn', 'Münster',
+  ],
+  ES: [
+    'Madrid', 'Barcelona', 'Valencia', 'Seville', 'Zaragoza',
+    'Málaga', 'Murcia', 'Palma', 'Las Palmas', 'Bilbao',
+    'Alicante', 'Córdoba', 'Valladolid', 'Vigo', 'Gijón',
+    'Granada', 'Vitoria-Gasteiz', 'La Coruña', 'Oviedo', 'Santa Cruz de Tenerife',
+  ],
+  IT: [
+    'Rome', 'Milan', 'Naples', 'Turin', 'Palermo',
+    'Genoa', 'Bologna', 'Florence', 'Bari', 'Catania',
+    'Venice', 'Verona', 'Messina', 'Padua', 'Trieste',
+    'Taranto', 'Brescia', 'Reggio Calabria', 'Modena', 'Prato',
+  ],
+  NL: [
+    'Amsterdam', 'Rotterdam', 'The Hague', 'Utrecht', 'Eindhoven',
+    'Tilburg', 'Groningen', 'Almere', 'Breda', 'Nijmegen',
+    'Arnhem', 'Haarlem', 'Zaandam', 'Haarlemmermeer', 'Enschede',
+    'Apeldoorn', 'Amersfoort', 'Dordrecht', 'Leiden', 'Zoetermeer',
+  ],
+  SE: [
+    'Stockholm', 'Gothenburg', 'Malmö', 'Uppsala', 'Västerås',
+    'Örebro', 'Linköping', 'Helsingborg', 'Jönköping', 'Norrköping',
+    'Lund', 'Umeå', 'Gävle', 'Borås', 'Sundsvall',
+    'Eskilstuna', 'Södertälje', 'Halmstad', 'Växjö', 'Karlstad',
+  ],
+  NO: [
+    'Oslo', 'Bergen', 'Trondheim', 'Stavanger', 'Drammen',
+    'Fredrikstad', 'Kristiansand', 'Sandnes', 'Tromsø', 'Sarpsborg',
+    'Skien', 'Ålesund', 'Sandefjord', 'Haugesund', 'Tønsberg',
+    'Moss', 'Bodø', 'Arendal', 'Hamar', 'Porsgrunn',
+  ],
+  PL: [
+    'Warsaw', 'Kraków', 'Łódź', 'Wrocław', 'Poznań',
+    'Gdańsk', 'Szczecin', 'Bydgoszcz', 'Lublin', 'Katowice',
+    'Białystok', 'Gdynia', 'Częstochowa', 'Radom', 'Sosnowiec',
+    'Toruń', 'Kielce', 'Rzeszów', 'Gliwice', 'Zabrze',
+  ],
+  TR: [
+    'Istanbul', 'Ankara', 'Izmir', 'Bursa', 'Adana',
+    'Gaziantep', 'Konya', 'Antalya', 'Kayseri', 'Mersin',
+    'Eskişehir', 'Diyarbakır', 'Samsun', 'Denizli', 'Şanlıurfa',
+    'Malatya', 'Gebze', 'Erzurum', 'Van', 'Kahramanmaraş',
+  ],
+  MA: [
+    'Casablanca', 'Rabat', 'Fès', 'Marrakech', 'Agadir',
+    'Tangier', 'Meknès', 'Oujda', 'Kénitra', 'Tétouan',
+    'Safi', 'El Jadida', 'Nador', 'Beni Mellal', 'Taza',
+    'Khouribga', 'Settat', 'Mohammedia', 'Laâyoune', 'Dakhla',
+  ],
+  EG: [
+    'Cairo', 'Alexandria', 'Giza', 'Shubra el-Kheima', 'Port Said',
+    'Suez', 'Luxor', 'Mansoura', 'El Mahalla El Kubra', 'Tanta',
+    'Asyut', 'Ismailia', 'Faiyum', 'Zagazig', 'Damietta',
+    'Aswan', 'Damanhur', 'Minya', 'Sohag', 'Beni Suef',
+  ],
+  ZA: [
+    'Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Port Elizabeth',
+    'Bloemfontein', 'East London', 'Vereeniging', 'Pietermaritzburg', 'Boksburg',
+    'Benoni', 'Tembisa', 'Soweto', 'Polokwane', 'Nelspruit',
+    'Kimberley', 'Rustenburg', 'Witbank', 'Mthatha', 'George',
+  ],
+  NG: [
+    'Lagos', 'Kano', 'Ibadan', 'Abuja', 'Port Harcourt',
+    'Benin City', 'Maiduguri', 'Zaria', 'Aba', 'Ilorin',
+    'Jos', 'Kaduna', 'Ogbomosho', 'Enugu', 'Warri',
+    'Onitsha', 'Abeokuta', 'Owerri', 'Uyo', 'Asaba',
+  ],
+  IN: [
+    'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Ahmedabad',
+    'Chennai', 'Kolkata', 'Surat', 'Pune', 'Jaipur',
+    'Lucknow', 'Kanpur', 'Nagpur', 'Indore', 'Bhopal',
+    'Patna', 'Ludhiana', 'Agra', 'Nashik', 'Vadodara',
+    'Coimbatore', 'Visakhapatnam', 'Kochi', 'Chandigarh', 'Guwahati',
+  ],
+  PK: [
+    'Karachi', 'Lahore', 'Faisalabad', 'Rawalpindi', 'Gujranwala',
+    'Peshawar', 'Multan', 'Islamabad', 'Hyderabad', 'Quetta',
+    'Sialkot', 'Bahawalpur', 'Sargodha', 'Abbottabad', 'Dera Ghazi Khan',
+    'Sukkur', 'Gujrat', 'Mardan', 'Sheikhupura', 'Larkana',
+  ],
+  CN: [
+    'Shanghai', 'Beijing', 'Chongqing', 'Tianjin', 'Guangzhou',
+    'Shenzhen', 'Chengdu', 'Wuhan', "Xi'an", 'Hangzhou',
+    'Nanjing', 'Shenyang', 'Harbin', 'Zhengzhou', 'Qingdao',
+    'Changsha', 'Kunming', 'Dalian', 'Jinan', 'Fuzhou',
+    'Suzhou', 'Ningbo', 'Wuxi', 'Xiamen', 'Nanchang',
+  ],
+  JP: [
+    'Tokyo', 'Osaka', 'Nagoya', 'Sapporo', 'Fukuoka',
+    'Kobe', 'Kawasaki', 'Kyoto', 'Saitama', 'Hiroshima',
+    'Sendai', 'Kitakyushu', 'Chiba', 'Sakai', 'Kumamoto',
+    'Niigata', 'Hamamatsu', 'Sagamihara', 'Okayama', 'Shizuoka',
+    'Yokohama', 'Nagasaki', 'Kagoshima', 'Matsuyama', 'Kanazawa',
+  ],
+  KR: [
+    'Seoul', 'Busan', 'Incheon', 'Daegu', 'Daejeon',
+    'Gwangju', 'Suwon', 'Ulsan', 'Changwon', 'Seongnam',
+    'Goyang', 'Yongin', 'Bucheon', 'Cheongju', 'Ansan',
+    'Jeonju', 'Anyang', 'Namyangju', 'Hwaseong', 'Pohang',
+  ],
+  TH: [
+    'Bangkok', 'Chiang Mai', 'Nonthaburi', 'Pak Kret', 'Hat Yai',
+    'Udon Thani', 'Nakhon Ratchasima', 'Chon Buri', 'Rayong', 'Phuket',
+    'Nakhon Si Thammarat', 'Khon Kaen', 'Ubon Ratchathani', 'Chiang Rai', 'Surat Thani',
+    'Pathum Thani', 'Samut Prakan', 'Nakhon Sawan', 'Lampang', 'Songkhla',
+  ],
+  VN: [
+    'Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Haiphong', 'Can Tho',
+    'Bien Hoa', 'Hue', 'Nha Trang', 'Vung Tau', 'Quy Nhon',
+    'Buon Ma Thuot', 'Thai Nguyen', 'Nam Dinh', 'Vinh', 'Da Lat',
+    'Rach Gia', 'Long Xuyen', 'My Tho', 'Ha Long', 'Pleiku',
+  ],
+  PH: [
+    'Manila', 'Quezon City', 'Davao', 'Caloocan', 'Cebu City',
+    'Zamboanga City', 'Taguig', 'Antipolo', 'Pasig', 'Cagayan de Oro',
+    'Makati', 'Parañaque', 'Valenzuela', 'Bacoor', 'Las Piñas',
+    'Muntinlupa', 'Marikina', 'Mandaluyong', 'General Santos', 'Bacolod',
+  ],
+  AU: [
+    'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide',
+    'Gold Coast', 'Canberra', 'Newcastle', 'Sunshine Coast', 'Wollongong',
+    'Logan City', 'Hobart', 'Townsville', 'Cairns', 'Toowoomba',
+    'Darwin', 'Geelong', 'Launceston', 'Ballarat', 'Bendigo',
+    'Mandurah', 'Bundaberg', 'Rockhampton', 'Hervey Bay', 'Mackay',
+  ],
+  NZ: [
+    'Auckland', 'Wellington', 'Christchurch', 'Hamilton', 'Tauranga',
+    'Napier', 'Palmerston North', 'Dunedin', 'Nelson', 'Rotorua',
+    'New Plymouth', 'Whangarei', 'Invercargill', 'Hastings', 'Lower Hutt',
+    'Porirua', 'Upper Hutt', 'Gisborne', 'Blenheim', 'Timaru',
+  ],
+  AE: [
+    'Dubai', 'Abu Dhabi', 'Sharjah', 'Al Ain', 'Ajman',
+    'Ras Al Khaimah', 'Fujairah', 'Umm Al Quwain', 'Khor Fakkan', 'Dibba Al Hisn',
+  ],
+  SA: [
+    'Riyadh', 'Jeddah', 'Mecca', 'Medina', 'Dammam',
+    'Khobar', 'Tabuk', 'Buraidah', 'Abha', 'Najran',
+    'Hail', 'Jubail', 'Khamis Mushait', 'Yanbu', 'Dhahran',
+    'Taif', 'Hofuf', 'Mubarak', 'Sakaka', 'Arar',
+  ],
+};
+
+/**
+ * Returns the sorted list of cities for a given country code.
+ * Returns an empty array if the country code is not found.
+ */
+export function getCitiesForCountry(countryCode: string): string[] {
+  return CITIES_BY_COUNTRY[countryCode] ?? [];
+}

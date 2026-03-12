@@ -29,4 +29,16 @@ export const MOCK_USERS: MockUser[] = [
     name: 'Jake Williams',
     role: 'athlete',
   },
+  {
+    email: 'parent1@test.com',
+    password: 'parent123',
+    name: 'Lisa Johnson',
+    role: 'parent',
+  },
+  {
+    email: 'parent2@test.com',
+    password: 'parent123',
+    name: 'David Williams',
+    role: 'parent',
+  },
 ];

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,8 +6,11 @@ import {
   Pressable,
   TextInput,
   Image,
+  ScrollView,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -15,7 +18,10 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
   runOnJS,
+  FadeIn,
+  FadeOut,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,16 +33,20 @@ import {
   Poppins_700Bold,
   Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins';
-import { brand, neutral, semantic } from '@/config/colors';
+import { brand, neutral, semantic, theme } from '@/config/colors';
 import {
   mockRecruiters,
   mockAthletes,
   RecruiterCard,
   AthleteProfile,
 } from '@/constants/discoverData';
+import { mockParentProfiles } from '@/constants/parentData';
 import { AthleteCard } from '@/components/discover/AthleteCard';
 import { RootState } from '@/store';
 
+// ------------------------------------------------------------------
+// DiscoverCard — shown to athletes swiping on recruiters
+// ------------------------------------------------------------------
 function DiscoverCard({
   recruiter,
   onSwipeLeft,
@@ -119,7 +129,7 @@ function DiscoverCard({
               <Ionicons
                 name={recruiter.role === 'agent' ? 'briefcase' : 'school'}
                 size={72}
-                color={neutral.gray400}
+                color={theme.textMuted}
               />
             </View>
           )}
@@ -130,7 +140,7 @@ function DiscoverCard({
           </View>
 
           <Animated.View style={[styles.overlay, styles.likeOverlay, likeOverlayStyle]}>
-            <Text style={[styles.overlayText, { color: semantic.success }]}>LIKE</Text>
+            <Text style={[styles.overlayText, { color: semantic.success }]}>DRAFT</Text>
           </Animated.View>
           <Animated.View style={[styles.overlay, styles.nopeOverlay, nopeOverlayStyle]}>
             <Text style={[styles.overlayText, { color: semantic.error }]}>PASS</Text>
@@ -167,16 +177,62 @@ function DiscoverCard({
   );
 }
 
+// ------------------------------------------------------------------
+// Match celebration overlay
+// ------------------------------------------------------------------
+function MatchOverlay({
+  recruiterName,
+  onDismiss,
+}: {
+  recruiterName: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      exiting={FadeOut.duration(300)}
+      style={styles.matchOverlay}
+    >
+      <LinearGradient
+        colors={['rgba(0,0,0,0.85)', 'rgba(18,18,18,0.97)']}
+        style={styles.matchOverlayInner}
+      >
+        <Text style={styles.matchEmoji}>🤝</Text>
+        <Text style={styles.matchTitle}>Game On!</Text>
+        <Text style={styles.matchSubtitle}>
+          You and {recruiterName} are ready to connect.
+        </Text>
+        <Pressable style={styles.matchMessageButton} onPress={onDismiss}>
+          <Ionicons name="chatbubble-outline" size={18} color={brand.white} />
+          <Text style={styles.matchMessageButtonText}>Send a Message</Text>
+        </Pressable>
+        <Pressable style={styles.matchKeepButton} onPress={onDismiss}>
+          <Text style={styles.matchKeepButtonText}>Keep Scouting</Text>
+        </Pressable>
+      </LinearGradient>
+    </Animated.View>
+  );
+}
+
+// ------------------------------------------------------------------
+// Main Discover Screen
+// ------------------------------------------------------------------
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const user = useSelector((state: RootState) => state.auth.user);
+  const preferences = useSelector((state: RootState) => state.discoverPreferences);
   const isRecruiter = user?.role === 'recruiter' || user?.role === 'coach';
-  const discoverItems = isRecruiter ? mockAthletes : mockRecruiters;
+  const isParent = user?.role === 'parent';
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [swipeLock, setSwipeLock] = useState(false);
   const [cardAreaHeight, setCardAreaHeight] = useState(0);
+  const [matchOverlay, setMatchOverlay] = useState<{ visible: boolean; name: string }>({
+    visible: false,
+    name: '',
+  });
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -187,6 +243,86 @@ export default function DiscoverScreen() {
   });
 
   const displayName = user?.name?.split(' ')[0] || 'Player';
+  const parentProfile = isParent
+    ? mockParentProfiles.find((parent) => parent.email === user?.email)
+    : null;
+  const managedAthlete = parentProfile
+    ? mockAthletes.find((athlete) => athlete.email === parentProfile.childAthleteEmail)
+    : null;
+  const managedAthleteName = managedAthlete?.name ?? null;
+  const discoverTitle =
+    isParent && managedAthleteName
+      ? `Opportunities for ${managedAthleteName.split(' ')[0]}`
+      : "Let's Start Scouting";
+
+  const discoverItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const shouldFilterByCountry = !preferences.includeInternational;
+
+    if (isRecruiter) {
+      return mockAthletes.filter((athlete) => {
+        const matchesSearch =
+          query.length === 0 ||
+          [
+            athlete.name,
+            athlete.sport,
+            athlete.position,
+            athlete.level,
+            athlete.location,
+          ].some((field) => field.toLowerCase().includes(query));
+
+        if (!matchesSearch) return false;
+        if (preferences.sport !== 'all' && athlete.sport !== preferences.sport) return false;
+        if (preferences.distanceKm !== null && athlete.distanceKm > preferences.distanceKm) {
+          return false;
+        }
+        if (shouldFilterByCountry && athlete.country !== preferences.country) return false;
+        if (preferences.athletePosition !== 'all' && athlete.position !== preferences.athletePosition) {
+          return false;
+        }
+        if (preferences.athleteLevel !== 'all' && athlete.level !== preferences.athleteLevel) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    return mockRecruiters.filter((recruiter) => {
+      const matchesSearch =
+        query.length === 0 ||
+        [
+          recruiter.name,
+          recruiter.organization,
+          recruiter.sport,
+          recruiter.location,
+          recruiter.role,
+        ].some((field) => field.toLowerCase().includes(query));
+
+      if (!matchesSearch) return false;
+      if (preferences.sport !== 'all' && recruiter.sport !== preferences.sport) return false;
+      if (preferences.distanceKm !== null && recruiter.distanceKm > preferences.distanceKm) {
+        return false;
+      }
+      if (shouldFilterByCountry && recruiter.country !== preferences.country) return false;
+      if (preferences.recruiterType !== 'all' && recruiter.role !== preferences.recruiterType) {
+        return false;
+      }
+      if (preferences.verifiedRecruitersOnly && !recruiter.verified) return false;
+
+      return true;
+    });
+  }, [isRecruiter, preferences, searchQuery]);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+    setSwipeLock(false);
+  }, [isRecruiter, preferences, searchQuery]);
+
+  useEffect(() => {
+    if (isParent) {
+      router.replace('/(tabs)/matches');
+    }
+  }, [isParent, router]);
 
   const handleCardAreaLayout = useCallback((e: any) => {
     const next = Math.round(e?.nativeEvent?.layout?.height ?? 0);
@@ -200,14 +336,13 @@ export default function DiscoverScreen() {
   }, [screenWidth]);
 
   const cardHeight = useMemo(() => {
-    const byRatio = Math.round(cardWidth * (4 / 3)); // ~3:4 card ratio
+    const byRatio = Math.round(cardWidth * (4 / 3));
     const fallback = Math.round(screenHeight * 0.58);
     const available = cardAreaHeight > 0 ? Math.max(0, cardAreaHeight - 12) : fallback;
     return Math.min(byRatio, available);
   }, [cardAreaHeight, cardWidth, screenHeight]);
 
   const circleSize = useMemo(() => {
-    // Responsive action buttons (small phones -> 52, larger -> 64)
     return Math.min(64, Math.max(52, Math.round(screenWidth * 0.16)));
   }, [screenWidth]);
 
@@ -220,49 +355,73 @@ export default function DiscoverScreen() {
     setTimeout(() => setSwipeLock(false), 400);
   };
 
-  const handleSwipeRight = () => {
+  const handleSwipeRight = useCallback(() => {
     setSwipeLock(true);
+    const current = discoverItems[currentIndex];
+    const name = (current as RecruiterCard)?.name ?? (current as AthleteProfile)?.name ?? '';
+    // Show match celebration for non-recruiter roles (athletes swiping right on recruiters)
+    if (!isRecruiter && name) {
+      setMatchOverlay({ visible: true, name });
+    }
     setCurrentIndex((i) => Math.min(i + 1, discoverItems.length));
     setTimeout(() => setSwipeLock(false), 400);
-  };
+  }, [discoverItems, currentIndex, isRecruiter]);
 
-  const handleSendMessage = () => {
-    handleSwipeRight();
-  };
+  const handleMatchDismiss = useCallback(() => {
+    setMatchOverlay({ visible: false, name: '' });
+  }, []);
+
+  const handleSendMessage = useCallback(() => {
+    // Navigate to matches where the user can start a conversation
+    router.push('/(tabs)/matches');
+  }, [router]);
 
   if (!fontsLoaded) return null;
+  if (isParent) return null;
 
   const hasMoreCards = currentIndex < discoverItems.length;
+  const remaining = discoverItems.length - currentIndex;
   const stackItems = hasMoreCards
     ? discoverItems.slice(currentIndex, currentIndex + 2).reverse()
     : [];
   const topStackIndex = stackItems.length - 1;
+  const parentDiscoverItems = isParent ? (discoverItems as RecruiterCard[]) : [];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Hello, {displayName} 👋</Text>
-          <Text style={styles.title}>Let&apos;s Find a Match</Text>
+          <Text style={styles.title}>{discoverTitle}</Text>
         </View>
-        <Pressable style={styles.notifyButton}>
-          <Ionicons name="notifications-outline" size={24} color={brand.primary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={styles.notifyButton}
+            onPress={() => Alert.alert('Notifications', 'No new notifications.')}
+          >
+            <Ionicons name="notifications-outline" size={22} color={theme.text} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.searchRow}>
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={20} color={neutral.gray400} />
+          <Ionicons name="search" size={20} color={theme.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder={isRecruiter ? 'Find athletes...' : 'Find coaches, agents...'}
-            placeholderTextColor={neutral.gray400}
+            placeholderTextColor={theme.inputPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={theme.textMuted} />
+            </Pressable>
+          )}
         </View>
-        <Pressable style={styles.filterButton}>
-          <Ionicons name="options-outline" size={22} color={brand.primary} />
+        <Pressable style={styles.filterButton} onPress={() => router.push('/preferences')}>
+          <Ionicons name="options-outline" size={22} color={theme.text} />
         </Pressable>
       </View>
 
@@ -270,67 +429,136 @@ export default function DiscoverScreen() {
         <View style={[styles.tab, styles.tabActive]}>
           <Text style={styles.tabTextActive}>Discover</Text>
         </View>
-        <View style={styles.tab}>
-          <Text style={styles.tabText}>Matches</Text>
-        </View>
-      </View>
-
-      <View style={styles.cardsContainer} onLayout={handleCardAreaLayout}>
-        {hasMoreCards ? (
-          stackItems.map((item, i) => {
-            const isTopCard = i === topStackIndex;
-            const canSwipe = isTopCard && !swipeLock;
-            const isBackCard = !isTopCard;
-            return (
-              <View
-                key={`${isTopCard ? 'top' : 'next'}-${item.id}`}
-                style={[
-                  styles.cardWrapper,
-                  {
-                    zIndex: isTopCard ? 2 : 1,
-                    opacity: isTopCard ? 1 : 0.92,
-                    transform: isBackCard ? [{ scale: 0.96 }, { translateY: 12 }] : [],
-                  },
-                ]}
-                pointerEvents={isTopCard ? 'auto' : 'none'}
-              >
-                {isRecruiter ? (
-                  <AthleteCard
-                    athlete={item as AthleteProfile}
-                    onSwipeLeft={handleSwipeLeft}
-                    onSwipeRight={handleSwipeRight}
-                    isTop={canSwipe}
-                    isActive={isTopCard}
-                    cardWidth={cardWidth}
-                    cardHeight={cardHeight}
-                    screenWidth={screenWidth}
-                  />
-                ) : (
-                  <DiscoverCard
-                    recruiter={item as RecruiterCard}
-                    onSwipeLeft={handleSwipeLeft}
-                    onSwipeRight={handleSwipeRight}
-                    isTop={canSwipe}
-                    cardWidth={cardWidth}
-                    cardHeight={cardHeight}
-                    screenWidth={screenWidth}
-                  />
-                )}
-              </View>
-            );
-          })
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={64} color={neutral.gray400} />
-            <Text style={styles.emptyTitle}>No more profiles</Text>
-            <Text style={styles.emptySubtitle}>
-              Check back later for new {isRecruiter ? 'athletes' : 'recruiters'}
-            </Text>
+        <Pressable style={styles.tab} onPress={() => router.push('/(tabs)/matches')}>
+          <Text style={styles.tabText}>{isParent ? 'Inbox' : 'Draft Board'}</Text>
+        </Pressable>
+        {hasMoreCards && !isRecruiter && (
+          <View style={styles.cardCounter}>
+            <Text style={styles.cardCounterText}>{remaining} left</Text>
           </View>
         )}
       </View>
 
-      {hasMoreCards && (
+      {isParent ? (
+        <ScrollView
+          style={styles.parentDiscoverScroll}
+          contentContainerStyle={[styles.parentDiscoverContent, { paddingBottom: insets.bottom + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {managedAthlete ? (
+            <View style={styles.parentSummaryCard}>
+              <Text style={styles.parentSummaryTitle}>Managing {managedAthlete.name}</Text>
+              <Text style={styles.parentSummarySubtitle}>
+                {managedAthlete.sport} • {managedAthlete.position} • {managedAthlete.level}
+              </Text>
+            </View>
+          ) : null}
+
+          <Text style={styles.parentSectionTitle}>Discover Recruiters</Text>
+
+          {parentDiscoverItems.length > 0 ? (
+            parentDiscoverItems.map((recruiter) => (
+              <View key={recruiter.id} style={styles.parentRecruiterCard}>
+                <View style={styles.parentRecruiterTopRow}>
+                  <Text style={styles.parentRecruiterName}>
+                    {recruiter.name} • {recruiter.role === 'agent' ? 'Agent' : 'Coach'}
+                  </Text>
+                  {recruiter.verified && (
+                    <Ionicons name="checkmark-circle" size={16} color={semantic.success} />
+                  )}
+                </View>
+                <Text style={styles.parentRecruiterOrg}>{recruiter.organization}</Text>
+                <View style={styles.parentRecruiterMetaRow}>
+                  <Ionicons name="location-outline" size={14} color={theme.textMuted} />
+                  <Text style={styles.parentRecruiterMetaText}>{recruiter.location}</Text>
+                </View>
+                <View style={styles.parentRecruiterTagRow}>
+                  {recruiter.tags.slice(0, 2).map((tag) => (
+                    <View key={`${recruiter.id}-${tag}`} style={styles.parentTag}>
+                      <Text style={styles.parentTagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.parentEmptyState}>
+              <Ionicons name="compass-outline" size={46} color={theme.textMuted} />
+              <Text style={styles.parentEmptyTitle}>No recruiters found</Text>
+              <Text style={styles.parentEmptySubtitle}>
+                Try updating Preferences to widen your distance or country.
+              </Text>
+              <Pressable style={styles.parentAdjustButton} onPress={() => router.push('/preferences')}>
+                <Text style={styles.parentAdjustButtonText}>Adjust Preferences</Text>
+              </Pressable>
+            </View>
+          )}
+        </ScrollView>
+      ) : (
+        <View style={styles.cardsContainer} onLayout={handleCardAreaLayout}>
+          {hasMoreCards ? (
+            stackItems.map((item, i) => {
+              const isTopCard = i === topStackIndex;
+              const canSwipe = isTopCard && !swipeLock;
+              const isBackCard = !isTopCard;
+              return (
+                <View
+                  key={`${isTopCard ? 'top' : 'next'}-${item.id}`}
+                  style={[
+                    styles.cardWrapper,
+                    {
+                      zIndex: isTopCard ? 2 : 1,
+                      opacity: isTopCard ? 1 : 0.92,
+                      transform: isBackCard ? [{ scale: 0.96 }, { translateY: 12 }] : [],
+                    },
+                  ]}
+                  pointerEvents={isTopCard ? 'auto' : 'none'}
+                >
+                  {isRecruiter ? (
+                    <AthleteCard
+                      athlete={item as AthleteProfile}
+                      onSwipeLeft={handleSwipeLeft}
+                      onSwipeRight={handleSwipeRight}
+                      isTop={canSwipe}
+                      isActive={isTopCard}
+                      cardWidth={cardWidth}
+                      cardHeight={cardHeight}
+                      screenWidth={screenWidth}
+                    />
+                  ) : (
+                    <DiscoverCard
+                      recruiter={item as RecruiterCard}
+                      onSwipeLeft={handleSwipeLeft}
+                      onSwipeRight={handleSwipeRight}
+                      isTop={canSwipe}
+                      cardWidth={cardWidth}
+                      cardHeight={cardHeight}
+                      screenWidth={screenWidth}
+                    />
+                  )}
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color={theme.textMuted} />
+              <Text style={styles.emptyTitle}>You've seen everyone!</Text>
+              <Text style={styles.emptySubtitle}>
+                Check back later for new {isRecruiter ? 'athletes' : 'recruiters'}, or widen your search.
+              </Text>
+              <Pressable
+                style={styles.emptyAdjustButton}
+                onPress={() => router.push('/preferences')}
+              >
+                <Ionicons name="options-outline" size={16} color={theme.accentText} />
+                <Text style={styles.emptyAdjustButtonText}>Adjust Preferences</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      )}
+
+      {!isParent && hasMoreCards && (
         <View style={[styles.actions, { paddingBottom: insets.bottom + 20 }]}>
           <Pressable
             style={({ pressed }) => [
@@ -341,7 +569,7 @@ export default function DiscoverScreen() {
             ]}
             onPress={handleSwipeLeft}
           >
-            <Ionicons name="close" size={actionIconSize} color={semantic.error} />
+            <Ionicons name="close" size={actionIconSize} color={brand.white} />
           </Pressable>
           <Pressable
             style={({ pressed }) => [
@@ -351,21 +579,28 @@ export default function DiscoverScreen() {
             ]}
             onPress={handleSendMessage}
           >
-            <Ionicons name="chatbubble-outline" size={20} color={brand.primary} />
-            <Text style={styles.messageButtonText}>Send a message</Text>
+            <Ionicons name="chatbubble-outline" size={20} color={theme.text} />
+            <Text style={styles.messageButtonText}>Messages</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [
               styles.circleButton,
-              styles.heartButton,
+              styles.draftButton,
               { width: circleSize, height: circleSize, borderRadius: circleSize / 2 },
               pressed && styles.pressed,
             ]}
             onPress={handleSwipeRight}
           >
-            <Ionicons name="heart" size={actionIconSize} color={brand.white} />
+            <Ionicons name="checkmark" size={actionIconSize} color={brand.white} />
           </Pressable>
         </View>
+      )}
+
+      {matchOverlay.visible && (
+        <MatchOverlay
+          recruiterName={matchOverlay.name}
+          onDismiss={handleMatchDismiss}
+        />
       )}
     </View>
   );
@@ -374,7 +609,7 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: neutral.gray100,
+    backgroundColor: theme.bg,
   },
   header: {
     flexDirection: 'row',
@@ -383,20 +618,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: brand.white,
+    backgroundColor: theme.headerBg,
   },
   greeting: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
-    color: neutral.gray600,
+    color: theme.textSecondary,
   },
   title: {
     fontSize: 24,
     fontFamily: 'Poppins_700Bold',
-    color: brand.primary,
+    color: theme.text,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   notifyButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.surface,
   },
   searchRow: {
     flexDirection: 'row',
@@ -404,13 +649,13 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: brand.white,
+    backgroundColor: theme.headerBg,
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: neutral.gray100,
+    backgroundColor: theme.inputBg,
     borderRadius: 12,
     paddingHorizontal: 14,
     height: 44,
@@ -420,17 +665,154 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: 'Poppins_400Regular',
-    color: brand.primary,
+    color: theme.inputText,
   },
   filterButton: {
-    padding: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.surface,
   },
   tabs: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     paddingHorizontal: 20,
     paddingBottom: 12,
-    backgroundColor: brand.white,
+    backgroundColor: theme.headerBg,
+  },
+  cardCounter: {
+    marginLeft: 'auto',
+    backgroundColor: theme.surface,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  cardCounterText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.textSecondary,
+  },
+  parentDiscoverScroll: {
+    flex: 1,
+  },
+  parentDiscoverContent: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    gap: 10,
+  },
+  parentSummaryCard: {
+    backgroundColor: brand.primary,
+    borderRadius: 14,
+    padding: 14,
+  },
+  parentSummaryTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_700Bold',
+    color: brand.white,
+  },
+  parentSummarySubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  parentSectionTitle: {
+    marginTop: 2,
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.text,
+  },
+  parentRecruiterCard: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+    padding: 14,
+    gap: 6,
+  },
+  parentRecruiterTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  parentRecruiterName: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.text,
+  },
+  parentRecruiterOrg: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.textSecondary,
+  },
+  parentRecruiterMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  parentRecruiterMetaText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: theme.textSecondary,
+  },
+  parentRecruiterTagRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  parentTag: {
+    backgroundColor: theme.surfaceSecondary,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  parentTagText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.textSecondary,
+  },
+  parentEmptyState: {
+    marginTop: 8,
+    borderRadius: 14,
+    backgroundColor: theme.cardBg,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+    alignItems: 'center',
+    paddingVertical: 26,
+    paddingHorizontal: 20,
+  },
+  parentEmptyTitle: {
+    marginTop: 10,
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+    color: theme.text,
+  },
+  parentEmptySubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    textAlign: 'center',
+    fontFamily: 'Poppins_400Regular',
+    color: theme.textSecondary,
+    lineHeight: 20,
+  },
+  parentAdjustButton: {
+    marginTop: 12,
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  parentAdjustButtonText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.accentText,
   },
   tab: {
     paddingHorizontal: 20,
@@ -438,17 +820,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   tabActive: {
-    backgroundColor: brand.primary,
+    backgroundColor: theme.accent,
   },
   tabText: {
     fontSize: 14,
     fontFamily: 'Poppins_500Medium',
-    color: neutral.gray600,
+    color: theme.textSecondary,
   },
   tabTextActive: {
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
-    color: brand.white,
+    color: theme.accentText,
   },
   cardsContainer: {
     flex: 1,
@@ -463,7 +845,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    backgroundColor: brand.white,
+    backgroundColor: theme.cardBg,
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -474,7 +856,7 @@ const styles = StyleSheet.create({
   },
   cardImage: {
     flex: 1,
-    backgroundColor: neutral.gray200,
+    backgroundColor: theme.surface,
   },
   media: {
     ...StyleSheet.absoluteFillObject,
@@ -581,14 +963,32 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontFamily: 'Poppins_700Bold',
-    color: brand.primary,
+    color: theme.text,
     marginTop: 16,
+    textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
-    color: neutral.gray600,
+    color: theme.textSecondary,
     marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  emptyAdjustButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: theme.accent,
+    borderRadius: 24,
+  },
+  emptyAdjustButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.accentText,
   },
   actions: {
     flexDirection: 'row',
@@ -602,7 +1002,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   passButton: {
-    backgroundColor: neutral.gray200,
+    backgroundColor: semantic.error,
   },
   messageButton: {
     flex: 1,
@@ -610,18 +1010,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: neutral.gray200,
+    backgroundColor: theme.surface,
     paddingHorizontal: 16,
   },
   messageButtonText: {
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
-    color: brand.primary,
+    color: theme.text,
   },
-  heartButton: {
-    backgroundColor: brand.primary,
+  draftButton: {
+    backgroundColor: semantic.success,
   },
   pressed: {
     transform: [{ scale: 0.96 }],
+  },
+  // Match celebration overlay
+  matchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
+  matchOverlayInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  matchEmoji: {
+    fontSize: 72,
+    marginBottom: 16,
+  },
+  matchTitle: {
+    fontSize: 36,
+    fontFamily: 'Poppins_800ExtraBold',
+    color: brand.white,
+    textAlign: 'center',
+  },
+  matchSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_400Regular',
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 24,
+  },
+  matchMessageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 40,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    backgroundColor: brand.white,
+    borderRadius: 30,
+  },
+  matchMessageButtonText: {
+    fontSize: 16,
+    fontFamily: 'Poppins_700Bold',
+    color: brand.primary,
+  },
+  matchKeepButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  matchKeepButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_500Medium',
+    color: 'rgba(255,255,255,0.7)',
   },
 });

@@ -19,59 +19,14 @@ import {
     Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
+import { Plan, plans } from '@/constants/plansData';
 
 const { width } = Dimensions.get('window');
-
-interface Plan {
-    id: string;
-    name: string;
-    price: number;
-    period: string;
-    swipes: string;
-    features: string[];
-    popular?: boolean;
-}
 
 interface PlanSelectionScreenProps {
     onPlanSelected: (planId: string) => void;
     onBack: () => void;
 }
-
-const plans: Plan[] = [
-    {
-        id: 'basic',
-        name: 'Basic',
-        price: 0,
-        period: 'Free Forever',
-        swipes: '10 swipes/day',
-        features: ['Text messaging', 'Basic profile', 'Limited filters'],
-    },
-    {
-        id: 'starter',
-        name: 'Starter',
-        price: 3,
-        period: 'per month',
-        swipes: '30 swipes/day',
-        features: ['Enhanced messaging', 'Priority support', 'Standard filters'],
-    },
-    {
-        id: 'pro',
-        name: 'Pro',
-        price: 7,
-        period: 'per month',
-        swipes: '100 swipes/day',
-        features: ['Advanced features', 'See who liked you', 'Advanced filters', 'No ads'],
-        popular: true,
-    },
-    {
-        id: 'premium',
-        name: 'Premium',
-        price: 15,
-        period: 'per month',
-        swipes: 'Unlimited',
-        features: ['Full access', 'Unlimited swipes', 'Premium badge', 'Priority matching', 'All features'],
-    },
-];
 
 export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
     onPlanSelected,
