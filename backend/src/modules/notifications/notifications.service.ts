@@ -1,0 +1,93 @@
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { SupabaseService } from '../../config/supabase.config';
+
+interface PushMessage {
+  to: string;
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+}
+
+@Injectable()
+export class NotificationsService {
+  constructor(
+    private supabaseService: SupabaseService,
+    private configService: ConfigService,
+  ) {}
+
+  async registerToken(
+    userId: string,
+    token: string,
+    platform: 'ios' | 'android',
+  ) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { error } = await supabase
+      .from('push_tokens')
+      .upsert(
+        { user_id: userId, token, platform },
+        { onConflict: 'user_id,token' },
+      );
+
+    if (error) throw new BadRequestException(error.message);
+
+    return { message: 'Token registered' };
+  }
+
+  async removeToken(userId: string, token: string) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    await supabase
+      .from('push_tokens')
+      .delete()
+      .eq('user_id', userId)
+      .eq('token', token);
+
+    return { message: 'Token removed' };
+  }
+
+  async sendPushToUser(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Record<string, any>,
+  ) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: tokens } = await supabase
+      .from('push_tokens')
+      .select('token')
+      .eq('user_id', userId);
+
+    if (!tokens || tokens.length === 0) return;
+
+    const messages: PushMessage[] = tokens.map((t) => ({
+      to: t.token,
+      title,
+      body,
+      data,
+    }));
+
+    await this.sendExpoPush(messages);
+  }
+
+  private async sendExpoPush(messages: PushMessage[]) {
+    const accessToken = this.configService.get('EXPO_ACCESS_TOKEN');
+
+    try {
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : {}),
+        },
+        body: JSON.stringify(messages),
+      });
+    } catch {
+      // Silently fail — push notifications are best-effort
+    }
+  }
+}

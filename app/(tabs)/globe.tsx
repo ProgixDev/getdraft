@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -25,11 +25,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { theme } from '@/config/colors';
+import { statsService } from '@/services/stats';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ── Continent talent data ──
-const CONTINENTS = [
+// ── Continent talent data (defaults) ──
+const DEFAULT_CONTINENTS = [
   { name: 'North America', athletes: '4,200+', recruiters: '180+', icon: 'american-football' as const },
   { name: 'Europe', athletes: '2,800+', recruiters: '150+', icon: 'football' as const },
   { name: 'Africa', athletes: '1,500+', recruiters: '60+', icon: 'fitness' as const },
@@ -102,7 +103,7 @@ document.addEventListener('touchend',function(){isDragging=false;setTimeout(func
 function a(){if(autoRotate)rotY+=0.003;G.rotation.y=rotY;G.rotation.x=rotX;r.render(s,c);requestAnimationFrame(a)}a();
 <\/script></body></html>`;
 
-function ContinentCard({ continent, index }: { continent: typeof CONTINENTS[0]; index: number }) {
+function ContinentCard({ continent, index }: { continent: typeof DEFAULT_CONTINENTS[0]; index: number }) {
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(-20);
 
@@ -141,6 +142,19 @@ export default function GlobeTab() {
   const [isActive, setIsActive] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const webviewRef = useRef<WebView>(null);
+  const [CONTINENTS, setContinents] = useState(DEFAULT_CONTINENTS);
+
+  // Fetch globe stats from API
+  useEffect(() => {
+    statsService.getGlobeStats().then((data) => {
+      if (Array.isArray(data) && data.length > 0) {
+        setContinents(data.map((d: any, i: number) => ({
+          ...DEFAULT_CONTINENTS[i],
+          ...d,
+        })));
+      }
+    }).catch(() => {});
+  }, []);
 
   // Lazy load: only render WebView when tab is focused
   useFocusEffect(

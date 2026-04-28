@@ -43,6 +43,7 @@ import {
 import { mockParentProfiles } from '@/constants/parentData';
 import { AthleteCard } from '@/components/discover/AthleteCard';
 import { RootState } from '@/store';
+import { discoverService } from '@/services/discover';
 
 // ------------------------------------------------------------------
 // DiscoverCard — shown to athletes swiping on recruiters
@@ -233,6 +234,8 @@ export default function DiscoverScreen() {
     visible: false,
     name: '',
   });
+  const [apiCards, setApiCards] = useState<any[] | null>(null);
+  const [swipesRemaining, setSwipesRemaining] = useState<number | null>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -241,6 +244,30 @@ export default function DiscoverScreen() {
     Poppins_700Bold,
     Poppins_800ExtraBold,
   });
+
+  // Fetch discover feed from API (falls back to mock data)
+  useEffect(() => {
+    if (isParent) return;
+    discoverService
+      .getFeed({
+        sport: preferences.sport !== 'all' ? preferences.sport : undefined,
+        distanceKm: preferences.distanceKm ?? undefined,
+        includeInternational: preferences.includeInternational,
+        country: preferences.country || undefined,
+        recruiterType: preferences.recruiterType !== 'all' ? preferences.recruiterType : undefined,
+        athletePosition: preferences.athletePosition !== 'all' ? preferences.athletePosition : undefined,
+        athleteLevel: preferences.athleteLevel !== 'all' ? preferences.athleteLevel : undefined,
+        verifiedRecruitersOnly: preferences.verifiedRecruitersOnly || undefined,
+      })
+      .then((res) => {
+        setApiCards(res.cards);
+        setSwipesRemaining(res.swipesRemaining);
+      })
+      .catch(() => {
+        // Fallback to mock data
+        setApiCards(null);
+      });
+  }, [isParent, preferences]);
 
   const displayName = user?.name?.split(' ')[0] || 'Player';
   const parentProfile = isParent
@@ -256,6 +283,18 @@ export default function DiscoverScreen() {
       : "Let's Start Scouting";
 
   const discoverItems = useMemo(() => {
+    // Use API data if available
+    if (apiCards && apiCards.length > 0) {
+      const query = searchQuery.trim().toLowerCase();
+      if (query.length === 0) return apiCards;
+      return apiCards.filter((card: any) =>
+        [card.name, card.sport, card.organization, card.location, card.position]
+          .filter(Boolean)
+          .some((field: string) => field.toLowerCase().includes(query)),
+      );
+    }
+
+    // Fallback to mock data
     const query = searchQuery.trim().toLowerCase();
     const shouldFilterByCountry = !preferences.includeInternational;
 
@@ -351,6 +390,11 @@ export default function DiscoverScreen() {
 
   const handleSwipeLeft = () => {
     setSwipeLock(true);
+    const current = discoverItems[currentIndex];
+    const targetId = current?.id;
+    if (targetId) {
+      discoverService.swipe(targetId, 'pass').catch(() => {});
+    }
     setCurrentIndex((i) => Math.min(i + 1, discoverItems.length));
     setTimeout(() => setSwipeLock(false), 400);
   };
@@ -359,10 +403,24 @@ export default function DiscoverScreen() {
     setSwipeLock(true);
     const current = discoverItems[currentIndex];
     const name = (current as RecruiterCard)?.name ?? (current as AthleteProfile)?.name ?? '';
-    // Show match celebration for non-recruiter roles (athletes swiping right on recruiters)
-    if (!isRecruiter && name) {
+    const targetId = current?.id;
+
+    if (targetId) {
+      discoverService.swipe(targetId, 'draft').then((res) => {
+        if (res.matched) {
+          setMatchOverlay({ visible: true, name });
+        }
+        setSwipesRemaining(res.swipesRemaining);
+      }).catch(() => {
+        // Show match overlay as fallback for demo
+        if (!isRecruiter && name) {
+          setMatchOverlay({ visible: true, name });
+        }
+      });
+    } else if (!isRecruiter && name) {
       setMatchOverlay({ visible: true, name });
     }
+
     setCurrentIndex((i) => Math.min(i + 1, discoverItems.length));
     setTimeout(() => setSwipeLock(false), 400);
   }, [discoverItems, currentIndex, isRecruiter]);

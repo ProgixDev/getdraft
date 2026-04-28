@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Text, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +15,8 @@ import { brand, neutral, semantic, theme } from '@/config/colors';
 import { RootState } from '@/store';
 import { mockParentRecruiterOutreach } from '@/constants/parentData';
 import { mockAthleteMatches, AthleteMatch } from '@/constants/discoverData';
+import { matchesService } from '@/services/matches';
+import { outreachService } from '@/services/outreach';
 
 export default function MatchesScreen() {
   const insets = useSafeAreaInsets();
@@ -30,18 +32,30 @@ export default function MatchesScreen() {
   const isParent = user?.role === 'parent';
   const isAthlete = user?.role === 'athlete';
 
+  const [apiMatches, setApiMatches] = useState<any[] | null>(null);
+  const [apiOutreach, setApiOutreach] = useState<any[] | null>(null);
+
+  // Fetch matches/outreach from API
+  useEffect(() => {
+    if (isParent) {
+      outreachService.getOutreachList().then(setApiOutreach).catch(() => setApiOutreach(null));
+    } else {
+      matchesService.getMatches().then(setApiMatches).catch(() => setApiMatches(null));
+    }
+  }, [isParent]);
+
   const parentMessages = useMemo(
-    () => (isParent && user?.email ? mockParentRecruiterOutreach[user.email] ?? [] : []),
-    [isParent, user?.email]
+    () => apiOutreach ?? (isParent && user?.email ? mockParentRecruiterOutreach[user.email] ?? [] : []),
+    [isParent, user?.email, apiOutreach]
   );
 
   const athleteMatches = useMemo(
-    () => (isAthlete && user?.email ? mockAthleteMatches[user.email] ?? [] : []),
-    [isAthlete, user?.email]
+    () => apiMatches ?? (isAthlete && user?.email ? mockAthleteMatches[user.email] ?? [] : []),
+    [isAthlete, user?.email, apiMatches]
   );
 
   const totalUnread = useMemo(
-    () => athleteMatches.reduce((sum, m) => sum + m.unreadCount, 0),
+    () => athleteMatches.reduce((sum: number, m: any) => sum + (m.unreadCount || 0), 0),
     [athleteMatches]
   );
 

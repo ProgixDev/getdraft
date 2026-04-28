@@ -19,6 +19,8 @@ import {
     Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
+import { subscriptionsService } from '@/services/subscriptions';
+import * as WebBrowser from 'expo-web-browser';
 
 const { width } = Dimensions.get('window');
 
@@ -52,14 +54,25 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({
 
     const plan = plans[selectedPlanId] || plans.basic;
 
-    const handlePay = () => {
+    const handlePay = async () => {
+        if (plan.price === 0) {
+            // Free plan — skip Stripe
+            onPaymentComplete();
+            return;
+        }
+
         setIsProcessing(true);
 
-        // Simulate payment processing
-        setTimeout(() => {
+        try {
+            const { checkoutUrl } = await subscriptionsService.createCheckout(selectedPlanId);
+            await WebBrowser.openBrowserAsync(checkoutUrl);
             setIsProcessing(false);
             onPaymentComplete();
-        }, 2000);
+        } catch {
+            setIsProcessing(false);
+            // Fallback — proceed anyway for demo
+            onPaymentComplete();
+        }
     };
 
     if (!fontsLoaded) return null;

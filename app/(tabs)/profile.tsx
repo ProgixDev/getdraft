@@ -24,6 +24,8 @@ import { brand, semantic, theme } from '@/config/colors';
 import { RootState } from '@/store';
 import { mockAthletes, mockAgentProfile, MediaSource, mockAthleteMatches } from '@/constants/discoverData';
 import { mockParentProfiles } from '@/constants/parentData';
+import { profilesService } from '@/services/profiles';
+import { statsService } from '@/services/stats';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 48) / 3 - 8;

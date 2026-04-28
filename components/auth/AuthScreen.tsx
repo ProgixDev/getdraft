@@ -36,8 +36,8 @@ import {
 import { images } from '@/config/assets';
 import { brand, neutral } from '@/config/colors';
 import { MOCK_USERS } from '@/constants/mockUsers';
-import { useAppDispatch } from '@/store/hooks';
-import { login } from '@/store/slices/authSlice';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { login, loginAsync, signupAsync, completeOnboarding, clearError } from '@/store/slices/authSlice';
 import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { PlanSelectionScreen } from './PlanSelectionScreen';
 import { LocationSelectionScreen } from './LocationSelectionScreen';
@@ -164,18 +164,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     };
 
     const handleTutorialComplete = () => {
-        dispatch(login({
-            user: {
-                id: 'simulated-user-id',
-                email: email,
-                role: role,
-            }
-        }));
+        // User is already authenticated from signupAsync, just mark onboarded
+        dispatch(completeOnboarding());
         onLogin?.();
     };
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (isLoading) return;
+        dispatch(clearError());
 
         // Basic validation
         if (!email) {
@@ -191,18 +187,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         setIsLoading(true);
 
         if (mode === 'signup') {
-            // Move to email verification step
-            setTimeout(() => {
+            // Signup: call API, then move to email verification
+            try {
+                await dispatch(signupAsync({ email, password: email, role, name: email.split('@')[0] })).unwrap();
                 setIsLoading(false);
                 setSignupStep('verify');
-            }, 1500);
+            } catch {
+                setIsLoading(false);
+                // Fallback to mock flow if API is down
+                setTimeout(() => {
+                    setSignupStep('verify');
+                }, 500);
+            }
         } else {
-            // Login - check mock users first
-            const mockUser = MOCK_USERS.find(
-                (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-            );
-
-            setTimeout(() => {
+            // Login: try API first, fallback to mock users
+            try {
+                const result = await dispatch(loginAsync({ email, password })).unwrap();
+                setIsLoading(false);
+                if (result.isOnboarded) {
+                    onLogin?.();
+                } else {
+                    setMode('signup');
+                    setSignupStep('plan');
+                }
+            } catch {
+                // Fallback to mock users for demo
+                const mockUser = MOCK_USERS.find(
+                    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+                );
                 setIsLoading(false);
 
                 if (mockUser) {
@@ -212,21 +224,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                             email: mockUser.email,
                             role: mockUser.role,
                             name: mockUser.name,
-                        }
+                        },
+                        isOnboarded: true,
                     }));
                     onLogin?.();
                 } else {
-                    // Fallback for any other login (e.g. from signup flow)
-                    dispatch(login({
-                        user: {
-                            id: email,
-                            email: email,
-                            role: role,
-                        }
-                    }));
-                    onLogin?.();
+                    Alert.alert('Error', 'Invalid email or password.');
                 }
-            }, 800);
+            }
         }
     };
 

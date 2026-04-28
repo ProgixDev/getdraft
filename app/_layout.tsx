@@ -28,6 +28,7 @@ function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const dispatch = useDispatch();
   const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+  const isOnboarded = useSelector((state: RootState) => state.auth.isOnboarded);
   const user = useSelector((state: RootState) => state.auth.user);
 
   const [appState, setAppState] = useState<AppState>('loading');
@@ -38,7 +39,7 @@ function RootLayoutContent() {
   useEffect(() => {
     loadAuth().then((persisted) => {
       if (persisted?.user) {
-        dispatch(login({ user: persisted.user }));
+        dispatch(login({ user: persisted.user, isOnboarded: persisted.isOnboarded }));
         setAppState('app');
       } else {
         setAppState('splash');
@@ -49,7 +50,7 @@ function RootLayoutContent() {
   // Persist auth when user logs in
   useEffect(() => {
     if (isAuthenticated && user) {
-      saveAuth({ user }).catch(() => {});
+      saveAuth({ user, isOnboarded }).catch(() => {});
     }
   }, [isAuthenticated, user]);
 

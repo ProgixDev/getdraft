@@ -31,6 +31,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
 import { SPORTS_WITH_POSITIONS } from '@/constants/sportsData';
+import { profilesService } from '@/services/profiles';
 
 const { width } = Dimensions.get('window');
 
@@ -240,10 +241,24 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         setFormData(prev => ({ ...prev, [fieldId]: value }));
     };
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (currentStep < steps.length - 1) {
             setCurrentStep(prev => prev + 1);
         } else {
+            // Final step — save profile to API
+            try {
+                await profilesService.upsertAthleteProfile({
+                    sport: formData.sport,
+                    position: formData.position,
+                    level: formData.level,
+                    bio: '',
+                    class_year: '',
+                    height: formData.height ? `${formData.height}${heightUnit === 'in' ? '' : ' cm'}` : undefined,
+                    weight: formData.weight ? `${formData.weight} ${weightUnit}` : undefined,
+                });
+            } catch {
+                // Continue even if API fails — profile can be updated later
+            }
             onPayment();
         }
     };

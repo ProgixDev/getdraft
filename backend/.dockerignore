@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.git
+test
+coverage
+.eslintrc.js
+.prettierrc
+README.md

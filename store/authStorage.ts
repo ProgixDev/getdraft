@@ -15,6 +15,7 @@ export interface PersistedAuth {
     role: UserRole;
     name?: string;
   };
+  isOnboarded: boolean;
 }
 
 export async function loadAuth(): Promise<PersistedAuth | null> {

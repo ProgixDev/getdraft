@@ -23,6 +23,7 @@ import {
 import { brand, neutral, semantic, theme } from '@/config/colors';
 import { RootState } from '@/store';
 import { mockParentChatThreads, ParentChatMessage } from '@/constants/parentData';
+import { chatService } from '@/services/chat';
 
 export default function ParentChatScreen() {
   const insets = useSafeAreaInsets();
@@ -44,13 +45,63 @@ export default function ParentChatScreen() {
     [threadId]
   );
 
+  // Load messages from API, fallback to mock
   useEffect(() => {
-    setMessages(thread?.messages ?? []);
-  }, [thread]);
+    if (!threadId) return;
+    chatService
+      .getMessages(String(threadId))
+      .then((res) => {
+        const apiMessages = (res.messages || res || []).map((m: any) => ({
+          id: m.id,
+          sender: m.sender_id === user?.id ? 'parent' : 'recruiter',
+          text: m.text,
+          sentAt: m.created_at || 'Now',
+        }));
+        if (apiMessages.length > 0) {
+          setMessages(apiMessages);
+        } else {
+          setMessages(thread?.messages ?? []);
+        }
+      })
+      .catch(() => {
+        setMessages(thread?.messages ?? []);
+      });
+
+    // Connect WebSocket
+    if (user?.id) {
+      chatService.connectSocket(user.id).then(() => {
+        chatService.joinThread(String(threadId));
+        const socket = chatService.getSocket();
+        socket?.on('new_message', (msg: any) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: msg.id,
+              sender: msg.senderId === user?.id ? 'parent' : 'recruiter',
+              text: msg.text,
+              sentAt: msg.createdAt || 'Now',
+            },
+          ]);
+        });
+      });
+    }
+
+    return () => {
+      if (threadId) chatService.leaveThread(String(threadId));
+    };
+  }, [threadId, user?.id]);
 
   const handleSend = () => {
     const text = draft.trim();
     if (!text) return;
+
+    // Send via WebSocket (real-time) or REST fallback
+    const socket = chatService.getSocket();
+    if (socket?.connected && threadId) {
+      chatService.sendSocketMessage(String(threadId), text);
+    } else if (threadId) {
+      chatService.sendMessage(String(threadId), text).catch(() => {});
+    }
 
     setMessages((prev) => [
       ...prev,
