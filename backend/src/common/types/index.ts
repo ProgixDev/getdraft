@@ -36,6 +36,11 @@ export enum SubscriptionStatus {
   TRIALING = 'trialing',
 }
 
+export enum PushPlatform {
+  IOS = 'ios',
+  ANDROID = 'android',
+}
+
 export const PLAN_SWIPE_LIMITS: Record<PlanId, number> = {
   [PlanId.BASIC]: 10,
   [PlanId.STARTER]: 30,
