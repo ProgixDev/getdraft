@@ -1,0 +1,542 @@
+### ─────────────────────────────────────────────────────────────────────────
+### GetDraft API tests (REST Client / Insomnia compatible)
+### Run top-to-bottom. Each request `@name`s a variable so the next one
+### can reference IDs/tokens captured from the previous response.
+###
+### Prereqs:
+###   1. Run all 7 migrations + MIGRATIONS_TO_RUN.sql.
+###   2. The signup trigger creates `public.users` and `public.subscriptions`
+###      automatically; tests rely on that.
+###   3. Two real Stripe price IDs must be set in env (STRIPE_PRICE_*).
+### ─────────────────────────────────────────────────────────────────────────
+
+@baseUrl = http://localhost:3000/api
+@athleteEmail = athlete-{{$timestamp}}@getdraft.test
+@recruiterEmail = recruiter-{{$timestamp}}@getdraft.test
+@parentEmail = parent-{{$timestamp}}@getdraft.test
+@password = passw0rd!
+
+### ─────────────────────────────────────────────────────────────────────────
+### 1. AUTH — signup an athlete, a recruiter, a parent
+### ─────────────────────────────────────────────────────────────────────────
+
+# @name signupAthlete
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "{{athleteEmail}}",
+  "password": "{{password}}",
+  "name": "Marcus Johnson",
+  "role": "athlete"
+}
+
+###
+
+@athleteToken = {{signupAthlete.response.body.data.accessToken}}
+@athleteId = {{signupAthlete.response.body.data.user.id}}
+
+# @name signupRecruiter
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "{{recruiterEmail}}",
+  "password": "{{password}}",
+  "name": "Coach Smith",
+  "role": "recruiter"
+}
+
+###
+
+@recruiterToken = {{signupRecruiter.response.body.data.accessToken}}
+@recruiterId = {{signupRecruiter.response.body.data.user.id}}
+
+# @name signupParent
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "email": "{{parentEmail}}",
+  "password": "{{password}}",
+  "name": "Pat Johnson",
+  "role": "parent"
+}
+
+###
+
+@parentToken = {{signupParent.response.body.data.accessToken}}
+@parentId = {{signupParent.response.body.data.user.id}}
+
+### Login a returning user (sanity check)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{athleteEmail}}",
+  "password": "{{password}}"
+}
+
+###
+
+### Refresh access token
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{signupAthlete.response.body.data.refreshToken}}"
+}
+
+###
+
+### Forgot password (sends email)
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{athleteEmail}}"
+}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 2. USERS — me, update, public profile, view, block/unblock, lists
+### ─────────────────────────────────────────────────────────────────────────
+
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{athleteToken}}
+
+###
+
+PUT {{baseUrl}}/users/me
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "name": "Marcus J. Johnson",
+  "location": "Austin, TX, USA",
+  "country": "United States",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "latitude": 30.2672,
+  "longitude": -97.7431
+}
+
+###
+
+PUT {{baseUrl}}/users/me/onboarding
+Authorization: Bearer {{athleteToken}}
+
+###
+
+# Verify all fields persisted
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{athleteToken}}
+
+###
+
+GET {{baseUrl}}/users/{{recruiterId}}
+Authorization: Bearer {{athleteToken}}
+
+###
+
+POST {{baseUrl}}/users/{{recruiterId}}/view
+Authorization: Bearer {{athleteToken}}
+
+###
+
+GET {{baseUrl}}/users/me/profile-views
+Authorization: Bearer {{recruiterToken}}
+
+###
+
+POST {{baseUrl}}/users/{{parentId}}/block
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "reason": "Spam DMs"
+}
+
+###
+
+GET {{baseUrl}}/users/me/blocks
+Authorization: Bearer {{athleteToken}}
+
+###
+
+DELETE {{baseUrl}}/users/{{parentId}}/block
+Authorization: Bearer {{athleteToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 3. PROFILES — athlete, recruiter, parent (PUT all fields → GET to verify)
+### ─────────────────────────────────────────────────────────────────────────
+
+# @name putAthleteProfile
+PUT {{baseUrl}}/profiles/athlete
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "sport": "American Football",
+  "position": "Quarterback",
+  "level": "NCAA Div I",
+  "bio": "Class of 2025 QB prospect with strong arm and leadership.",
+  "class_year": "2025",
+  "gpa": 3.7,
+  "height": "6'2\"",
+  "weight": "215 lbs",
+  "forty_yard_dash": "4.65s",
+  "awards": ["State Championship MVP 2024"],
+  "photos": ["https://example.com/p1.jpg"],
+  "videos": ["https://example.com/v1.mp4"]
+}
+
+###
+
+# Verify all fields persisted
+GET {{baseUrl}}/profiles/athlete
+Authorization: Bearer {{athleteToken}}
+
+###
+
+# Partial update
+PUT {{baseUrl}}/profiles/athlete
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "sport": "American Football",
+  "bio": "Updated bio with new accolades."
+}
+
+###
+
+# @name putRecruiterProfile
+PUT {{baseUrl}}/profiles/recruiter
+Authorization: Bearer {{recruiterToken}}
+Content-Type: application/json
+
+{
+  "organization": "Elite Sports Agency",
+  "sport": "American Football",
+  "role_type": "agent",
+  "tags": ["NFL Certified", "10+ Years"],
+  "bio": "NFL Certified Agent with 10+ years experience.",
+  "photos": ["https://example.com/agent.jpg"],
+  "videos": []
+}
+
+###
+
+GET {{baseUrl}}/profiles/recruiter
+Authorization: Bearer {{recruiterToken}}
+
+###
+
+# @name putParentProfile
+PUT {{baseUrl}}/profiles/parent
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "relationship": "Mother",
+  "child_athlete_id": "{{athleteId}}",
+  "child_class_year": "2025",
+  "bio": "Focused on finding the right college fit."
+}
+
+###
+
+GET {{baseUrl}}/profiles/parent
+Authorization: Bearer {{parentToken}}
+
+###
+
+GET {{baseUrl}}/profiles/{{athleteId}}
+Authorization: Bearer {{recruiterToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 4. DISCOVER — feed, swipe, who-drafted-me
+### ─────────────────────────────────────────────────────────────────────────
+
+GET {{baseUrl}}/discover/feed?page=1&limit=10
+Authorization: Bearer {{athleteToken}}
+
+###
+
+# @name swipeDraft
+POST {{baseUrl}}/discover/swipe
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "targetUserId": "{{recruiterId}}",
+  "direction": "draft"
+}
+
+###
+
+# Mutual draft → match created
+POST {{baseUrl}}/discover/swipe
+Authorization: Bearer {{recruiterToken}}
+Content-Type: application/json
+
+{
+  "targetUserId": "{{athleteId}}",
+  "direction": "draft"
+}
+
+###
+
+# Self-swipe must 400
+POST {{baseUrl}}/discover/swipe
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "targetUserId": "{{athleteId}}",
+  "direction": "draft"
+}
+
+###
+
+# Duplicate swipe must 409
+POST {{baseUrl}}/discover/swipe
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "targetUserId": "{{recruiterId}}",
+  "direction": "draft"
+}
+
+###
+
+# Pro+ feature, returns 403 unless plan upgraded
+GET {{baseUrl}}/discover/who-drafted-me
+Authorization: Bearer {{athleteToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 5. MATCHES
+### ─────────────────────────────────────────────────────────────────────────
+
+# @name listMatches
+GET {{baseUrl}}/matches
+Authorization: Bearer {{athleteToken}}
+
+###
+
+@matchId = {{listMatches.response.body.data[0].id}}
+
+GET {{baseUrl}}/matches/{{matchId}}
+Authorization: Bearer {{athleteToken}}
+
+###
+
+DELETE {{baseUrl}}/matches/{{matchId}}
+Authorization: Bearer {{athleteToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 6. CHAT (REST fallback) — relies on a fresh active match.
+###     Re-run /discover/swipe + /discover/swipe to get a new match before this.
+### ─────────────────────────────────────────────────────────────────────────
+
+GET {{baseUrl}}/chat/threads
+Authorization: Bearer {{athleteToken}}
+
+###
+
+# @name sendMessage
+POST {{baseUrl}}/chat/threads/{{matchId}}/messages
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "text": "Hey coach, thanks for drafting me!"
+}
+
+###
+
+GET {{baseUrl}}/chat/threads/{{matchId}}/messages
+Authorization: Bearer {{recruiterToken}}
+
+###
+
+PUT {{baseUrl}}/chat/threads/{{matchId}}/read
+Authorization: Bearer {{recruiterToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 7. OUTREACH (recruiter → parent)
+### ─────────────────────────────────────────────────────────────────────────
+
+# @name createOutreach
+POST {{baseUrl}}/outreach
+Authorization: Bearer {{recruiterToken}}
+Content-Type: application/json
+
+{
+  "parentId": "{{parentId}}",
+  "childAthleteId": "{{athleteId}}",
+  "message": "Hi, we'd like to invite your son to our showcase camp this summer."
+}
+
+###
+
+@outreachId = {{createOutreach.response.body.data.id}}
+
+GET {{baseUrl}}/outreach
+Authorization: Bearer {{parentToken}}
+
+###
+
+GET {{baseUrl}}/outreach/{{outreachId}}
+Authorization: Bearer {{parentToken}}
+
+###
+
+PUT {{baseUrl}}/outreach/{{outreachId}}/status
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "status": "In Review"
+}
+
+###
+
+POST {{baseUrl}}/outreach/{{outreachId}}/messages
+Authorization: Bearer {{parentToken}}
+Content-Type: application/json
+
+{
+  "text": "Thanks for reaching out — we'd like to learn more."
+}
+
+###
+
+GET {{baseUrl}}/outreach/{{outreachId}}/messages
+Authorization: Bearer {{recruiterToken}}
+
+###
+
+DELETE {{baseUrl}}/outreach/{{outreachId}}
+Authorization: Bearer {{parentToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 8. SUBSCRIPTIONS / Stripe
+### ─────────────────────────────────────────────────────────────────────────
+
+GET {{baseUrl}}/subscriptions/me
+Authorization: Bearer {{athleteToken}}
+
+###
+
+POST {{baseUrl}}/subscriptions/checkout
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "planId": "pro"
+}
+
+###
+
+POST {{baseUrl}}/subscriptions/portal
+Authorization: Bearer {{athleteToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 9. NOTIFICATIONS — push tokens
+### ─────────────────────────────────────────────────────────────────────────
+
+POST {{baseUrl}}/notifications/register-token
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "token": "ExponentPushToken[abcdef]",
+  "platform": "ios"
+}
+
+###
+
+DELETE {{baseUrl}}/notifications/token
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "token": "ExponentPushToken[abcdef]"
+}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 10. UPLOADS — signed URL + delete (path-scoped to userId)
+### ─────────────────────────────────────────────────────────────────────────
+
+# @name signedUrl
+POST {{baseUrl}}/uploads/signed-url
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "bucket": "photos",
+  "fileName": "highlight.jpg"
+}
+
+###
+
+# Path returned by the previous request (must start with the user's UUID)
+DELETE {{baseUrl}}/uploads
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{
+  "bucket": "photos",
+  "path": "{{signedUrl.response.body.data.path}}"
+}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 11. STATS
+### ─────────────────────────────────────────────────────────────────────────
+
+GET {{baseUrl}}/stats/globe
+
+###
+
+GET {{baseUrl}}/stats/welcome
+
+###
+
+GET {{baseUrl}}/stats/profile/{{athleteId}}
+Authorization: Bearer {{athleteToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 12. ADMIN (requires an admin user; signup with role=admin not allowed
+###     via API — promote in DB first)
+### ─────────────────────────────────────────────────────────────────────────
+
+@adminToken = REPLACE_ME_WITH_ADMIN_ACCESS_TOKEN
+
+GET {{baseUrl}}/admin/users?page=1&limit=20
+Authorization: Bearer {{adminToken}}
+
+###
+
+PUT {{baseUrl}}/admin/users/{{recruiterId}}/verify
+Authorization: Bearer {{adminToken}}
+
+###
+
+PUT {{baseUrl}}/admin/users/{{parentId}}/ban
+Authorization: Bearer {{adminToken}}
+
+###
+
+GET {{baseUrl}}/admin/stats
+Authorization: Bearer {{adminToken}}
+
+### ─────────────────────────────────────────────────────────────────────────
+### 13. AUTH cleanup
+### ─────────────────────────────────────────────────────────────────────────
+
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{athleteToken}}
+Content-Type: application/json
+
+{}
