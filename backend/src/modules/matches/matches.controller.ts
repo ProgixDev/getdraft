@@ -1,4 +1,12 @@
-import { Controller, Get, Delete, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Delete,
+  Param,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MatchesService } from './matches.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -17,13 +25,20 @@ export class MatchesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get match details' })
-  getMatch(@Param('id') id: string, @CurrentUser('id') userId: string) {
+  getMatch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
     return this.matchesService.getMatch(id, userId);
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Unmatch' })
-  unmatch(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    return this.matchesService.unmatch(id, userId);
+  async unmatch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.matchesService.unmatch(id, userId);
   }
 }

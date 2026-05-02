@@ -1,4 +1,11 @@
-import { Controller, Get, Put, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Body,
+  Param,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ProfilesService } from './profiles.service';
 import { UpsertAthleteProfileDto } from './dto/athlete-profile.dto';
@@ -59,7 +66,7 @@ export class ProfilesController {
 
   @Get(':userId')
   @ApiOperation({ summary: 'Get public profile by user ID' })
-  getPublicProfile(@Param('userId') userId: string) {
+  getPublicProfile(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.profilesService.getPublicProfile(userId);
   }
 }

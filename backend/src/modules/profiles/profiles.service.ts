@@ -44,7 +44,6 @@ export class ProfilesService {
         .update({
           ...dto,
           profile_completion: profileCompletion,
-          updated_at: new Date().toISOString(),
         })
         .eq('user_id', userId)
         .select()
@@ -97,7 +96,7 @@ export class ProfilesService {
     if (existing) {
       const { data, error } = await supabase
         .from('recruiter_profiles')
-        .update({ ...dto, updated_at: new Date().toISOString() })
+        .update({ ...dto })
         .eq('user_id', userId)
         .select()
         .single();
@@ -142,7 +141,7 @@ export class ProfilesService {
     if (existing) {
       const { data, error } = await supabase
         .from('parent_profiles')
-        .update({ ...dto, updated_at: new Date().toISOString() })
+        .update({ ...dto })
         .eq('user_id', userId)
         .select()
         .single();

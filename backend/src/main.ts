@@ -3,7 +3,7 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -50,7 +50,8 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
-  console.log(`GetDraft API running on port ${port}`);
-  console.log(`Swagger docs at http://localhost:${port}/docs`);
+  const logger = new Logger('Bootstrap');
+  logger.log(`GetDraft API running on port ${port}`);
+  logger.log(`Swagger docs at http://localhost:${port}/docs`);
 }
 bootstrap();
