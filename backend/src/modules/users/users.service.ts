@@ -2,9 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUserPayload } from '../../common/types';
 
 @Injectable()
@@ -32,7 +34,7 @@ export class UsersService {
 
     const { data, error } = await supabase
       .from('users')
-      .update({ ...dto, updated_at: new Date().toISOString() })
+      .update(dto)
       .eq('id', user.id)
       .select()
       .single();
@@ -49,7 +51,7 @@ export class UsersService {
 
     const { data, error } = await supabase
       .from('users')
-      .update({ is_onboarded: true, updated_at: new Date().toISOString() })
+      .update({ is_onboarded: true })
       .eq('id', userId)
       .select()
       .single();
@@ -79,7 +81,7 @@ export class UsersService {
   }
 
   async trackProfileView(viewerId: string, viewedId: string) {
-    if (viewerId === viewedId) return;
+    if (viewerId === viewedId) return { tracked: false };
 
     const supabase = this.supabaseService.getAdminClient();
 
@@ -87,25 +89,64 @@ export class UsersService {
       .from('profile_views')
       .insert({ viewer_id: viewerId, viewed_id: viewedId });
 
-    // Increment profile_views counter on athlete_profiles
     await supabase.rpc('increment_profile_views', { target_user_id: viewedId });
+
+    return { tracked: true };
   }
 
-  async blockUser(blockerId: string, blockedId: string) {
+  async listProfileViewers(userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data } = await supabase
+      .from('profile_views')
+      .select(
+        `id, created_at,
+         viewer:users!profile_views_viewer_id_fkey(id, name, avatar_url, role, location)`,
+      )
+      .eq('viewed_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    return data || [];
+  }
+
+  async listMyBlocks(userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data } = await supabase
+      .from('blocks')
+      .select(
+        `id, blocked_id, reason, created_at,
+         blocked:users!blocks_blocked_id_fkey(id, name, avatar_url, role)`,
+      )
+      .eq('blocker_id', userId)
+      .order('created_at', { ascending: false });
+
+    return data || [];
+  }
+
+  async blockUser(blockerId: string, blockedId: string, dto: BlockUserDto) {
+    if (blockerId === blockedId) {
+      throw new BadRequestException('Cannot block yourself');
+    }
+
     const supabase = this.supabaseService.getAdminClient();
 
     const { error } = await supabase
       .from('blocks')
-      .insert({ blocker_id: blockerId, blocked_id: blockedId });
+      .insert({
+        blocker_id: blockerId,
+        blocked_id: blockedId,
+        reason: dto.reason ?? null,
+      });
 
     if (error) {
       if (error.code === '23505') {
-        throw new BadRequestException('User already blocked');
+        throw new ConflictException('User already blocked');
       }
       throw new BadRequestException(error.message);
     }
 
-    // Deactivate any existing match
     await supabase
       .from('matches')
       .update({ is_active: false })

@@ -6,10 +6,14 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentUserPayload } from '../../common/types';
 
@@ -40,9 +44,21 @@ export class UsersController {
     return this.usersService.completeOnboarding(userId);
   }
 
+  @Get('me/blocks')
+  @ApiOperation({ summary: 'List users I have blocked' })
+  listMyBlocks(@CurrentUser('id') userId: string) {
+    return this.usersService.listMyBlocks(userId);
+  }
+
+  @Get('me/profile-views')
+  @ApiOperation({ summary: 'List recent viewers of my profile' })
+  listProfileViewers(@CurrentUser('id') userId: string) {
+    return this.usersService.listProfileViewers(userId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get public user profile' })
-  getPublicProfile(@Param('id') id: string) {
+  getPublicProfile(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.getPublicProfile(id);
   }
 
@@ -50,7 +66,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Track a profile view' })
   trackView(
     @CurrentUser('id') viewerId: string,
-    @Param('id') viewedId: string,
+    @Param('id', ParseUUIDPipe) viewedId: string,
   ) {
     return this.usersService.trackProfileView(viewerId, viewedId);
   }
@@ -59,17 +75,19 @@ export class UsersController {
   @ApiOperation({ summary: 'Block a user' })
   blockUser(
     @CurrentUser('id') blockerId: string,
-    @Param('id') blockedId: string,
+    @Param('id', ParseUUIDPipe) blockedId: string,
+    @Body() dto: BlockUserDto,
   ) {
-    return this.usersService.blockUser(blockerId, blockedId);
+    return this.usersService.blockUser(blockerId, blockedId, dto);
   }
 
   @Delete(':id/block')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Unblock a user' })
-  unblockUser(
+  async unblockUser(
     @CurrentUser('id') blockerId: string,
-    @Param('id') blockedId: string,
+    @Param('id', ParseUUIDPipe) blockedId: string,
   ) {
-    return this.usersService.unblockUser(blockerId, blockedId);
+    await this.usersService.unblockUser(blockerId, blockedId);
   }
 }

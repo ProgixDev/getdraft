@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import {
@@ -14,6 +16,8 @@ import { CurrentUserPayload, UserRole } from '../../common/types';
 
 @Injectable()
 export class OutreachService {
+  private readonly logger = new Logger(OutreachService.name);
+
   constructor(private supabaseService: SupabaseService) {}
 
   async createOutreach(user: CurrentUserPayload, dto: CreateOutreachDto) {
@@ -23,7 +27,25 @@ export class OutreachService {
 
     const supabase = this.supabaseService.getAdminClient();
 
-    const { data, error } = await supabase
+    const { data: parent } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', dto.parentId)
+      .maybeSingle();
+    if (!parent || parent.role !== UserRole.PARENT) {
+      throw new BadRequestException('Target user is not a parent');
+    }
+
+    const { data: child } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', dto.childAthleteId)
+      .maybeSingle();
+    if (!child || child.role !== UserRole.ATHLETE) {
+      throw new BadRequestException('Target child is not an athlete');
+    }
+
+    const { data: outreach, error } = await supabase
       .from('outreach')
       .insert({
         recruiter_id: user.id,
@@ -36,19 +58,28 @@ export class OutreachService {
 
     if (error) {
       if (error.code === '23505') {
-        throw new BadRequestException('Outreach already sent to this parent');
+        throw new ConflictException('Outreach already sent to this parent');
       }
       throw new BadRequestException(error.message);
     }
 
-    // Create initial message in outreach_messages
-    await supabase.from('outreach_messages').insert({
-      outreach_id: data.id,
+    const { error: msgError } = await supabase.from('outreach_messages').insert({
+      outreach_id: outreach.id,
       sender_id: user.id,
       text: dto.message,
     });
 
-    return data;
+    if (msgError) {
+      // Compensating action: roll the outreach back so we don't leave an
+      // empty thread visible to the parent.
+      await supabase.from('outreach').delete().eq('id', outreach.id);
+      this.logger.error(
+        `Failed to seed outreach_messages for ${outreach.id}: ${msgError.message}`,
+      );
+      throw new BadRequestException(msgError.message);
+    }
+
+    return outreach;
   }
 
   async getOutreachList(userId: string, role: UserRole) {
@@ -69,19 +100,19 @@ export class OutreachService {
           .from('users')
           .select('name')
           .eq('id', o.recruiter_id)
-          .single();
+          .maybeSingle();
 
         const { data: rp } = await supabase
           .from('recruiter_profiles')
           .select('role_type, organization, verified')
           .eq('user_id', o.recruiter_id)
-          .single();
+          .maybeSingle();
 
         const { data: child } = await supabase
           .from('users')
           .select('name')
           .eq('id', o.child_athlete_id)
-          .single();
+          .maybeSingle();
 
         const { count: unreadCount } = await supabase
           .from('outreach_messages')
@@ -115,14 +146,38 @@ export class OutreachService {
       .from('outreach')
       .select('*')
       .eq('id', outreachId)
-      .single();
+      .maybeSingle();
 
     if (!data) throw new NotFoundException('Outreach not found');
     if (data.parent_id !== userId && data.recruiter_id !== userId) {
       throw new ForbiddenException('Not authorized');
     }
 
-    return data;
+    const { data: recruiter } = await supabase
+      .from('users')
+      .select('id, name, avatar_url')
+      .eq('id', data.recruiter_id)
+      .maybeSingle();
+
+    const { data: rp } = await supabase
+      .from('recruiter_profiles')
+      .select('role_type, organization, verified, sport, bio')
+      .eq('user_id', data.recruiter_id)
+      .maybeSingle();
+
+    const { data: parent } = await supabase
+      .from('users')
+      .select('id, name, avatar_url')
+      .eq('id', data.parent_id)
+      .maybeSingle();
+
+    const { data: child } = await supabase
+      .from('users')
+      .select('id, name, avatar_url')
+      .eq('id', data.child_athlete_id)
+      .maybeSingle();
+
+    return { ...data, recruiter, recruiter_profile: rp, parent, child };
   }
 
   async updateOutreachStatus(
@@ -136,21 +191,45 @@ export class OutreachService {
       .from('outreach')
       .select('parent_id')
       .eq('id', outreachId)
-      .single();
+      .maybeSingle();
 
     if (!outreach) throw new NotFoundException('Outreach not found');
     if (outreach.parent_id !== userId) {
       throw new ForbiddenException('Only the parent can update status');
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('outreach')
-      .update({ status: dto.status, updated_at: new Date().toISOString() })
+      .update({ status: dto.status })
       .eq('id', outreachId)
       .select()
       .single();
 
+    if (error) throw new BadRequestException(error.message);
+
     return data;
+  }
+
+  async deleteOutreach(outreachId: string, userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: outreach } = await supabase
+      .from('outreach')
+      .select('parent_id, recruiter_id')
+      .eq('id', outreachId)
+      .maybeSingle();
+
+    if (!outreach) throw new NotFoundException('Outreach not found');
+    if (outreach.parent_id !== userId && outreach.recruiter_id !== userId) {
+      throw new ForbiddenException('Not authorized');
+    }
+
+    const { error } = await supabase
+      .from('outreach')
+      .delete()
+      .eq('id', outreachId);
+
+    if (error) throw new BadRequestException(error.message);
   }
 
   async sendMessage(
@@ -164,14 +243,14 @@ export class OutreachService {
       .from('outreach')
       .select('parent_id, recruiter_id')
       .eq('id', outreachId)
-      .single();
+      .maybeSingle();
 
     if (!outreach) throw new NotFoundException('Outreach not found');
     if (outreach.parent_id !== userId && outreach.recruiter_id !== userId) {
       throw new ForbiddenException('Not authorized');
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('outreach_messages')
       .insert({
         outreach_id: outreachId,
@@ -180,6 +259,8 @@ export class OutreachService {
       })
       .select()
       .single();
+
+    if (error) throw new BadRequestException(error.message);
 
     return data;
   }
@@ -191,7 +272,7 @@ export class OutreachService {
       .from('outreach')
       .select('parent_id, recruiter_id')
       .eq('id', outreachId)
-      .single();
+      .maybeSingle();
 
     if (!outreach) throw new NotFoundException('Outreach not found');
     if (outreach.parent_id !== userId && outreach.recruiter_id !== userId) {
@@ -204,7 +285,6 @@ export class OutreachService {
       .eq('outreach_id', outreachId)
       .order('created_at', { ascending: true });
 
-    // Mark as read
     await supabase
       .from('outreach_messages')
       .update({ is_read: true })
