@@ -1,7 +1,8 @@
-import { Controller, Post, Delete, Body } from '@nestjs/common';
+import { Controller, Post, Delete, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { RegisterTokenDto } from './dto/register-token.dto';
+import { RemoveTokenDto } from './dto/remove-token.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Notifications')
@@ -24,11 +25,12 @@ export class NotificationsController {
   }
 
   @Delete('token')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove push token (on logout)' })
-  removeToken(
+  async removeToken(
     @CurrentUser('id') userId: string,
-    @Body('token') token: string,
+    @Body() dto: RemoveTokenDto,
   ) {
-    return this.notificationsService.removeToken(userId, token);
+    await this.notificationsService.removeToken(userId, dto.token);
   }
 }

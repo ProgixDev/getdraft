@@ -1,6 +1,7 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../config/supabase.config';
+import { PushPlatform } from '../../common/types';
 
 interface PushMessage {
   to: string;
@@ -11,6 +12,8 @@ interface PushMessage {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private supabaseService: SupabaseService,
     private configService: ConfigService,
@@ -19,7 +22,7 @@ export class NotificationsService {
   async registerToken(
     userId: string,
     token: string,
-    platform: 'ios' | 'android',
+    platform: PushPlatform,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -86,8 +89,9 @@ export class NotificationsService {
         },
         body: JSON.stringify(messages),
       });
-    } catch {
-      // Silently fail — push notifications are best-effort
+    } catch (err: any) {
+      // Push notifications are best-effort but we log the failure to aid ops.
+      this.logger.warn(`Expo push failed: ${err?.message || 'unknown'}`);
     }
   }
 }

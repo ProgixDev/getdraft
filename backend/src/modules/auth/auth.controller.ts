@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -8,6 +8,7 @@ import {
   RefreshTokenDto,
   ForgotPasswordDto,
 } from './dto/verify-email.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Auth')
@@ -52,7 +53,11 @@ export class AuthController {
 
   @Post('logout')
   @ApiOperation({ summary: 'Logout current session' })
-  logout(@Body('accessToken') accessToken: string) {
-    return this.authService.logout(accessToken);
+  logout(@Body() dto: LogoutDto, @Req() req: any) {
+    const headerAuth = req?.headers?.authorization || '';
+    const headerToken = headerAuth.startsWith('Bearer ')
+      ? headerAuth.slice(7)
+      : null;
+    return this.authService.logout(dto.accessToken || headerToken);
   }
 }

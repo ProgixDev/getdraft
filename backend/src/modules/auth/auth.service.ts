@@ -120,8 +120,12 @@ export class AuthService {
     return { message: 'Password reset email sent' };
   }
 
-  async logout(accessToken: string) {
-    const supabase = this.supabaseService.getClient();
+  async logout(accessToken: string | null) {
+    if (!accessToken) {
+      return { message: 'Logged out successfully' };
+    }
+    // admin.signOut requires the service_role key.
+    const supabase = this.supabaseService.getAdminClient();
 
     await supabase.auth.admin.signOut(accessToken, 'local');
 

@@ -29,8 +29,11 @@ describe('AuthService', () => {
     },
   };
 
-  const mockAdminClient = {
+  const mockAdminClient: any = {
     from: jest.fn(),
+    auth: {
+      admin: { signOut: jest.fn() },
+    },
   };
 
   beforeEach(async () => {
@@ -204,15 +207,20 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('should sign out user', async () => {
-      mockClient.auth.admin.signOut.mockResolvedValue({});
+    it('should sign out user via admin client', async () => {
+      mockAdminClient.auth.admin.signOut.mockResolvedValue({});
 
       const result = await service.logout('access-token');
       expect(result.message).toBe('Logged out successfully');
-      expect(mockClient.auth.admin.signOut).toHaveBeenCalledWith(
+      expect(mockAdminClient.auth.admin.signOut).toHaveBeenCalledWith(
         'access-token',
         'local',
       );
+    });
+
+    it('should no-op when no token is provided', async () => {
+      const result = await service.logout(null);
+      expect(result.message).toBe('Logged out successfully');
     });
   });
 });
