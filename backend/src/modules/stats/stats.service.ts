@@ -106,11 +106,11 @@ export class StatsService {
   async getProfileStats(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
-    const { data: profile } = await supabase
-      .from('athlete_profiles')
-      .select('profile_views, likes_received, profile_completion')
-      .eq('user_id', userId)
-      .single();
+    const { data: user } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
 
     const { count: matchCount } = await supabase
       .from('matches')
@@ -118,11 +118,33 @@ export class StatsService {
       .or(`user_1_id.eq.${userId},user_2_id.eq.${userId}`)
       .eq('is_active', true);
 
+    const { count: viewCount } = await supabase
+      .from('profile_views')
+      .select('*', { count: 'exact', head: true })
+      .eq('viewed_id', userId);
+
+    if (user?.role === 'athlete') {
+      const { data: profile } = await supabase
+        .from('athlete_profiles')
+        .select('profile_views, likes_received, profile_completion')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      return {
+        role: user.role,
+        profileViews: profile?.profile_views ?? viewCount ?? 0,
+        likesReceived: profile?.likes_received ?? 0,
+        profileCompletion: profile?.profile_completion ?? 0,
+        totalMatches: matchCount ?? 0,
+      };
+    }
+
     return {
-      profileViews: profile?.profile_views || 0,
-      likesReceived: profile?.likes_received || 0,
-      profileCompletion: profile?.profile_completion || 0,
-      totalMatches: matchCount || 0,
+      role: user?.role ?? null,
+      profileViews: viewCount ?? 0,
+      likesReceived: 0,
+      profileCompletion: 0,
+      totalMatches: matchCount ?? 0,
     };
   }
 }

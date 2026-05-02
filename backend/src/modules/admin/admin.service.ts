@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 
 @Injectable()
@@ -33,12 +37,16 @@ export class AdminService {
   async verifyRecruiter(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('recruiter_profiles')
       .update({ verified: true })
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .select('id');
 
     if (error) throw new BadRequestException(error.message);
+    if (!data || data.length === 0) {
+      throw new NotFoundException('Recruiter profile not found');
+    }
 
     return { message: 'Recruiter verified' };
   }
@@ -46,12 +54,16 @@ export class AdminService {
   async banUser(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('users')
       .update({ is_banned: true })
-      .eq('id', userId);
+      .eq('id', userId)
+      .select('id');
 
     if (error) throw new BadRequestException(error.message);
+    if (!data || data.length === 0) {
+      throw new NotFoundException('User not found');
+    }
 
     return { message: 'User banned' };
   }

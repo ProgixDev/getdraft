@@ -1,4 +1,11 @@
-import { Controller, Get, Put, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Param,
+  Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -23,13 +30,13 @@ export class AdminController {
 
   @Put('users/:id/verify')
   @ApiOperation({ summary: 'Verify a recruiter/coach' })
-  verifyRecruiter(@Param('id') id: string) {
+  verifyRecruiter(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.verifyRecruiter(id);
   }
 
   @Put('users/:id/ban')
   @ApiOperation({ summary: 'Ban a user' })
-  banUser(@Param('id') id: string) {
+  banUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.banUser(id);
   }
 
