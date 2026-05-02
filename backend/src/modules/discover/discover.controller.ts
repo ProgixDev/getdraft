@@ -30,7 +30,6 @@ export class DiscoverController {
   @Get('who-drafted-me')
   @ApiOperation({ summary: 'See who drafted you (Pro+ feature)' })
   whoDraftedMe(@CurrentUser('id') userId: string) {
-    // TODO: get plan from subscription
-    return this.discoverService.whoDraftedMe(userId, 'pro');
+    return this.discoverService.whoDraftedMe(userId);
   }
 }

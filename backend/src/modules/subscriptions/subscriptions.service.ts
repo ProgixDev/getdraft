@@ -2,14 +2,21 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../config/supabase.config';
 import { StripeService } from '../../config/stripe.config';
 import { PlanId, PLAN_SWIPE_LIMITS } from '../../common/types';
 
+type StripeWebhookEvent = {
+  type: string;
+  data: { object: any };
+};
+
 @Injectable()
 export class SubscriptionsService {
+  private readonly logger = new Logger(SubscriptionsService.name);
   private priceMap: Record<string, string>;
 
   constructor(
@@ -31,7 +38,7 @@ export class SubscriptionsService {
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (!data) {
       return {
@@ -42,7 +49,6 @@ export class SubscriptionsService {
       };
     }
 
-    // Reset daily counter if new day
     const today = new Date().toISOString().split('T')[0];
     if (data.swipes_reset_at !== today) {
       await supabase
@@ -50,6 +56,7 @@ export class SubscriptionsService {
         .update({ swipes_used_today: 0, swipes_reset_at: today })
         .eq('user_id', userId);
       data.swipes_used_today = 0;
+      data.swipes_reset_at = today;
     }
 
     return data;
@@ -68,12 +75,11 @@ export class SubscriptionsService {
 
     const supabase = this.supabaseService.getAdminClient();
 
-    // Get or create Stripe customer
-    let { data: user } = await supabase
+    const { data: user } = await supabase
       .from('users')
       .select('stripe_customer_id')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     let customerId = user?.stripe_customer_id;
     if (!customerId) {
@@ -105,7 +111,7 @@ export class SubscriptionsService {
       .from('users')
       .select('stripe_customer_id')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (!user?.stripe_customer_id) {
       throw new NotFoundException('No subscription found');
@@ -119,53 +125,95 @@ export class SubscriptionsService {
     return { portalUrl: session.url };
   }
 
-  async handleWebhook(event: any) {
+  async handleWebhook(event: StripeWebhookEvent) {
     const supabase = this.supabaseService.getAdminClient();
 
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
-        const { userId, planId } = session.metadata;
-        const swipeLimit = PLAN_SWIPE_LIMITS[planId as PlanId] || 10;
+        const metadata = session.metadata || {};
+        const userId = metadata.userId;
+        const planId = metadata.planId as PlanId;
+        if (!userId || !planId) {
+          this.logger.warn('checkout.session.completed missing metadata');
+          break;
+        }
 
-        await supabase
+        const swipeLimit = PLAN_SWIPE_LIMITS[planId] ?? 10;
+
+        // Fetch the subscription so we can persist period/price fields.
+        let priceId: string | null = null;
+        let periodStart: string | null = null;
+        let periodEnd: string | null = null;
+
+        if (session.subscription) {
+          try {
+            const stripe = this.stripeService.getClient();
+            const sub = (await stripe.subscriptions.retrieve(
+              session.subscription,
+            )) as any;
+            const item = sub.items?.data?.[0];
+            priceId = item?.price?.id ?? null;
+            periodStart = this.toIso(item?.current_period_start);
+            periodEnd = this.toIso(item?.current_period_end);
+          } catch (err: any) {
+            this.logger.warn(
+              `Could not fetch Stripe subscription ${session.subscription}: ${err?.message}`,
+            );
+          }
+        }
+
+        const { error: subErr } = await supabase
           .from('subscriptions')
           .update({
             plan_id: planId,
-            stripe_subscription_id: session.subscription,
+            stripe_subscription_id: session.subscription ?? null,
+            stripe_price_id: priceId,
             status: 'active',
             daily_swipe_limit: swipeLimit,
-            updated_at: new Date().toISOString(),
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
           })
           .eq('user_id', userId);
+        if (subErr) {
+          this.logger.error(`subscriptions update failed: ${subErr.message}`);
+          break;
+        }
 
-        await supabase
+        const { error: userErr } = await supabase
           .from('users')
-          .update({ plan_id: planId })
+          .update({
+            plan_id: planId,
+            stripe_subscription_id: session.subscription ?? null,
+          })
           .eq('id', userId);
+        if (userErr) {
+          this.logger.error(`users update failed: ${userErr.message}`);
+        }
         break;
       }
 
       case 'customer.subscription.updated': {
-        const subscription = event.data.object;
+        const sub = event.data.object;
+        const item = sub.items?.data?.[0];
+        const priceId = item?.price?.id ?? null;
+        const periodStart = this.toIso(item?.current_period_start);
+        const periodEnd = this.toIso(item?.current_period_end);
+
         await supabase
           .from('subscriptions')
           .update({
-            status: subscription.status === 'active' ? 'active' : 'past_due',
-            current_period_start: new Date(
-              subscription.current_period_start * 1000,
-            ).toISOString(),
-            current_period_end: new Date(
-              subscription.current_period_end * 1000,
-            ).toISOString(),
-            updated_at: new Date().toISOString(),
+            status: sub.status === 'active' ? 'active' : sub.status,
+            stripe_price_id: priceId,
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
           })
-          .eq('stripe_subscription_id', subscription.id);
+          .eq('stripe_subscription_id', sub.id);
         break;
       }
 
       case 'customer.subscription.deleted': {
-        const subscription = event.data.object;
+        const sub = event.data.object;
         await supabase
           .from('subscriptions')
           .update({
@@ -173,25 +221,39 @@ export class SubscriptionsService {
             status: 'canceled',
             daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
             stripe_subscription_id: null,
-            updated_at: new Date().toISOString(),
+            stripe_price_id: null,
           })
-          .eq('stripe_subscription_id', subscription.id);
+          .eq('stripe_subscription_id', sub.id);
+
+        await supabase
+          .from('users')
+          .update({ plan_id: PlanId.BASIC, stripe_subscription_id: null })
+          .eq('stripe_subscription_id', sub.id);
         break;
       }
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object;
-        if (invoice.subscription) {
+        const subId = invoice.subscription;
+        if (subId) {
           await supabase
             .from('subscriptions')
-            .update({
-              status: 'past_due',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('stripe_subscription_id', invoice.subscription);
+            .update({ status: 'past_due' })
+            .eq('stripe_subscription_id', subId);
         }
         break;
       }
+
+      default:
+        // Other events are intentionally ignored.
+        break;
     }
+  }
+
+  private toIso(unixSeconds: number | null | undefined): string | null {
+    if (typeof unixSeconds !== 'number' || !Number.isFinite(unixSeconds)) {
+      return null;
+    }
+    return new Date(unixSeconds * 1000).toISOString();
   }
 }

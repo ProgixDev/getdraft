@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { DiscoverService } from './discover.service';
 import { SupabaseService } from '../../config/supabase.config';
 import {
@@ -14,16 +18,14 @@ const mockQueryBuilder = (finalResult: any = { data: [], error: null }) => {
   const builder: any = {};
   const methods = [
     'select', 'eq', 'neq', 'not', 'in', 'or', 'order', 'range',
-    'limit', 'single', 'insert', 'update', 'lt',
+    'limit', 'single', 'maybeSingle', 'insert', 'update', 'lt',
   ];
   methods.forEach((m) => {
     builder[m] = jest.fn().mockReturnValue(builder);
   });
-  // Terminal methods return the result
+  // Terminal methods return the result; chainable methods rely on `then`.
   builder.single.mockResolvedValue(finalResult);
-  builder.range.mockResolvedValue(finalResult);
-  builder.limit.mockResolvedValue(finalResult);
-  // Default: last chained call resolves
+  builder.maybeSingle.mockResolvedValue(finalResult);
   builder.then = (resolve: any) => resolve(finalResult);
   return builder;
 };
@@ -178,34 +180,11 @@ describe('DiscoverService', () => {
       const subBuilder = mockQueryBuilder({
         data: { daily_swipe_limit: 10, swipes_used_today: 10, swipes_reset_at: new Date().toISOString().split('T')[0] },
       });
+      const blocksBuilder = mockQueryBuilder({ data: null });
 
-      mockAdminClient.from.mockImplementation(() => subBuilder);
-
-      await expect(
-        service.swipe(athleteUser, {
-          targetUserId: 'rec-1',
-          direction: SwipeDirection.DRAFT,
-        }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should throw BadRequestException on duplicate swipe', async () => {
-      const subBuilder = mockQueryBuilder({
-        data: { daily_swipe_limit: 10, swipes_used_today: 5, swipes_reset_at: new Date().toISOString().split('T')[0] },
-      });
-      const insertBuilder = mockQueryBuilder({
-        data: null,
-        error: { code: '23505', message: 'duplicate' },
-      });
-
-      let callIndex = 0;
       mockAdminClient.from.mockImplementation((table: string) => {
+        if (table === 'blocks') return blocksBuilder;
         if (table === 'subscriptions') return subBuilder;
-        if (table === 'swipes') {
-          callIndex++;
-          if (callIndex === 1) return insertBuilder; // insert call
-          return mockQueryBuilder({ data: [] });
-        }
         return mockQueryBuilder();
       });
 
@@ -214,24 +193,67 @@ describe('DiscoverService', () => {
           targetUserId: 'rec-1',
           direction: SwipeDirection.DRAFT,
         }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw BadRequestException on self-swipe', async () => {
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: athleteUser.id,
+          direction: SwipeDirection.DRAFT,
+        }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw ConflictException on duplicate swipe', async () => {
+      const subBuilder = mockQueryBuilder({
+        data: { daily_swipe_limit: 10, swipes_used_today: 5, swipes_reset_at: new Date().toISOString().split('T')[0] },
+      });
+      const blocksBuilder = mockQueryBuilder({ data: null });
+      const insertBuilder = mockQueryBuilder({
+        data: null,
+        error: { code: '23505', message: 'duplicate' },
+      });
+
+      mockAdminClient.from.mockImplementation((table: string) => {
+        if (table === 'blocks') return blocksBuilder;
+        if (table === 'subscriptions') return subBuilder;
+        if (table === 'swipes') return insertBuilder;
+        return mockQueryBuilder();
+      });
+
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
   describe('whoDraftedMe', () => {
     it('should throw ForbiddenException for basic plan', async () => {
-      await expect(
-        service.whoDraftedMe('user-1', PlanId.BASIC),
-      ).rejects.toThrow(ForbiddenException);
+      const subBuilder = mockQueryBuilder({ data: { plan_id: PlanId.BASIC } });
+      mockAdminClient.from.mockReturnValue(subBuilder);
+
+      await expect(service.whoDraftedMe('user-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw ForbiddenException for starter plan', async () => {
-      await expect(
-        service.whoDraftedMe('user-1', PlanId.STARTER),
-      ).rejects.toThrow(ForbiddenException);
+      const subBuilder = mockQueryBuilder({
+        data: { plan_id: PlanId.STARTER },
+      });
+      mockAdminClient.from.mockReturnValue(subBuilder);
+
+      await expect(service.whoDraftedMe('user-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should return drafts for pro plan', async () => {
+      const subBuilder = mockQueryBuilder({ data: { plan_id: PlanId.PRO } });
       const swipesBuilder = mockQueryBuilder({
         data: [
           {
@@ -242,9 +264,13 @@ describe('DiscoverService', () => {
         ],
       });
 
-      mockAdminClient.from.mockReturnValue(swipesBuilder);
+      mockAdminClient.from.mockImplementation((table: string) => {
+        if (table === 'subscriptions') return subBuilder;
+        if (table === 'swipes') return swipesBuilder;
+        return mockQueryBuilder();
+      });
 
-      const result = await service.whoDraftedMe('user-1', PlanId.PRO);
+      const result = await service.whoDraftedMe('user-1');
       expect(result).toHaveLength(1);
     });
   });

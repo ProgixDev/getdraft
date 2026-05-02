@@ -8,10 +8,11 @@ import { PlanId } from '../../common/types';
 
 const mockQueryBuilder = (finalResult: any = { data: null, error: null }) => {
   const builder: any = {};
-  ['select', 'eq', 'single', 'update', 'insert'].forEach((m) => {
+  ['select', 'eq', 'single', 'maybeSingle', 'update', 'insert'].forEach((m) => {
     builder[m] = jest.fn().mockReturnValue(builder);
   });
   builder.single.mockResolvedValue(finalResult);
+  builder.maybeSingle.mockResolvedValue(finalResult);
   builder.then = (resolve: any) => resolve(finalResult);
   return builder;
 };
