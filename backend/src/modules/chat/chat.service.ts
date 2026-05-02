@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 
@@ -118,7 +119,7 @@ export class ChatService {
       .select()
       .single();
 
-    if (error) throw new NotFoundException(error.message);
+    if (error) throw new BadRequestException(error.message);
 
     return data;
   }

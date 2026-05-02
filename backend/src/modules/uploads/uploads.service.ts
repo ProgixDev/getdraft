@@ -1,5 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { UploadBucket } from './dto/signed-url.dto';
 
 @Injectable()
 export class UploadsService {
@@ -7,19 +12,13 @@ export class UploadsService {
 
   async getSignedUploadUrl(
     userId: string,
-    bucket: string,
+    bucket: UploadBucket,
     fileName: string,
   ) {
     const supabase = this.supabaseService.getAdminClient();
 
-    const validBuckets = ['avatars', 'photos', 'videos'];
-    if (!validBuckets.includes(bucket)) {
-      throw new BadRequestException(
-        `Invalid bucket. Must be one of: ${validBuckets.join(', ')}`,
-      );
-    }
-
-    const filePath = `${userId}/${Date.now()}-${fileName}`;
+    const safeName = fileName.replace(/[^A-Za-z0-9._\-]/g, '_');
+    const filePath = `${userId}/${Date.now()}-${safeName}`;
 
     const { data, error } = await supabase.storage
       .from(bucket)
@@ -27,7 +26,6 @@ export class UploadsService {
 
     if (error) throw new BadRequestException(error.message);
 
-    // Also return the public URL for after upload
     const {
       data: { publicUrl },
     } = supabase.storage.from(bucket).getPublicUrl(filePath);
@@ -40,13 +38,15 @@ export class UploadsService {
     };
   }
 
-  async deleteFile(bucket: string, path: string) {
+  async deleteFile(userId: string, bucket: UploadBucket, path: string) {
+    if (!path.startsWith(`${userId}/`)) {
+      throw new ForbiddenException('Cannot delete files owned by another user');
+    }
+
     const supabase = this.supabaseService.getAdminClient();
 
     const { error } = await supabase.storage.from(bucket).remove([path]);
 
     if (error) throw new BadRequestException(error.message);
-
-    return { message: 'File deleted' };
   }
 }

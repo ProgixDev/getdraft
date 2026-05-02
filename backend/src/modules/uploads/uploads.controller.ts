@@ -1,6 +1,15 @@
-import { Controller, Post, Delete, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Delete,
+  Body,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
+import { SignedUrlDto } from './dto/signed-url.dto';
+import { DeleteFileDto } from './dto/delete-file.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Uploads')
@@ -13,18 +22,22 @@ export class UploadsController {
   @ApiOperation({ summary: 'Get a signed URL for file upload' })
   getSignedUrl(
     @CurrentUser('id') userId: string,
-    @Body() body: { bucket: string; fileName: string },
+    @Body() dto: SignedUrlDto,
   ) {
     return this.uploadsService.getSignedUploadUrl(
       userId,
-      body.bucket,
-      body.fileName,
+      dto.bucket,
+      dto.fileName,
     );
   }
 
   @Delete()
-  @ApiOperation({ summary: 'Delete a file from storage' })
-  deleteFile(@Body() body: { bucket: string; path: string }) {
-    return this.uploadsService.deleteFile(body.bucket, body.path);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete an uploaded file owned by the current user' })
+  async deleteFile(
+    @CurrentUser('id') userId: string,
+    @Body() dto: DeleteFileDto,
+  ) {
+    await this.uploadsService.deleteFile(userId, dto.bucket, dto.path);
   }
 }
