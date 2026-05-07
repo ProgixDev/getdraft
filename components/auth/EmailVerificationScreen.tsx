@@ -84,10 +84,12 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
             await authService.verifyEmail(enteredCode);
             setIsLoading(false);
             onVerified();
-        } catch {
+        } catch (err: any) {
             setIsLoading(false);
-            // Fallback: accept any code for demo/dev
-            onVerified();
+            const message =
+                err?.response?.data?.message ||
+                'Invalid or expired code. Please check the link sent to your email.';
+            Alert.alert('Verification failed', message);
         }
     };
 

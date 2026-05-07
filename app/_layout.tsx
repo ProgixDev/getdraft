@@ -47,12 +47,12 @@ function RootLayoutContent() {
     });
   }, [dispatch]);
 
-  // Persist auth when user logs in
+  // Persist auth when user logs in or onboarding state changes
   useEffect(() => {
     if (isAuthenticated && user) {
       saveAuth({ user, isOnboarded }).catch(() => {});
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, isOnboarded]);
 
   // When user logs out from app, go back to auth screen
   useEffect(() => {

@@ -10,6 +10,7 @@ import {
     Modal,
     Platform,
     Switch,
+    Alert,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Animated, {
@@ -245,7 +246,6 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         if (currentStep < steps.length - 1) {
             setCurrentStep(prev => prev + 1);
         } else {
-            // Final step — save profile to API
             try {
                 await profilesService.upsertAthleteProfile({
                     sport: formData.sport,
@@ -256,10 +256,15 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     height: formData.height ? `${formData.height}${heightUnit === 'in' ? '' : ' cm'}` : undefined,
                     weight: formData.weight ? `${formData.weight} ${weightUnit}` : undefined,
                 });
-            } catch {
-                // Continue even if API fails — profile can be updated later
+                onPayment();
+            } catch (err: any) {
+                const message =
+                    err?.response?.data?.message ||
+                    err?.message ||
+                    'Could not save your profile. Please try again.';
+                console.warn('[ProfileSetup] upsert failed:', message, err?.response?.data);
+                Alert.alert('Profile not saved', message);
             }
-            onPayment();
         }
     };
 

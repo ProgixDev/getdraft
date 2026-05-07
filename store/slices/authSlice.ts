@@ -30,6 +30,16 @@ const initialState: AuthState = {
 
 // --- Async Thunks ---
 
+function describeError(err: any, fallback: string): string {
+    if (err?.response?.data?.message) return String(err.response.data.message);
+    if (err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
+        return 'Cannot reach the server. Make sure the backend is running and your device is on the same network.';
+    }
+    if (err?.code === 'ECONNABORTED') return 'Request timed out. Is the backend responding?';
+    if (err?.message) return String(err.message);
+    return fallback;
+}
+
 export const loginAsync = createAsyncThunk<
     AuthResponse,
     { email: string; password: string },
@@ -38,9 +48,7 @@ export const loginAsync = createAsyncThunk<
     try {
         return await authService.login(email, password);
     } catch (err: any) {
-        return rejectWithValue(
-            err.response?.data?.message || 'Login failed. Please check your credentials.',
-        );
+        return rejectWithValue(describeError(err, 'Login failed. Please check your credentials.'));
     }
 });
 
@@ -52,9 +60,7 @@ export const signupAsync = createAsyncThunk<
     try {
         return await authService.signup(email, password, role, name);
     } catch (err: any) {
-        return rejectWithValue(
-            err.response?.data?.message || 'Signup failed. Please try again.',
-        );
+        return rejectWithValue(describeError(err, 'Signup failed. Please try again.'));
     }
 });
 
@@ -98,6 +104,9 @@ export const authSlice = createSlice({
         },
         completeOnboarding: (state) => {
             state.isOnboarded = true;
+            if (state.user) {
+                saveAuth({ user: state.user, isOnboarded: true }).catch(() => {});
+            }
         },
         clearError: (state) => {
             state.error = null;

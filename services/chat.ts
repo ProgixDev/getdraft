@@ -1,4 +1,4 @@
-import api from './api';
+import api, { API_ORIGIN } from './api';
 import { io, Socket } from 'socket.io-client';
 import { loadTokens } from './api';
 
@@ -31,11 +31,7 @@ export const chatService = {
   async connectSocket(userId: string): Promise<Socket> {
     if (socket?.connected) return socket;
 
-    const baseURL = __DEV__
-      ? 'http://localhost:3000'
-      : 'https://getdraft-api.up.railway.app';
-
-    socket = io(`${baseURL}/chat`, {
+    socket = io(`${API_ORIGIN}/chat`, {
       query: { userId },
       transports: ['websocket'],
     });

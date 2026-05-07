@@ -37,7 +37,8 @@ import { images } from '@/config/assets';
 import { brand, neutral } from '@/config/colors';
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { login, loginAsync, signupAsync, completeOnboarding, clearError } from '@/store/slices/authSlice';
+import { login, loginAsync, signupAsync, completeOnboarding, completeOnboardingAsync, clearError } from '@/store/slices/authSlice';
+import { usersService } from '@/services/users';
 import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { PlanSelectionScreen } from './PlanSelectionScreen';
 import { LocationSelectionScreen } from './LocationSelectionScreen';
@@ -150,8 +151,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         setSignupStep('location');
     };
 
-    const handleLocationSelected = (city: string, country: string) => {
+    const handleLocationSelected = async (city: string, country: string) => {
         setLocation({ city, country });
+        // Persist to backend so the user's discover feed can geo-filter
+        try {
+            await usersService.updateMe({
+                location: city ? `${city}${country ? `, ${country}` : ''}` : undefined,
+                country: country || undefined,
+            });
+        } catch (err: any) {
+            console.warn('[AuthScreen] updateMe(location) failed:', err?.response?.data || err?.message);
+            // Non-blocking — user can update later from profile
+        }
         setSignupStep('profile');
     };
 
@@ -163,9 +174,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         setSignupStep('tutorial');
     };
 
-    const handleTutorialComplete = () => {
-        // User is already authenticated from signupAsync, just mark onboarded
-        dispatch(completeOnboarding());
+    const handleTutorialComplete = async () => {
+        // Persist is_onboarded=true to backend (and update Redux + AsyncStorage)
+        try {
+            await dispatch(completeOnboardingAsync()).unwrap();
+        } catch (err: any) {
+            console.warn('[AuthScreen] completeOnboardingAsync failed:', err);
+            // Fall back to local state-only update so the user isn't stuck
+            dispatch(completeOnboarding());
+        }
         onLogin?.();
     };
 
@@ -179,58 +196,77 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             return;
         }
 
-        if (mode === 'login' && !password) {
+        if (!password) {
             Alert.alert('Error', 'Please enter your password.');
+            return;
+        }
+
+        if (mode === 'signup' && password.length < 6) {
+            Alert.alert('Error', 'Password must be at least 6 characters.');
             return;
         }
 
         setIsLoading(true);
 
         if (mode === 'signup') {
-            // Signup: call API, then move to email verification
             try {
-                await dispatch(signupAsync({ email, password: email, role, name: email.split('@')[0] })).unwrap();
+                const result = await dispatch(
+                    signupAsync({ email, password, role, name: email.split('@')[0] })
+                ).unwrap();
                 setIsLoading(false);
-                setSignupStep('verify');
-            } catch {
+
+                // If accessToken is null, Supabase requires email confirmation
+                if (!result.accessToken) {
+                    Alert.alert(
+                        'Verify Your Email',
+                        `We sent a confirmation link to ${email}. Please click it, then sign in to continue.`,
+                        [{ text: 'OK', onPress: () => setMode('login') }]
+                    );
+                    return;
+                }
+
+                // Account created and authenticated — skip OTP, go straight to plan selection
+                setSignupStep('plan');
+            } catch (err: any) {
                 setIsLoading(false);
-                // Fallback to mock flow if API is down
-                setTimeout(() => {
-                    setSignupStep('verify');
-                }, 500);
+                Alert.alert('Sign-up failed', err?.toString?.() || 'Could not create your account. Please try again.');
             }
         } else {
-            // Login: try API first, fallback to mock users
+            // Login
             try {
                 const result = await dispatch(loginAsync({ email, password })).unwrap();
                 setIsLoading(false);
                 if (result.isOnboarded) {
                     onLogin?.();
                 } else {
+                    // Resume onboarding for an existing user that never finished
                     setMode('signup');
                     setSignupStep('plan');
                 }
-            } catch {
-                // Fallback to mock users for demo
-                const mockUser = MOCK_USERS.find(
-                    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-                );
-                setIsLoading(false);
-
-                if (mockUser) {
-                    dispatch(login({
-                        user: {
-                            id: mockUser.email,
-                            email: mockUser.email,
-                            role: mockUser.role,
-                            name: mockUser.name,
-                        },
-                        isOnboarded: true,
-                    }));
-                    onLogin?.();
-                } else {
-                    Alert.alert('Error', 'Invalid email or password.');
+            } catch (err: any) {
+                // Fallback to mock users only if backend is unreachable (network error, no response)
+                const isNetworkError = !err?.response;
+                if (isNetworkError) {
+                    const mockUser = MOCK_USERS.find(
+                        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+                    );
+                    setIsLoading(false);
+                    if (mockUser) {
+                        dispatch(login({
+                            user: {
+                                id: mockUser.email,
+                                email: mockUser.email,
+                                role: mockUser.role,
+                                name: mockUser.name,
+                            },
+                            isOnboarded: true,
+                        }));
+                        onLogin?.();
+                        return;
+                    }
                 }
+                setIsLoading(false);
+                Alert.alert('Sign-in failed', err?.toString?.() || 'Invalid email or password.');
             }
         }
     };
@@ -402,44 +438,42 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                                 />
                             </View>
 
-                            {/* Password Input (Login Only) */}
+                            {/* Password Input */}
+                            <View style={styles.inputWrapper}>
+                                <Ionicons
+                                    name="lock-closed-outline"
+                                    size={20}
+                                    color={neutral.gray400}
+                                    style={styles.inputIcon}
+                                />
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder={mode === 'signup' ? 'Password (min. 6 characters)' : 'Password'}
+                                    placeholderTextColor={neutral.gray400}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    secureTextEntry={!isPasswordVisible}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
+                                <Pressable
+                                    onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                                    style={styles.eyeIcon}
+                                >
+                                    <Ionicons
+                                        name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+                                        size={20}
+                                        color={neutral.gray400}
+                                    />
+                                </Pressable>
+                            </View>
+
                             {mode === 'login' && (
-                                <>
-                                    <View style={styles.inputWrapper}>
-                                        <Ionicons
-                                            name="lock-closed-outline"
-                                            size={20}
-                                            color={neutral.gray400}
-                                            style={styles.inputIcon}
-                                        />
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Password"
-                                            placeholderTextColor={neutral.gray400}
-                                            value={password}
-                                            onChangeText={setPassword}
-                                            secureTextEntry={!isPasswordVisible}
-                                        />
-                                        <Pressable
-                                            onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-                                            style={styles.eyeIcon}
-                                        >
-                                            <Ionicons
-                                                name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
-                                                size={20}
-                                                color={neutral.gray400}
-                                            />
-                                        </Pressable>
-                                    </View>
-
-                                    <Pressable style={styles.forgotPassword}>
-                                        <Text style={styles.forgotPasswordText}>
-                                            Forgot password?
-                                        </Text>
-                                    </Pressable>
-
-
-                                </>
+                                <Pressable style={styles.forgotPassword}>
+                                    <Text style={styles.forgotPasswordText}>
+                                        Forgot password?
+                                    </Text>
+                                </Pressable>
                             )}
 
                             {/* Submit Button */}
