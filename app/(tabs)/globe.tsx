@@ -29,7 +29,7 @@ import { statsService } from '@/services/stats';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ── Continent talent data (defaults) ──
+// ── Continent talent data (defaults — used as fallback if API has no data yet) ──
 const DEFAULT_CONTINENTS = [
   { name: 'North America', athletes: '4,200+', recruiters: '180+', icon: 'american-football' as const },
   { name: 'Europe', athletes: '2,800+', recruiters: '150+', icon: 'football' as const },
@@ -38,6 +38,12 @@ const DEFAULT_CONTINENTS = [
   { name: 'Asia', athletes: '400+', recruiters: '35+', icon: 'tennisball' as const },
   { name: 'Oceania', athletes: '200+', recruiters: '30+', icon: 'basketball' as const },
 ];
+
+function formatContinentCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '')}k+`;
+  if (n >= 100) return `${Math.floor(n / 10) * 10}+`;
+  return String(n);
+}
 
 // ── Interactive Three.js Globe HTML ──
 const globeHtml = `<!DOCTYPE html>
@@ -144,15 +150,28 @@ export default function GlobeTab() {
   const webviewRef = useRef<WebView>(null);
   const [CONTINENTS, setContinents] = useState(DEFAULT_CONTINENTS);
 
-  // Fetch globe stats from API
+  // Fetch globe stats from API. Backend returns a continent-keyed object:
+  // { 'North America': { athletes, coaches, recruiters }, ... }
   useEffect(() => {
     statsService.getGlobeStats().then((data) => {
-      if (Array.isArray(data) && data.length > 0) {
-        setContinents(data.map((d: any, i: number) => ({
-          ...DEFAULT_CONTINENTS[i],
-          ...d,
-        })));
-      }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+      const hasAny = Object.values(data).some(
+        (v: any) => (v?.athletes ?? 0) + (v?.coaches ?? 0) + (v?.recruiters ?? 0) > 0,
+      );
+      if (!hasAny) return; // Empty DB — keep mock numbers for UX
+      setContinents(
+        DEFAULT_CONTINENTS.map((cont) => {
+          const stats = (data as Record<string, any>)[cont.name];
+          if (!stats) return cont;
+          const athletes = stats.athletes ?? 0;
+          const recruiters = (stats.recruiters ?? 0) + (stats.coaches ?? 0);
+          return {
+            ...cont,
+            athletes: formatContinentCount(athletes),
+            recruiters: formatContinentCount(recruiters),
+          };
+        }),
+      );
     }).catch(() => {});
   }, []);
 

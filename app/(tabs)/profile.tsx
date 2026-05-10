@@ -50,7 +50,12 @@ function pathFromPublicUrl(url: string, bucket: UploadBucket): string | null {
   }
 }
 
-type ProfileStats = { profileViews?: number; likesReceived?: number; matches?: number };
+type ProfileStats = {
+  profileViews?: number;
+  likesReceived?: number;
+  totalMatches?: number;
+  profileCompletion?: number;
+};
 type MeUser = { location?: string; country?: string; avatar_url?: string };
 
 const ATHLETE_DTO_FIELDS = [
@@ -362,7 +367,7 @@ export default function ProfileScreen() {
 
   const profileViews = apiStats?.profileViews ?? athleteProfile?.profileViews ?? 0;
   const likesReceived = apiStats?.likesReceived ?? athleteProfile?.likesReceived ?? 0;
-  const athleteMatches = apiStats?.matches
+  const athleteMatches = apiStats?.totalMatches
     ?? (isAthlete && user?.email ? (mockAthleteMatches[user.email] ?? []).length : 0);
 
   const completeness = isAthlete && athleteProfile
