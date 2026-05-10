@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -32,6 +33,15 @@ export default function ParentChatScreen() {
   const { threadId } = useLocalSearchParams<{ threadId?: string }>();
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ParentChatMessage[]>([]);
+  const [otherIsTyping, setOtherIsTyping] = useState(false);
+
+  // Local typing-emit debouncer: emit(true) when user types,
+  // emit(false) after 2s of inactivity. Refs to avoid re-renders.
+  const localTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localIsTyping = useRef(false);
+  // Remote typing auto-clear: hide indicator if no new event arrives
+  // within 4s (handles missed `stop` events).
+  const remoteTypingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -48,8 +58,10 @@ export default function ParentChatScreen() {
   // Load messages from API, fallback to mock
   useEffect(() => {
     if (!threadId) return;
+    const tid = String(threadId);
+
     chatService
-      .getMessages(String(threadId))
+      .getMessages(tid)
       .then((res) => {
         const apiMessages = (res.messages || res || []).map((m: any) => ({
           id: m.id,
@@ -67,10 +79,13 @@ export default function ParentChatScreen() {
         setMessages(thread?.messages ?? []);
       });
 
+    // Mark thread read on open (best-effort)
+    chatService.markRead(tid).catch(() => {});
+
     // Connect WebSocket
     if (user?.id) {
       chatService.connectSocket(user.id).then(() => {
-        chatService.joinThread(String(threadId));
+        chatService.joinThread(tid);
         const socket = chatService.getSocket();
         socket?.on('new_message', (msg: any) => {
           setMessages((prev) => [
@@ -82,18 +97,83 @@ export default function ParentChatScreen() {
               sentAt: msg.createdAt || 'Now',
             },
           ]);
+          // Mark as read whenever a new incoming message arrives while we're open
+          if (msg.senderId !== user?.id) {
+            chatService.markRead(tid).catch(() => {});
+          }
+        });
+        socket?.on('user_typing', (evt: any) => {
+          if (!evt) return;
+          if (String(evt.matchId) !== tid) return;
+          if (evt.userId === user?.id) return; // ignore self
+          setOtherIsTyping(!!evt.isTyping);
+          if (remoteTypingClear.current) clearTimeout(remoteTypingClear.current);
+          if (evt.isTyping) {
+            remoteTypingClear.current = setTimeout(() => setOtherIsTyping(false), 4000);
+          }
         });
       });
     }
 
     return () => {
-      if (threadId) chatService.leaveThread(String(threadId));
+      if (threadId) chatService.leaveThread(tid);
+      // Clear our own typing indicator on unmount
+      if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
+      if (remoteTypingClear.current) clearTimeout(remoteTypingClear.current);
+      if (localIsTyping.current) {
+        chatService.emitTyping(tid, false);
+        localIsTyping.current = false;
+      }
+      // Detach handlers so they don't accumulate across re-mounts
+      const socket = chatService.getSocket();
+      socket?.off('new_message');
+      socket?.off('user_typing');
     };
   }, [threadId, user?.id]);
+
+  // Reconnect socket when app returns to foreground
+  useEffect(() => {
+    if (!threadId || !user?.id) return;
+    const tid = String(threadId);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      const socket = chatService.getSocket();
+      if (!socket || !socket.connected) {
+        chatService.connectSocket(user.id).then(() => {
+          chatService.joinThread(tid);
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [threadId, user?.id]);
+
+  const onDraftChange = (val: string) => {
+    setDraft(val);
+    if (!threadId) return;
+    const tid = String(threadId);
+    if (!localIsTyping.current) {
+      chatService.emitTyping(tid, true);
+      localIsTyping.current = true;
+    }
+    if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
+    localTypingTimer.current = setTimeout(() => {
+      if (localIsTyping.current) {
+        chatService.emitTyping(tid, false);
+        localIsTyping.current = false;
+      }
+    }, 2000);
+  };
 
   const handleSend = () => {
     const text = draft.trim();
     if (!text) return;
+
+    // Stop the typing indicator immediately on send
+    if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
+    if (localIsTyping.current && threadId) {
+      chatService.emitTyping(String(threadId), false);
+      localIsTyping.current = false;
+    }
 
     // Send via WebSocket (real-time) or REST fallback
     const socket = chatService.getSocket();
@@ -215,11 +295,21 @@ export default function ParentChatScreen() {
         })}
       </ScrollView>
 
+      {otherIsTyping && (
+        <View style={styles.typingRow}>
+          <View style={styles.typingBubble}>
+            <Text style={styles.typingLabel} numberOfLines={1}>
+              {thread.recruiterName} is typing…
+            </Text>
+          </View>
+        </View>
+      )}
+
       <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
         <View style={styles.inputWrap}>
           <TextInput
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={onDraftChange}
             placeholder="Type a message..."
             placeholderTextColor={theme.inputPlaceholder}
             style={styles.input}
@@ -349,6 +439,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 10,
     fontFamily: 'Poppins_500Medium',
+  },
+  typingRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    alignItems: 'flex-start',
+  },
+  typingBubble: {
+    backgroundColor: theme.surface,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    maxWidth: '70%',
+  },
+  typingLabel: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: theme.textSecondary,
+    fontStyle: 'italic',
   },
   recruiterTimeText: {
     color: theme.textMuted,
