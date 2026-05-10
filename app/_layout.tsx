@@ -142,6 +142,7 @@ function RootLayoutContent() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="profile-edit" options={{ headerShown: false }} />
+        <Stack.Screen name="who-drafted-me" options={{ headerShown: false }} />
         <Stack.Screen name="preferences" options={{ headerShown: false }} />
         <Stack.Screen name="preferences-country" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />

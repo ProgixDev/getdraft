@@ -56,6 +56,7 @@ export default function MoreScreen() {
             : 'User';
 
   const menuItems = [
+    { icon: 'star-outline', label: 'Who Drafted You', onPress: () => router.push('/who-drafted-me') },
     { icon: 'settings-outline', label: 'Settings', onPress: () => router.push('/settings') },
     { icon: 'diamond-outline', label: 'My Subscription', onPress: () => router.push('/subscription') },
     { icon: 'help-circle-outline', label: 'Help Center', onPress: () => router.push('/help-center') },
