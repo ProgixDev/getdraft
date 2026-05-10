@@ -369,13 +369,22 @@ export default function PublicProfileScreen() {
             <View style={styles.infoSection}>
               <Text style={styles.sectionTitle}>Videos</Text>
               <View style={styles.videoSection}>
-                {videos.map((_url, i) => (
-                  <View key={i} style={styles.videoItem}>
+                {videos.map((url, i) => (
+                  <Pressable
+                    key={i}
+                    style={styles.videoItem}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/video',
+                        params: { url, title: `Highlight Reel ${i + 1}` },
+                      })
+                    }
+                  >
                     <View style={styles.videoPlaceholder}>
                       <Ionicons name="play-circle" size={48} color={brand.white} />
                       <Text style={styles.videoLabel}>Highlight Reel {i + 1}</Text>
                     </View>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </View>

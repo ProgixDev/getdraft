@@ -700,7 +700,13 @@ export default function ProfileScreen() {
                   <Pressable
                     key={i}
                     style={styles.videoItem}
-                    onPress={() => comingSoon('Video Player')}
+                    onPress={() => {
+                      if (!isUrl) return; // skip require'd mock assets
+                      router.push({
+                        pathname: '/video',
+                        params: { url: uri as string, title: `Highlight Reel ${i + 1}` },
+                      });
+                    }}
                     onLongPress={isUrl && !isParent ? () => handleDeleteMedia('videos', uri as string) : undefined}
                     delayLongPress={400}
                   >
