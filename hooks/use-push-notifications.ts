@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { router } from 'expo-router';
 
 import { notificationsService } from '@/services/notifications';
 
@@ -14,6 +15,30 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+/**
+ * Route the user to the right screen based on the notification's `data` payload.
+ * Backend schema:
+ *   { type: 'new_match' | 'new_message', matchId: string }
+ *   { type: 'outreach', outreachId: string }
+ */
+function routeFromNotificationData(data: unknown) {
+  if (!data || typeof data !== 'object') return;
+  const { type, matchId, outreachId } = data as {
+    type?: string;
+    matchId?: string;
+    outreachId?: string;
+  };
+  if ((type === 'new_match' || type === 'new_message') && matchId) {
+    router.push(`/chat/${matchId}` as never);
+    return;
+  }
+  if (type === 'outreach' && outreachId) {
+    // No dedicated outreach detail screen yet — drop into the Draft Board
+    // (parent's outreach inbox) so the new thread is visible.
+    router.push('/(tabs)/matches' as never);
+  }
+}
 
 async function getExpoPushToken(): Promise<string | null> {
   if (!Device.isDevice) return null;
@@ -45,7 +70,9 @@ async function getExpoPushToken(): Promise<string | null> {
 
 export function usePushNotifications(enabled: boolean) {
   const attemptedRef = useRef(false);
+  const coldStartHandledRef = useRef(false);
 
+  // Token registration: runs once after auth.
   useEffect(() => {
     if (!enabled) {
       attemptedRef.current = false;
@@ -69,5 +96,30 @@ export function usePushNotifications(enabled: boolean) {
         attemptedRef.current = false;
       }
     })();
+  }, [enabled]);
+
+  // Tap-handling: deep-link into chat/outreach when the user opens a
+  // notification. Only active while the user is authenticated.
+  useEffect(() => {
+    if (!enabled) {
+      coldStartHandledRef.current = false;
+      return;
+    }
+
+    // Cold-start: app launched by tapping a notification.
+    if (!coldStartHandledRef.current) {
+      coldStartHandledRef.current = true;
+      Notifications.getLastNotificationResponseAsync()
+        .then((response) => {
+          if (response) routeFromNotificationData(response.notification.request.content.data);
+        })
+        .catch(() => {});
+    }
+
+    // Warm: tapped while app is foreground/background.
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      routeFromNotificationData(response.notification.request.content.data);
+    });
+    return () => sub.remove();
   }, [enabled]);
 }

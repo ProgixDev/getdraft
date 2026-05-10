@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { DiscoverService } from './discover.service';
 import { SupabaseService } from '../../config/supabase.config';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   UserRole,
   SwipeDirection,
@@ -45,6 +46,12 @@ describe('DiscoverService', () => {
           provide: SupabaseService,
           useValue: {
             getAdminClient: () => mockAdminClient,
+          },
+        },
+        {
+          provide: NotificationsService,
+          useValue: {
+            sendPushToUser: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

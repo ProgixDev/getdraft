@@ -14,12 +14,16 @@ import {
   SwipeDirection,
   PlanId,
 } from '../../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class DiscoverService {
   private readonly logger = new Logger(DiscoverService.name);
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async getFeed(user: CurrentUserPayload, query: DiscoverQueryDto) {
     if (user.role === UserRole.PARENT) {
@@ -280,6 +284,29 @@ export class DiscoverService {
         } else if (match) {
           matched = true;
           matchId = match.id;
+
+          // Push "Game On!" to both users (best-effort; method swallows its own errors)
+          const { data: names } = await supabase
+            .from('users')
+            .select('id, name')
+            .in('id', [user.id, dto.targetUserId]);
+          const nameOf = (id: string) =>
+            names?.find((n) => n.id === id)?.name ?? 'Someone';
+          const data = { type: 'new_match', matchId: match.id };
+          await Promise.all([
+            this.notificationsService.sendPushToUser(
+              dto.targetUserId,
+              'Game On! 🤝',
+              `You matched with ${nameOf(user.id)}`,
+              data,
+            ),
+            this.notificationsService.sendPushToUser(
+              user.id,
+              'Game On! 🤝',
+              `You matched with ${nameOf(dto.targetUserId)}`,
+              data,
+            ),
+          ]);
         }
       }
     }
