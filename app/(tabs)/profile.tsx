@@ -36,7 +36,19 @@ import { mockParentProfiles, ParentProfile } from '@/constants/parentData';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
+import { uploadsService, UploadBucket } from '@/services/uploads';
 import { pickAndUploadMedia } from '@/services/media';
+
+function pathFromPublicUrl(url: string, bucket: UploadBucket): string | null {
+  const marker = `/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  try {
+    return decodeURIComponent(url.slice(idx + marker.length));
+  } catch {
+    return null;
+  }
+}
 
 type ProfileStats = { profileViews?: number; likesReceived?: number; matches?: number };
 type MeUser = { location?: string; country?: string; avatar_url?: string };
@@ -251,6 +263,66 @@ export default function ProfileScreen() {
     } finally {
       setUploading(null);
     }
+  }, [uploading, user, isAthlete, isRecruiter, loadProfile]);
+
+  const handleDeleteMedia = useCallback(async (kind: 'photos' | 'videos', url: string) => {
+    if (uploading || !user) return;
+    if (!isAthlete && !isRecruiter) return;
+    Alert.alert(
+      kind === 'videos' ? 'Delete this video?' : 'Delete this photo?',
+      'This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setUploading(kind);
+            try {
+              let current: any = {};
+              try {
+                current = isAthlete
+                  ? await profilesService.getAthleteProfile()
+                  : await profilesService.getRecruiterProfile();
+              } catch {
+                /* 404 — nothing to delete from */
+                return;
+              }
+              const existing: string[] = Array.isArray(current[kind]) ? current[kind] : [];
+              const next = existing.filter((u: string) => u !== url);
+              if (next.length === existing.length) {
+                // URL wasn't in the array (e.g. mock data). Skip.
+                return;
+              }
+
+              const bucket: UploadBucket = kind === 'videos' ? 'videos' : 'photos';
+              const path = pathFromPublicUrl(url, bucket);
+              if (path) {
+                await uploadsService.deleteFile(bucket, path).catch(() => {
+                  // If storage delete fails (already gone, race), still strip from profile
+                });
+              }
+
+              const merged = pickFields(
+                current,
+                isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+              );
+              merged[kind] = next;
+              if (isAthlete) {
+                await profilesService.upsertAthleteProfile(merged);
+              } else {
+                await profilesService.upsertRecruiterProfile(merged);
+              }
+              await loadProfile();
+            } catch (err: any) {
+              Alert.alert('Could not delete', err?.message ?? 'Try again in a moment.');
+            } finally {
+              setUploading(null);
+            }
+          },
+        },
+      ],
+    );
   }, [uploading, user, isAthlete, isRecruiter, loadProfile]);
 
   const handleChangeAvatar = useCallback(async () => {
@@ -557,15 +629,23 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.photoGrid}>
             {photos.length > 0 ? (
-              photos.map((photo, i) => (
-                <View key={i} style={styles.photoItem}>
-                  <Image
-                    source={typeof photo === 'string' ? { uri: photo } : photo}
-                    style={styles.photoImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              ))
+              photos.map((photo, i) => {
+                const isUrl = typeof photo === 'string';
+                return (
+                  <Pressable
+                    key={i}
+                    style={styles.photoItem}
+                    onLongPress={isUrl && !isParent ? () => handleDeleteMedia('photos', photo as string) : undefined}
+                    delayLongPress={400}
+                  >
+                    <Image
+                      source={isUrl ? { uri: photo as string } : photo}
+                      style={styles.photoImage}
+                      resizeMode="cover"
+                    />
+                  </Pressable>
+                );
+              })
             ) : (
               <View style={styles.emptyMedia}>
                 <Ionicons name="images-outline" size={40} color={theme.textMuted} />
@@ -609,14 +689,23 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.videoSection}>
             {videos.length > 0 ? (
-              videos.map((uri, i) => (
-                <Pressable key={i} style={styles.videoItem} onPress={() => comingSoon('Video Player')}>
-                  <View style={styles.videoPlaceholder}>
-                    <Ionicons name="play-circle" size={48} color={brand.white} />
-                    <Text style={styles.videoLabel}>Highlight Reel {i + 1}</Text>
-                  </View>
-                </Pressable>
-              ))
+              videos.map((uri, i) => {
+                const isUrl = typeof uri === 'string';
+                return (
+                  <Pressable
+                    key={i}
+                    style={styles.videoItem}
+                    onPress={() => comingSoon('Video Player')}
+                    onLongPress={isUrl && !isParent ? () => handleDeleteMedia('videos', uri as string) : undefined}
+                    delayLongPress={400}
+                  >
+                    <View style={styles.videoPlaceholder}>
+                      <Ionicons name="play-circle" size={48} color={brand.white} />
+                      <Text style={styles.videoLabel}>Highlight Reel {i + 1}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })
             ) : (
               <View style={styles.emptyMedia}>
                 <Ionicons name="videocam-outline" size={40} color={theme.textMuted} />
