@@ -31,3 +31,12 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id
 -- 4. Index for unique (viewer, viewed) profile-view dedup queries.
 CREATE INDEX IF NOT EXISTS idx_profile_views_viewer_viewed
   ON public.profile_views(viewer_id, viewed_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 009_user_preferences.sql
+-- ------------------------------------------------------------
+-- Per-user JSONB blob for client-managed settings (notification
+-- toggles, privacy flags). Client owns the schema of the contents.
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
