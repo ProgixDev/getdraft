@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,8 +8,10 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSelector } from 'react-redux';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,10 +24,91 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
 import { RootState } from '@/store';
-import { mockAthletes, mockAgentProfile, MediaSource, mockAthleteMatches } from '@/constants/discoverData';
-import { mockParentProfiles } from '@/constants/parentData';
+import {
+  mockAthletes,
+  mockAgentProfile,
+  MediaSource,
+  mockAthleteMatches,
+  AthleteProfile,
+  AgentProfile,
+} from '@/constants/discoverData';
+import { mockParentProfiles, ParentProfile } from '@/constants/parentData';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
+import { usersService } from '@/services/users';
+import { pickAndUploadMedia } from '@/services/media';
+
+type ProfileStats = { profileViews?: number; likesReceived?: number; matches?: number };
+type MeUser = { location?: string; country?: string; avatar_url?: string };
+
+const ATHLETE_DTO_FIELDS = [
+  'sport', 'position', 'level', 'bio', 'class_year', 'gpa',
+  'height', 'weight', 'forty_yard_dash', 'awards', 'photos', 'videos',
+] as const;
+
+const RECRUITER_DTO_FIELDS = [
+  'organization', 'sport', 'role_type', 'tags', 'bio', 'photos', 'videos',
+] as const;
+
+function pickFields<T extends string>(src: any, keys: readonly T[]): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of keys) {
+    const v = src?.[k];
+    if (v != null) out[k] = v;
+  }
+  return out;
+}
+
+function normalizeAthleteApi(api: any, name: string, email: string): AthleteProfile {
+  return {
+    id: api?.id ?? '',
+    email,
+    name,
+    sport: api?.sport ?? '',
+    position: api?.position ?? '',
+    level: api?.level ?? '',
+    location: '',
+    country: '',
+    distanceKm: 0,
+    photos: Array.isArray(api?.photos) ? (api.photos as MediaSource[]) : [],
+    videos: Array.isArray(api?.videos) ? (api.videos as MediaSource[]) : [],
+    bio: api?.bio,
+    classYear: api?.class_year,
+    gpa: api?.gpa,
+    height: api?.height,
+    weight: api?.weight,
+    fortyYardDash: api?.forty_yard_dash,
+    awards: Array.isArray(api?.awards) ? api.awards : undefined,
+    profileViews: api?.profile_views,
+    likesReceived: api?.likes_received,
+  };
+}
+
+function normalizeAgentApi(api: any, name: string, email: string): AgentProfile {
+  return {
+    id: api?.id ?? '',
+    email,
+    name,
+    organization: api?.organization ?? '',
+    location: '',
+    sport: api?.sport ?? '',
+    photos: Array.isArray(api?.photos) ? (api.photos as MediaSource[]) : [],
+    videos: Array.isArray(api?.videos) ? (api.videos as MediaSource[]) : [],
+    bio: api?.bio,
+  };
+}
+
+function normalizeParentApi(api: any, name: string, email: string): ParentProfile {
+  return {
+    email,
+    name,
+    relationship: api?.relationship ?? '',
+    childAthleteEmail: '',
+    childClassYear: api?.child_class_year ?? '',
+    location: '',
+    bio: api?.bio ?? '',
+  };
+}
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 48) / 3 - 8;
@@ -64,6 +147,7 @@ function getCompleteness(profile: {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
 
   const [fontsLoaded] = useFonts({
@@ -74,36 +158,129 @@ export default function ProfileScreen() {
   });
 
   const isAthlete = user?.role === 'athlete';
-  const isRecruiter = user?.role === 'recruiter';
+  const isRecruiter = user?.role === 'recruiter' || user?.role === 'coach';
   const isParent = user?.role === 'parent';
 
+  const [apiAthlete, setApiAthlete] = useState<AthleteProfile | null>(null);
+  const [apiAgent, setApiAgent] = useState<AgentProfile | null>(null);
+  const [apiParent, setApiParent] = useState<ParentProfile | null>(null);
+  const [apiUser, setApiUser] = useState<MeUser | null>(null);
+  const [apiStats, setApiStats] = useState<ProfileStats | null>(null);
+  const [uploading, setUploading] = useState<null | 'photos' | 'videos'>(null);
+
+  const loadProfile = useCallback(async () => {
+    if (!user) return;
+    const name = user.name ?? '';
+    const email = user.email;
+
+    usersService.getMe()
+      .then((data) => setApiUser(data ?? null))
+      .catch(() => setApiUser(null));
+
+    if (isAthlete) {
+      profilesService.getAthleteProfile()
+        .then((data) => { if (data) setApiAthlete(normalizeAthleteApi(data, name, email)); })
+        .catch(() => setApiAthlete(null));
+      if (user.id) {
+        statsService.getProfileStats(user.id)
+          .then((data) => setApiStats(data ?? null))
+          .catch(() => setApiStats(null));
+      }
+    } else if (isRecruiter) {
+      profilesService.getRecruiterProfile()
+        .then((data) => { if (data) setApiAgent(normalizeAgentApi(data, name, email)); })
+        .catch(() => setApiAgent(null));
+    } else if (isParent) {
+      profilesService.getParentProfile()
+        .then((data) => { if (data) setApiParent(normalizeParentApi(data, name, email)); })
+        .catch(() => setApiParent(null));
+    }
+  }, [user, isAthlete, isRecruiter, isParent]);
+
+  useFocusEffect(useCallback(() => { loadProfile(); }, [loadProfile]));
+
+  const handleAddMedia = useCallback(async (kind: 'photos' | 'videos') => {
+    if (uploading || !user) return;
+    if (!isAthlete && !isRecruiter) {
+      comingSoon('Add Media');
+      return;
+    }
+    setUploading(kind);
+    try {
+      const newUrls = await pickAndUploadMedia(
+        kind === 'videos' ? 'video' : 'image',
+        kind,
+        { allowsMultipleSelection: kind === 'photos', selectionLimit: kind === 'photos' ? 6 : 1 },
+      );
+      if (newUrls.length === 0) return;
+
+      if (isAthlete) {
+        let current: any = {};
+        try { current = await profilesService.getAthleteProfile(); } catch { /* 404 = no profile yet */ }
+        if (!current?.sport) {
+          Alert.alert(
+            'Set up your profile first',
+            'Add your sport and position before uploading media. Tap the pencil to edit your profile.',
+          );
+          return;
+        }
+        const merged = pickFields(current, ATHLETE_DTO_FIELDS);
+        const existing: string[] = Array.isArray(current[kind]) ? current[kind] : [];
+        merged[kind] = [...existing, ...newUrls];
+        await profilesService.upsertAthleteProfile(merged);
+      } else if (isRecruiter) {
+        let current: any = {};
+        try { current = await profilesService.getRecruiterProfile(); } catch { /* 404 */ }
+        if (!current?.organization || !current?.sport || !current?.role_type) {
+          Alert.alert(
+            'Set up your profile first',
+            'Add your organization, sport, and role before uploading media. Tap the pencil to edit your profile.',
+          );
+          return;
+        }
+        const merged = pickFields(current, RECRUITER_DTO_FIELDS);
+        const existing: string[] = Array.isArray(current[kind]) ? current[kind] : [];
+        merged[kind] = [...existing, ...newUrls];
+        await profilesService.upsertRecruiterProfile(merged);
+      }
+
+      await loadProfile();
+    } catch (err: any) {
+      Alert.alert('Upload failed', err?.message ?? 'Something went wrong while uploading.');
+    } finally {
+      setUploading(null);
+    }
+  }, [uploading, user, isAthlete, isRecruiter, loadProfile]);
+
   const athleteProfile = isAthlete
-    ? mockAthletes.find((a) => a.email === user?.email)
+    ? apiAthlete ?? mockAthletes.find((a) => a.email === user?.email) ?? null
     : null;
-  const agentProfile =
-    isRecruiter && user?.email === mockAgentProfile.email ? mockAgentProfile : null;
+  const agentProfile = isRecruiter
+    ? apiAgent ?? (user?.email === mockAgentProfile.email ? mockAgentProfile : null)
+    : null;
   const parentProfile = isParent
-    ? mockParentProfiles.find((parent) => parent.email === user?.email)
+    ? apiParent ?? mockParentProfiles.find((p) => p.email === user?.email) ?? null
     : null;
   const childAthleteProfile = parentProfile
-    ? mockAthletes.find((athlete) => athlete.email === parentProfile.childAthleteEmail)
+    ? mockAthletes.find((athlete) => athlete.email === (parentProfile as ParentProfile).childAthleteEmail)
     : null;
 
   const profileData = athleteProfile ?? agentProfile ?? childAthleteProfile;
   const photos: MediaSource[] = profileData?.photos ?? [];
   const videos: MediaSource[] = profileData?.videos ?? [];
 
-  // Athlete-specific stats
-  const athleteMatches = isAthlete && user?.email
-    ? (mockAthleteMatches[user.email] ?? []).length
-    : 0;
-  const profileViews = athleteProfile?.profileViews ?? 0;
-  const likesReceived = athleteProfile?.likesReceived ?? 0;
+  const profileViews = apiStats?.profileViews ?? athleteProfile?.profileViews ?? 0;
+  const likesReceived = apiStats?.likesReceived ?? athleteProfile?.likesReceived ?? 0;
+  const athleteMatches = apiStats?.matches
+    ?? (isAthlete && user?.email ? (mockAthleteMatches[user.email] ?? []).length : 0);
 
-  // Completeness
   const completeness = isAthlete && athleteProfile
     ? getCompleteness(athleteProfile)
     : null;
+
+  const displayLocation = apiUser?.location
+    ?? parentProfile?.location
+    ?? profileData?.location;
 
   if (!fontsLoaded) return null;
 
@@ -127,7 +304,7 @@ export default function ProfileScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
-        <Pressable style={styles.editButton} onPress={() => comingSoon('Edit Profile')}>
+        <Pressable style={styles.editButton} onPress={() => router.push('/profile-edit')}>
           <Ionicons name="pencil-outline" size={22} color={theme.text} />
         </Pressable>
       </View>
@@ -308,10 +485,12 @@ export default function ProfileScreen() {
                 </View>
               </>
             )}
-            <View style={styles.infoRow}>
-              <Ionicons name="location" size={18} color={theme.textMuted} />
-              <Text style={styles.infoText}>{parentProfile?.location ?? profileData?.location}</Text>
-            </View>
+            {displayLocation && (
+              <View style={styles.infoRow}>
+                <Ionicons name="location" size={18} color={theme.textMuted} />
+                <Text style={styles.infoText}>{displayLocation}</Text>
+              </View>
+            )}
             {(parentProfile?.bio || profileData?.bio) && (
               <Text style={styles.bio}>{parentProfile?.bio ?? profileData?.bio}</Text>
             )}
@@ -335,9 +514,18 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{isParent ? "Child's Photos" : 'Photos'}</Text>
-            <Pressable onPress={() => comingSoon('Add Photos')}>
-              <Text style={styles.addText}>+ Add</Text>
-            </Pressable>
+            {!isParent && (
+              <Pressable
+                onPress={() => handleAddMedia('photos')}
+                disabled={uploading !== null}
+              >
+                {uploading === 'photos' ? (
+                  <ActivityIndicator size="small" color={theme.text} />
+                ) : (
+                  <Text style={styles.addText}>+ Add</Text>
+                )}
+              </Pressable>
+            )}
           </View>
           <View style={styles.photoGrid}>
             {photos.length > 0 ? (
@@ -356,10 +544,18 @@ export default function ProfileScreen() {
                 <Text style={styles.emptyMediaText}>
                   {isParent ? "Child athlete hasn't added photos yet" : 'Add photos to your profile'}
                 </Text>
-                <Pressable style={styles.addMediaButton} onPress={() => comingSoon('Add Photos')}>
-                  <Text style={styles.addMediaButtonText}>
-                    {isParent ? 'Request Uploads' : 'Add Photos'}
-                  </Text>
+                <Pressable
+                  style={[styles.addMediaButton, uploading === 'photos' && styles.addMediaButtonDisabled]}
+                  onPress={() => isParent ? comingSoon('Request Uploads') : handleAddMedia('photos')}
+                  disabled={uploading !== null}
+                >
+                  {uploading === 'photos' ? (
+                    <ActivityIndicator size="small" color={theme.accentText} />
+                  ) : (
+                    <Text style={styles.addMediaButtonText}>
+                      {isParent ? 'Request Uploads' : 'Add Photos'}
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             )}
@@ -370,9 +566,18 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{isParent ? "Child's Videos" : 'Videos'}</Text>
-            <Pressable onPress={() => comingSoon('Add Videos')}>
-              <Text style={styles.addText}>+ Add</Text>
-            </Pressable>
+            {!isParent && (
+              <Pressable
+                onPress={() => handleAddMedia('videos')}
+                disabled={uploading !== null}
+              >
+                {uploading === 'videos' ? (
+                  <ActivityIndicator size="small" color={theme.text} />
+                ) : (
+                  <Text style={styles.addText}>+ Add</Text>
+                )}
+              </Pressable>
+            )}
           </View>
           <View style={styles.videoSection}>
             {videos.length > 0 ? (
@@ -390,10 +595,18 @@ export default function ProfileScreen() {
                 <Text style={styles.emptyMediaText}>
                   {isParent ? "Child athlete hasn't added highlight videos" : 'Add highlight videos'}
                 </Text>
-                <Pressable style={styles.addMediaButton} onPress={() => comingSoon('Add Videos')}>
-                  <Text style={styles.addMediaButtonText}>
-                    {isParent ? 'Request Uploads' : 'Add Videos'}
-                  </Text>
+                <Pressable
+                  style={[styles.addMediaButton, uploading === 'videos' && styles.addMediaButtonDisabled]}
+                  onPress={() => isParent ? comingSoon('Request Uploads') : handleAddMedia('videos')}
+                  disabled={uploading !== null}
+                >
+                  {uploading === 'videos' ? (
+                    <ActivityIndicator size="small" color={theme.accentText} />
+                  ) : (
+                    <Text style={styles.addMediaButtonText}>
+                      {isParent ? 'Request Uploads' : 'Add Videos'}
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             )}
@@ -707,6 +920,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: theme.accent,
     borderRadius: 20,
+    minHeight: 36,
+    minWidth: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMediaButtonDisabled: {
+    opacity: 0.6,
   },
   addMediaButtonText: {
     fontSize: 14,

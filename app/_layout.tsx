@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { theme } from '@/config/colors';
 import { store, RootState } from '@/store';
 import { SplashScreen, WelcomeScreen, AuthScreen } from '@/components';
@@ -34,6 +35,8 @@ function RootLayoutContent() {
   const [appState, setAppState] = useState<AppState>('loading');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionOpacity = useSharedValue(1);
+
+  usePushNotifications(isAuthenticated && !!user);
 
   // Restore auth on app start
   useEffect(() => {
@@ -138,6 +141,7 @@ function RootLayoutContent() {
     <ThemeProvider value={DarkTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="profile-edit" options={{ headerShown: false }} />
         <Stack.Screen name="preferences" options={{ headerShown: false }} />
         <Stack.Screen name="preferences-country" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />

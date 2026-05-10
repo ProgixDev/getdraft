@@ -12,7 +12,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.achrefdev.myroster",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
+        "NSPhotoLibraryAddUsageDescription": "GetDraft saves selected photos to your profile.",
+        "NSCameraUsageDescription": "GetDraft uses the camera to capture profile photos and highlight clips."
       }
     },
     "android": {
@@ -45,7 +48,14 @@
       ],
       "expo-font",
       "@react-native-community/datetimepicker",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
+          "cameraPermission": "GetDraft uses the camera to capture profile photos and highlight clips."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
