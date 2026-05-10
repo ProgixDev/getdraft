@@ -56,9 +56,9 @@ export function AthleteCard({
   );
   const [videoReady, setVideoReady] = useState(false);
 
-  const videoSource = hasVideo
-    ? typeof firstVideo === 'string' ? firstVideo : firstVideo?.uri ?? ''
-    : '';
+  // expo-video's useVideoPlayer accepts a string URL or a number (require'd asset).
+  // MediaSource is `string | number`, so we pass it through directly.
+  const videoSource: string | number = hasVideo && firstVideo != null ? firstVideo : '';
 
   const player = useVideoPlayer(videoSource, (p) => {
     p.loop = false;

@@ -66,7 +66,7 @@ export const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = (
     const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const webViewRef = useRef<WebView>(null);
-    const searchTimeout = useRef<NodeJS.Timeout>();
+    const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Popular cities as fallback
     const popularCities: Location[] = [
