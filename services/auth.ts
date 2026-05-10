@@ -36,6 +36,10 @@ export const authService = {
     await api.post('/auth/forgot-password', { email });
   },
 
+  async resendVerification(email: string): Promise<void> {
+    await api.post('/auth/resend-verification', { email });
+  },
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');

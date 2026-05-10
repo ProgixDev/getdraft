@@ -21,3 +21,10 @@ export class ForgotPasswordDto {
   @IsNotEmpty()
   email: string;
 }
+
+export class ResendVerificationDto {
+  @ApiProperty({ example: 'athlete@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
+}

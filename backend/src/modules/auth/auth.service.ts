@@ -120,6 +120,23 @@ export class AuthService {
     return { message: 'Password reset email sent' };
   }
 
+  async resendVerification(email: string) {
+    const supabase = this.supabaseService.getClient();
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+
+    // Don't surface "user already confirmed" or "user not found" errors to
+    // the caller — same anti-enumeration reasoning as forgot-password.
+    if (error && !/already confirmed|not found/i.test(error.message)) {
+      throw new BadRequestException(error.message);
+    }
+
+    return { message: 'Verification email sent' };
+  }
+
   async logout(accessToken: string | null) {
     if (!accessToken) {
       return { message: 'Logged out successfully' };

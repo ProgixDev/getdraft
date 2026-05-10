@@ -7,6 +7,7 @@ import {
   VerifyEmailDto,
   RefreshTokenDto,
   ForgotPasswordDto,
+  ResendVerificationDto,
 } from './dto/verify-email.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { Public } from '../../common/decorators/public.decorator';
@@ -49,6 +50,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Send password reset email' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @ApiOperation({ summary: 'Resend the email verification code' })
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto.email);
   }
 
   @Post('logout')

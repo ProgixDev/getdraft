@@ -39,6 +39,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
 
     const [code, setCode] = useState(['', '', '', '', '', '']);
     const [isLoading, setIsLoading] = useState(false);
+    const [isResending, setIsResending] = useState(false);
     const [timer, setTimer] = useState(60);
     const inputRefs = useRef<(TextInput | null)[]>([]);
 
@@ -93,11 +94,22 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
         }
     };
 
-    const handleResend = () => {
-        if (timer > 0) return;
-        
-        setTimer(60);
-        Alert.alert('Code Resent', 'A new verification code has been sent to your email.');
+    const handleResend = async () => {
+        if (timer > 0 || isResending) return;
+        setIsResending(true);
+        try {
+            await authService.resendVerification(email);
+            setTimer(60);
+            Alert.alert('Code Resent', 'A new verification code has been sent to your email.');
+        } catch (err: any) {
+            const message =
+                err?.response?.data?.message ??
+                err?.message ??
+                'Could not resend the code. Try again in a moment.';
+            Alert.alert('Resend failed', String(message));
+        } finally {
+            setIsResending(false);
+        }
     };
 
     if (!fontsLoaded) return null;
@@ -174,7 +186,7 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
                     {/* Resend */}
                     <View style={styles.resendContainer}>
                         <Text style={styles.resendText}>Didn't receive the code? </Text>
-                        <Pressable onPress={handleResend} disabled={timer > 0}>
+                        <Pressable onPress={handleResend} disabled={timer > 0 || isResending}>
                             <Text style={[
                                 styles.resendLink,
                                 timer > 0 && styles.resendLinkDisabled,
