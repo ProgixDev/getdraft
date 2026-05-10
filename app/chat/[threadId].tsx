@@ -25,6 +25,7 @@ import { brand, neutral, semantic, theme } from '@/config/colors';
 import { RootState } from '@/store';
 import { mockParentChatThreads, ParentChatMessage } from '@/constants/parentData';
 import { chatService } from '@/services/chat';
+import { matchesService } from '@/services/matches';
 
 export default function ParentChatScreen() {
   const insets = useSafeAreaInsets();
@@ -34,6 +35,7 @@ export default function ParentChatScreen() {
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<ParentChatMessage[]>([]);
   const [otherIsTyping, setOtherIsTyping] = useState(false);
+  const [otherUserId, setOtherUserId] = useState<string | null>(null);
 
   // Local typing-emit debouncer: emit(true) when user types,
   // emit(false) after 2s of inactivity. Refs to avoid re-renders.
@@ -81,6 +83,16 @@ export default function ParentChatScreen() {
 
     // Mark thread read on open (best-effort)
     chatService.markRead(tid).catch(() => {});
+
+    // Resolve the other user's id so the header can deep-link to their profile
+    if (user?.id) {
+      matchesService.getMatch(tid)
+        .then((match: any) => {
+          const other = match?.user_1_id === user.id ? match?.user_2_id : match?.user_1_id;
+          if (other) setOtherUserId(String(other));
+        })
+        .catch(() => {});
+    }
 
     // Connect WebSocket
     if (user?.id) {
@@ -230,7 +242,13 @@ export default function ParentChatScreen() {
         <Pressable style={styles.headerIconButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color={theme.text} />
         </Pressable>
-        <View style={styles.headerCenter}>
+        <Pressable
+          style={styles.headerCenter}
+          onPress={() => {
+            if (otherUserId) router.push(`/user/${otherUserId}`);
+          }}
+          disabled={!otherUserId}
+        >
           <View style={styles.headerTitleRow}>
             <Text style={styles.headerTitle}>{thread.recruiterName}</Text>
             {thread.verified && (
@@ -241,7 +259,7 @@ export default function ParentChatScreen() {
             {thread.recruiterRole} • {thread.organization}
           </Text>
           <Text style={styles.headerChild}>Regarding {thread.childName}</Text>
-        </View>
+        </Pressable>
         <View style={styles.headerIconButton} />
       </View>
 

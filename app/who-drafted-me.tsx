@@ -164,7 +164,11 @@ export default function WhoDraftedMeScreen() {
             const drafter = row.swiper;
             if (!drafter) return null;
             return (
-              <View key={`${drafter.id}-${row.created_at}`} style={styles.row}>
+              <Pressable
+                key={`${drafter.id}-${row.created_at}`}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                onPress={() => router.push(`/user/${drafter.id}`)}
+              >
                 <View style={styles.avatar}>
                   {drafter.avatar_url ? (
                     <Image
@@ -185,7 +189,8 @@ export default function WhoDraftedMeScreen() {
                   </Text>
                 </View>
                 <Text style={styles.time}>{timeAgo(row.created_at)}</Text>
-              </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              </Pressable>
             );
           })}
         </ScrollView>
@@ -248,6 +253,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 12,
+  },
+  rowPressed: {
+    opacity: 0.7,
   },
   avatar: {
     width: 48,
