@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,9 +6,11 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useFonts,
@@ -17,13 +19,48 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
-import { brand, neutral, semantic, theme } from '@/config/colors';
+import { brand, semantic, theme } from '@/config/colors';
 import { plans } from '@/constants/plansData';
+import { subscriptionsService } from '@/services/subscriptions';
+
+type SubStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
+
+interface ApiSubscription {
+  plan_id?: string;
+  status?: SubStatus;
+  current_period_end?: string | number | null;
+  swipes_used_today?: number;
+  daily_swipe_limit?: number | null;
+  cancel_at_period_end?: boolean;
+}
+
+function formatPeriodEnd(value: ApiSubscription['current_period_end']): string | null {
+  if (!value) return null;
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
+  if (isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+  });
+}
+
+function statusColor(status: SubStatus | undefined) {
+  if (status === 'active' || status === 'trialing') return semantic.success;
+  if (status === 'past_due') return '#E54B4B';
+  if (status === 'canceled') return '#E5A23B';
+  return theme.textSecondary;
+}
+
+function statusLabel(status: SubStatus | undefined) {
+  if (status === 'trialing') return 'Trial';
+  if (status === 'past_due') return 'Payment past due';
+  if (status === 'canceled') return 'Canceled';
+  if (status === 'active') return 'Active';
+  return 'Free';
+}
 
 export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [currentPlanId] = useState('basic');
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -32,9 +69,58 @@ export default function SubscriptionScreen() {
     Poppins_700Bold,
   });
 
+  const [apiSub, setApiSub] = useState<ApiSubscription | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<string | null>(null); // planId or 'portal'
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      subscriptionsService.getMySubscription()
+        .then((data) => { if (!cancelled) setApiSub(data ?? null); })
+        .catch(() => { if (!cancelled) setApiSub(null); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }, []),
+  );
+
+  const handleUpgrade = useCallback(async (planId: string) => {
+    if (pendingAction) return;
+    setPendingAction(planId);
+    try {
+      const { checkoutUrl } = await subscriptionsService.createCheckout(planId);
+      await WebBrowser.openBrowserAsync(checkoutUrl);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
+      Alert.alert('Could not start upgrade', String(msg));
+    } finally {
+      setPendingAction(null);
+    }
+  }, [pendingAction]);
+
+  const handleManage = useCallback(async () => {
+    if (pendingAction) return;
+    setPendingAction('portal');
+    try {
+      const { portalUrl } = await subscriptionsService.createPortal();
+      await WebBrowser.openBrowserAsync(portalUrl);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
+      Alert.alert('Could not open portal', String(msg));
+    } finally {
+      setPendingAction(null);
+    }
+  }, [pendingAction]);
+
   if (!fontsLoaded) return null;
 
-  const currentPlan = plans.find((p) => p.id === currentPlanId)!;
+  const currentPlanId = apiSub?.plan_id ?? 'basic';
+  const currentPlan = plans.find((p) => p.id === currentPlanId) ?? plans[0];
+  const status = apiSub?.status;
+  const periodEnd = formatPeriodEnd(apiSub?.current_period_end);
+  const isPaidPlan = currentPlanId !== 'basic';
+  const showManage = isPaidPlan;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -46,105 +132,152 @@ export default function SubscriptionScreen() {
         <View style={styles.headerButton} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Current plan hero */}
-        <View style={styles.currentPlanCard}>
-          <View style={styles.currentPlanBadge}>
-            <Text style={styles.currentPlanBadgeText}>CURRENT PLAN</Text>
-          </View>
-          <Text style={styles.currentPlanName}>{currentPlan.name}</Text>
-          <Text style={styles.currentPlanPrice}>
-            {currentPlan.price === 0 ? 'Free' : `$${currentPlan.price}`}
-            <Text style={styles.currentPlanPeriod}> {currentPlan.period}</Text>
-          </Text>
-          <View style={styles.currentPlanSwipeRow}>
-            <Ionicons name="swap-horizontal" size={16} color="rgba(255,255,255,0.8)" />
-            <Text style={styles.currentPlanSwipes}>{currentPlan.swipes}</Text>
-          </View>
+      {loading && !apiSub ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={theme.text} />
         </View>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Current plan hero */}
+          <View style={styles.currentPlanCard}>
+            <View style={styles.currentPlanBadge}>
+              <Text style={styles.currentPlanBadgeText}>CURRENT PLAN</Text>
+            </View>
+            <Text style={styles.currentPlanName}>{currentPlan.name}</Text>
+            <Text style={styles.currentPlanPrice}>
+              {currentPlan.price === 0 ? 'Free' : `$${currentPlan.price}`}
+              <Text style={styles.currentPlanPeriod}> {currentPlan.period}</Text>
+            </Text>
+            <View style={styles.currentPlanSwipeRow}>
+              <Ionicons name="swap-horizontal" size={16} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.currentPlanSwipes}>{currentPlan.swipes}</Text>
+            </View>
 
-        {/* Plan comparison */}
-        <Text style={styles.sectionHeading}>All Plans</Text>
+            {(isPaidPlan || status === 'past_due') && (
+              <View style={styles.statusPill}>
+                <View style={[styles.statusDot, { backgroundColor: statusColor(status) }]} />
+                <Text style={styles.statusText}>{statusLabel(status)}</Text>
+              </View>
+            )}
 
-        {plans.map((plan) => {
-          const isCurrent = plan.id === currentPlanId;
-          return (
-            <View
-              key={plan.id}
-              style={[
-                styles.planCard,
-                isCurrent && styles.planCardCurrent,
-                plan.popular && !isCurrent && styles.planCardPopular,
-              ]}
-            >
-              {plan.popular && !isCurrent && (
-                <View style={styles.popularBadge}>
-                  <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
-                </View>
-              )}
+            {periodEnd && status !== 'canceled' && (
+              <Text style={styles.periodText}>
+                {apiSub?.cancel_at_period_end ? 'Cancels' : 'Renews'} on {periodEnd}
+              </Text>
+            )}
+            {status === 'canceled' && periodEnd && (
+              <Text style={styles.periodText}>Access ends on {periodEnd}</Text>
+            )}
+          </View>
 
-              <View style={styles.planHeader}>
-                <View>
-                  <Text style={styles.planName}>{plan.name}</Text>
-                  <Text style={styles.planPrice}>
-                    {plan.price === 0 ? 'Free' : `$${plan.price}`}
-                    <Text style={styles.planPeriod}> {plan.period}</Text>
-                  </Text>
-                </View>
-                {isCurrent && (
-                  <View style={styles.currentBadge}>
-                    <Ionicons name="checkmark-circle" size={14} color={semantic.success} />
-                    <Text style={styles.currentBadgeText}>Current</Text>
+          {/* Past-due banner */}
+          {status === 'past_due' && (
+            <View style={styles.pastDueCard}>
+              <Ionicons name="warning" size={20} color="#E54B4B" />
+              <Text style={styles.pastDueText}>
+                Your last payment failed. Update your card to keep your plan.
+              </Text>
+            </View>
+          )}
+
+          {/* Plan comparison */}
+          <Text style={styles.sectionHeading}>All Plans</Text>
+
+          {plans.map((plan) => {
+            const isCurrent = plan.id === currentPlanId;
+            const isPending = pendingAction === plan.id;
+            return (
+              <View
+                key={plan.id}
+                style={[
+                  styles.planCard,
+                  isCurrent && styles.planCardCurrent,
+                  plan.popular && !isCurrent && styles.planCardPopular,
+                ]}
+              >
+                {plan.popular && !isCurrent && (
+                  <View style={styles.popularBadge}>
+                    <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
                   </View>
                 )}
-              </View>
 
-              <Text style={styles.planSwipes}>{plan.swipes}</Text>
-
-              <View style={styles.featureList}>
-                {plan.features.map((feature) => (
-                  <View key={feature} style={styles.featureRow}>
-                    <Ionicons name="checkmark" size={16} color={semantic.success} />
-                    <Text style={styles.featureText}>{feature}</Text>
+                <View style={styles.planHeader}>
+                  <View>
+                    <Text style={styles.planName}>{plan.name}</Text>
+                    <Text style={styles.planPrice}>
+                      {plan.price === 0 ? 'Free' : `$${plan.price}`}
+                      <Text style={styles.planPeriod}> {plan.period}</Text>
+                    </Text>
                   </View>
-                ))}
-              </View>
+                  {isCurrent && (
+                    <View style={styles.currentBadge}>
+                      <Ionicons name="checkmark-circle" size={14} color={semantic.success} />
+                      <Text style={styles.currentBadgeText}>Current</Text>
+                    </View>
+                  )}
+                </View>
 
-              {!isCurrent && (
-                <Pressable
-                  style={[styles.upgradeButton, plan.popular && styles.upgradeButtonPopular]}
-                  onPress={() =>
-                    Alert.alert(
-                      'Upgrade',
-                      `Upgrading to ${plan.name} ($${plan.price}/${plan.period}) is coming soon!`
-                    )
-                  }
-                >
-                  <Text
-                    style={[styles.upgradeButtonText, plan.popular && styles.upgradeButtonTextPopular]}
+                <Text style={styles.planSwipes}>{plan.swipes}</Text>
+
+                <View style={styles.featureList}>
+                  {plan.features.map((feature) => (
+                    <View key={feature} style={styles.featureRow}>
+                      <Ionicons name="checkmark" size={16} color={semantic.success} />
+                      <Text style={styles.featureText}>{feature}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {!isCurrent && plan.id !== 'basic' && (
+                  <Pressable
+                    style={[
+                      styles.upgradeButton,
+                      plan.popular && styles.upgradeButtonPopular,
+                      pendingAction !== null && styles.upgradeButtonDisabled,
+                    ]}
+                    onPress={() => handleUpgrade(plan.id)}
+                    disabled={pendingAction !== null}
                   >
-                    Upgrade to {plan.name}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          );
-        })}
+                    {isPending ? (
+                      <ActivityIndicator
+                        color={plan.popular ? theme.accentText : theme.text}
+                      />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.upgradeButtonText,
+                          plan.popular && styles.upgradeButtonTextPopular,
+                        ]}
+                      >
+                        Upgrade to {plan.name}
+                      </Text>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
 
-        {/* Manage */}
-        <Pressable
-          style={styles.manageButton}
-          onPress={() =>
-            Alert.alert('Manage Subscription', 'Subscription management is coming soon.')
-          }
-        >
-          <Text style={styles.manageButtonText}>Manage Subscription</Text>
-        </Pressable>
-      </ScrollView>
+          {/* Manage (paid plans only — Stripe customer portal) */}
+          {showManage && (
+            <Pressable
+              style={[styles.manageButton, pendingAction !== null && styles.upgradeButtonDisabled]}
+              onPress={handleManage}
+              disabled={pendingAction !== null}
+            >
+              {pendingAction === 'portal' ? (
+                <ActivityIndicator color={theme.accentText} />
+              ) : (
+                <Text style={styles.manageButtonText}>Manage Subscription</Text>
+              )}
+            </Pressable>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -175,6 +308,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     color: theme.text,
   },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: {
     flex: 1,
   },
@@ -182,7 +320,6 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 14,
   },
-  // Current plan hero
   currentPlanCard: {
     backgroundColor: brand.primary,
     borderRadius: 18,
@@ -233,13 +370,55 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: 'rgba(255,255,255,0.9)',
   },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: brand.white,
+  },
+  periodText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 8,
+  },
+  pastDueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(229,75,75,0.12)',
+    borderColor: '#E54B4B',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  pastDueText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.text,
+  },
   sectionHeading: {
     fontSize: 18,
     fontFamily: 'Poppins_600SemiBold',
     color: theme.text,
     marginTop: 4,
   },
-  // Plan cards
   planCard: {
     backgroundColor: theme.cardBg,
     borderRadius: 16,
@@ -334,6 +513,9 @@ const styles = StyleSheet.create({
   },
   upgradeButtonPopular: {
     backgroundColor: theme.accent,
+  },
+  upgradeButtonDisabled: {
+    opacity: 0.6,
   },
   upgradeButtonText: {
     fontSize: 15,

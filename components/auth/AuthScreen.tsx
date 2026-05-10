@@ -40,6 +40,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { login, loginAsync, signupAsync, completeOnboarding, completeOnboardingAsync, clearError } from '@/store/slices/authSlice';
 import { usersService } from '@/services/users';
 import { EmailVerificationScreen } from './EmailVerificationScreen';
+import { ForgotPasswordScreen } from './ForgotPasswordScreen';
 import { PlanSelectionScreen } from './PlanSelectionScreen';
 import { LocationSelectionScreen } from './LocationSelectionScreen';
 import { ProfileSetupScreen } from './ProfileSetupScreen';
@@ -53,7 +54,7 @@ interface AuthScreenProps {
     onSignup?: () => void;
 }
 
-type AuthMode = 'login' | 'signup';
+type AuthMode = 'login' | 'signup' | 'forgot';
 type SignupStep = 'role' | 'verify' | 'plan' | 'location' | 'profile' | 'payment' | 'tutorial';
 type UserRole = 'athlete' | 'parent' | 'coach' | 'recruiter';
 
@@ -273,6 +274,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
     if (!fontsLoaded) return null;
 
+    // Forgot password flow
+    if (mode === 'forgot') {
+        return (
+            <ForgotPasswordScreen
+                initialEmail={email}
+                onBack={() => setMode('login')}
+            />
+        );
+    }
+
     // Render signup flow screens
     if (mode === 'signup' && signupStep !== 'role') {
         switch (signupStep) {
@@ -469,7 +480,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                             </View>
 
                             {mode === 'login' && (
-                                <Pressable style={styles.forgotPassword}>
+                                <Pressable
+                                    style={styles.forgotPassword}
+                                    onPress={() => setMode('forgot')}
+                                >
                                     <Text style={styles.forgotPasswordText}>
                                         Forgot password?
                                     </Text>

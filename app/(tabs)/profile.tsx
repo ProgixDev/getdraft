@@ -167,6 +167,7 @@ export default function ProfileScreen() {
   const [apiUser, setApiUser] = useState<MeUser | null>(null);
   const [apiStats, setApiStats] = useState<ProfileStats | null>(null);
   const [uploading, setUploading] = useState<null | 'photos' | 'videos'>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const loadProfile = useCallback(async () => {
     if (!user) return;
@@ -252,6 +253,24 @@ export default function ProfileScreen() {
     }
   }, [uploading, user, isAthlete, isRecruiter, loadProfile]);
 
+  const handleChangeAvatar = useCallback(async () => {
+    if (uploadingAvatar || !user) return;
+    setUploadingAvatar(true);
+    try {
+      const newUrls = await pickAndUploadMedia('image', 'avatars', {
+        allowsMultipleSelection: false,
+        selectionLimit: 1,
+      });
+      if (newUrls.length === 0) return;
+      await usersService.updateMe({ avatar_url: newUrls[0] });
+      await loadProfile();
+    } catch (err: any) {
+      Alert.alert('Upload failed', err?.message ?? 'Could not update your photo.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }, [uploadingAvatar, user, loadProfile]);
+
   const athleteProfile = isAthlete
     ? apiAthlete ?? mockAthletes.find((a) => a.email === user?.email) ?? null
     : null;
@@ -322,7 +341,13 @@ export default function ProfileScreen() {
           />
           <View style={styles.avatarWrapper}>
             <View style={styles.avatarPlaceholder}>
-              {photos.length > 0 ? (
+              {apiUser?.avatar_url ? (
+                <Image
+                  source={{ uri: apiUser.avatar_url }}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : photos.length > 0 ? (
                 <Image
                   source={typeof photos[0] === 'string' ? { uri: photos[0] } : photos[0]}
                   style={styles.avatarImage}
@@ -331,7 +356,7 @@ export default function ProfileScreen() {
               ) : (
                 <Ionicons
                   name={
-                    user?.role === 'recruiter'
+                    user?.role === 'recruiter' || user?.role === 'coach'
                       ? 'briefcase'
                       : user?.role === 'parent'
                         ? 'people'
@@ -342,14 +367,17 @@ export default function ProfileScreen() {
                 />
               )}
             </View>
-            {isAthlete && (
-              <Pressable
-                style={styles.avatarEditBadge}
-                onPress={() => comingSoon('Change Photo')}
-              >
+            <Pressable
+              style={[styles.avatarEditBadge, uploadingAvatar && styles.avatarEditBadgeDisabled]}
+              onPress={handleChangeAvatar}
+              disabled={uploadingAvatar}
+            >
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color={brand.white} />
+              ) : (
                 <Ionicons name="camera" size={14} color={brand.white} />
-              </Pressable>
-            )}
+              )}
+            </Pressable>
           </View>
           <Text style={styles.name}>{displayName}</Text>
           <View style={styles.roleBadge}>
@@ -689,6 +717,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: theme.surface,
+  },
+  avatarEditBadgeDisabled: {
+    opacity: 0.7,
   },
   name: {
     fontSize: 22,
