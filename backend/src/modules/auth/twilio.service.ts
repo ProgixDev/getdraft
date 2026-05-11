@@ -21,18 +21,31 @@ export class TwilioService implements OnModuleInit {
   onModuleInit() {
     const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
     const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
+    const apiKeySid = this.configService.get<string>('TWILIO_API_KEY_SID');
+    const apiKeySecret = this.configService.get<string>('TWILIO_API_KEY_SECRET');
     this.verifyServiceSid = this.configService.get<string>('TWILIO_VERIFY_SERVICE_SID') || null;
 
-    if (!accountSid || !authToken || !this.verifyServiceSid) {
+    if (!accountSid || !this.verifyServiceSid) {
       this.logger.warn(
-        'Twilio not configured — phone OTP routes will return 503 until ' +
-          'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID are set in .env.',
+        'Twilio not configured — phone OTP routes will fail until TWILIO_ACCOUNT_SID, ' +
+          'TWILIO_VERIFY_SERVICE_SID, and either TWILIO_API_KEY_SID + TWILIO_API_KEY_SECRET ' +
+          '(preferred) OR TWILIO_AUTH_TOKEN are set in .env.',
       );
       return;
     }
 
-    this.client = twilio(accountSid, authToken);
-    this.logger.log(`Twilio Verify ready (service ${this.verifyServiceSid})`);
+    // Prefer API Key + Secret (scoped, revocable). Fall back to Auth Token.
+    if (apiKeySid && apiKeySecret) {
+      this.client = twilio(apiKeySid, apiKeySecret, { accountSid });
+      this.logger.log(`Twilio Verify ready via API Key (service ${this.verifyServiceSid})`);
+    } else if (authToken) {
+      this.client = twilio(accountSid, authToken);
+      this.logger.log(`Twilio Verify ready via Auth Token (service ${this.verifyServiceSid})`);
+    } else {
+      this.logger.warn(
+        'Twilio: no API Key or Auth Token set. Add either pair to .env.',
+      );
+    }
   }
 
   isConfigured(): boolean {
