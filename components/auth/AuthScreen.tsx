@@ -61,12 +61,20 @@ interface AuthScreenProps {
     phoneVerificationToken?: string;
     /** Display-only: shown on the phone-signup welcome line. */
     initialPhone?: string;
+    /**
+     * Set when the user arrived via OAuth (Apple, Google) and is brand
+     * new. The Supabase user already exists with the trigger-default
+     * 'athlete' role; we just need to ask them which role they actually
+     * want and update the row before continuing onboarding.
+     */
+    oauthMode?: { initialName?: string; initialEmail?: string };
 }
 
 type AuthMode = 'login' | 'signup' | 'forgot';
 type SignupStep =
     | 'role'
     | 'phone-role'   // role + name + password (no email) for phone signups
+    | 'oauth-role'   // role + name (no email, no password) for OAuth signups
     | 'verify'
     | 'plan'
     | 'location'
@@ -118,9 +126,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     onLogin,
     phoneVerificationToken,
     initialPhone,
+    oauthMode,
 }) => {
     const dispatch = useAppDispatch();
     const isPhoneSignup = !!phoneVerificationToken;
+    const isOauthSignup = !!oauthMode;
 
     // Fonts
     const [fontsLoaded] = useFonts({
@@ -132,13 +142,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     });
 
     // State — when arriving with a phoneVerificationToken we jump straight
-    // into the role + name + password step.
-    const [mode, setMode] = useState<AuthMode>(isPhoneSignup ? 'signup' : 'login');
-    const [signupStep, setSignupStep] = useState<SignupStep>(isPhoneSignup ? 'phone-role' : 'role');
+    // into the role + name + password step. OAuth arrivals jump to the
+    // oauth-role step (role + name, no password).
+    const [mode, setMode] = useState<AuthMode>(
+        isPhoneSignup || isOauthSignup ? 'signup' : 'login',
+    );
+    const [signupStep, setSignupStep] = useState<SignupStep>(
+        isPhoneSignup ? 'phone-role' : isOauthSignup ? 'oauth-role' : 'role',
+    );
     const [role, setRole] = useState<UserRole>('athlete');
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(oauthMode?.initialEmail ?? '');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
+    const [name, setName] = useState(oauthMode?.initialName ?? '');
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState('basic');
@@ -166,7 +181,46 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     };
 
     const handleBackToRoleSelection = () => {
-        setSignupStep(isPhoneSignup ? 'phone-role' : 'role');
+        setSignupStep(
+            isPhoneSignup ? 'phone-role' : isOauthSignup ? 'oauth-role' : 'role',
+        );
+    };
+
+    /**
+     * OAuth signup: Supabase user is already created. We just need to
+     * record the chosen role + name on public.users, then drop into the
+     * existing plan/location/profile/payment/tutorial flow.
+     */
+    const handleOauthRoleSubmit = async () => {
+        if (isLoading) return;
+        if (!name.trim()) {
+            Alert.alert('Error', 'Please enter your name.');
+            return;
+        }
+        setIsLoading(true);
+        try {
+            await usersService.updateMe({ role, name: name.trim() });
+            // Refresh Redux user with the new role + name so downstream screens see it.
+            const me = await usersService.getMe().catch(() => null);
+            dispatch(login({
+                user: {
+                    id: me?.id ?? oauthMode?.initialEmail ?? '',
+                    email: me?.email ?? oauthMode?.initialEmail ?? '',
+                    role,
+                    name: name.trim(),
+                },
+                isOnboarded: false,
+            }));
+            setIsLoading(false);
+            setSignupStep('plan');
+        } catch (err: any) {
+            setIsLoading(false);
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                'Could not save your role. Please try again.';
+            Alert.alert('Error', String(message));
+        }
     };
 
     /**
@@ -419,7 +473,106 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 );
             case 'phone-role':
                 return renderPhoneRoleStep();
+            case 'oauth-role':
+                return renderOauthRoleStep();
         }
+    }
+
+    function renderOauthRoleStep() {
+        return (
+            <LinearGradient
+                colors={[brand.primary, '#0a4d8f', brand.primary]}
+                style={styles.container}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.container}
+                >
+                    <ScrollView
+                        contentContainerStyle={styles.scrollContainer}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
+                            <Image source={images.logoWhite} style={styles.logo} resizeMode="contain" />
+                            <Text style={styles.tagline}>Welcome to GetDraft</Text>
+                        </Animated.View>
+
+                        <Animated.View entering={FadeInDown.duration(600).delay(150)} style={styles.card}>
+                            <Text style={styles.title}>Choose Your Role</Text>
+                            <Text style={styles.subtitle}>
+                                Tell us how you'll use GetDraft.
+                            </Text>
+
+                            <View style={styles.rolesGrid}>
+                                {roleOptions.map((roleOption) => {
+                                    const isActive = role === roleOption.id;
+                                    return (
+                                        <Pressable
+                                            key={roleOption.id}
+                                            style={[styles.roleCard, isActive && styles.roleCardActive]}
+                                            onPress={() => setRole(roleOption.id)}
+                                        >
+                                            <View style={[styles.roleIconContainer, isActive && styles.roleIconContainerActive]}>
+                                                <Ionicons
+                                                    name={roleOption.icon}
+                                                    size={24}
+                                                    color={isActive ? brand.white : brand.primary}
+                                                />
+                                            </View>
+                                            <Text style={[styles.roleLabel, isActive && styles.roleLabelActive]}>
+                                                {roleOption.label}
+                                            </Text>
+                                            <Text style={[styles.roleDescription, isActive && { color: 'rgba(255,255,255,0.85)' }]}>
+                                                {roleOption.description}
+                                            </Text>
+                                            <Text style={[styles.rolePrice, isActive && styles.rolePriceActive]}>
+                                                {roleOption.price}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+
+                            <View style={styles.formContainer}>
+                                <View style={styles.inputWrapper}>
+                                    <Ionicons name="person-outline" size={20} color={neutral.gray400} style={styles.inputIcon} />
+                                    <TextInput
+                                        style={styles.input}
+                                        value={name}
+                                        onChangeText={setName}
+                                        placeholder="Your name"
+                                        placeholderTextColor={neutral.gray500}
+                                        autoCapitalize="words"
+                                        editable={!isLoading}
+                                        autoComplete="name"
+                                    />
+                                </View>
+
+                                <Pressable
+                                    style={[styles.submitButton, isLoading && { opacity: 0.7 }]}
+                                    onPress={handleOauthRoleSubmit}
+                                    disabled={isLoading}
+                                >
+                                    <LinearGradient
+                                        colors={[brand.primary, '#0a4d8f']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.submitButtonGradient}
+                                    >
+                                        {isLoading ? (
+                                            <ActivityIndicator color={brand.white} />
+                                        ) : (
+                                            <Text style={styles.submitButtonText}>Continue to Plans</Text>
+                                        )}
+                                    </LinearGradient>
+                                </Pressable>
+                            </View>
+                        </Animated.View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </LinearGradient>
+        );
     }
 
     function renderPhoneRoleStep() {

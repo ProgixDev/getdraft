@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,9 +20,12 @@ import {
   Poppins_700Bold,
   Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins';
+import { useAppDispatch } from '@/store/hooks';
+import { login } from '@/store/slices/authSlice';
 import { brand } from '@/config/colors';
 import { images } from '@/config/assets';
 import { GrainyGradient } from '@/components/welcome';
+import { authService } from '@/services/auth';
 import { AuthScreen } from './AuthScreen';
 import { PhoneInputScreen } from './PhoneInputScreen';
 import { PhoneVerificationScreen } from './PhoneVerificationScreen';
@@ -30,7 +34,15 @@ interface AuthLandingProps {
   onLogin?: () => void;
 }
 
-type LandingState = 'landing' | 'email' | 'phone-input' | 'phone-verify' | 'phone-onboarding';
+type LandingState =
+  | 'landing'
+  | 'email'
+  | 'phone-input'
+  | 'phone-verify'
+  | 'phone-onboarding'
+  | 'oauth-onboarding';
+
+type OAuthProvider = 'apple' | 'google';
 
 /**
  * Post-welcome auth entry. User picks how to continue: phone (primary),
@@ -39,6 +51,7 @@ type LandingState = 'landing' | 'email' | 'phone-input' | 'phone-verify' | 'phon
  * phoneVerificationToken (phone path).
  */
 export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
+  const dispatch = useAppDispatch();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -51,6 +64,8 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
   const [phone, setPhone] = useState<string>('');
   const [channel, setChannel] = useState<'sms' | 'whatsapp'>('sms');
   const [phoneVerificationToken, setPhoneVerificationToken] = useState<string>('');
+  const [oauthInitial, setOauthInitial] = useState<{ name?: string; email?: string }>({});
+  const [pendingOauth, setPendingOauth] = useState<OAuthProvider | null>(null);
 
   const handleCodeSent = useCallback((p: string, c: 'sms' | 'whatsapp') => {
     setPhone(p);
@@ -63,12 +78,32 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
     setState('phone-onboarding');
   }, []);
 
-  const handleComingSoon = useCallback((provider: string) => {
-    Alert.alert(
-      `${provider} sign-in coming soon`,
-      `We're hooking ${provider} up next. For now, pick Phone or Email to continue.`,
-    );
-  }, []);
+  const handleOAuth = useCallback(
+    async (provider: OAuthProvider) => {
+      if (pendingOauth) return;
+      setPendingOauth(provider);
+      try {
+        const result = await authService.signInWithProvider(provider);
+        if (!result) return; // user canceled the in-app browser
+        if (result.isOnboarded) {
+          // Returning user — log straight in.
+          dispatch(login({ user: result.user, isOnboarded: true }));
+          onLogin?.();
+        } else {
+          // New user — route through the OAuth role-picker step.
+          setOauthInitial({ name: result.user.name, email: result.user.email });
+          setState('oauth-onboarding');
+        }
+      } catch (err: any) {
+        const message =
+          err?.message ?? `Could not sign in with ${provider}. Please try again.`;
+        Alert.alert(`${provider === 'apple' ? 'Apple' : 'Google'} sign-in failed`, String(message));
+      } finally {
+        setPendingOauth(null);
+      }
+    },
+    [pendingOauth, dispatch, onLogin],
+  );
 
   if (!fontsLoaded) return null;
 
@@ -106,6 +141,14 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
       />
     );
   }
+  if (state === 'oauth-onboarding') {
+    return (
+      <AuthScreen
+        onLogin={onLogin}
+        oauthMode={{ initialName: oauthInitial.name, initialEmail: oauthInitial.email }}
+      />
+    );
+  }
 
   // Landing — four-button entry.
   return (
@@ -140,24 +183,47 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
 
           {/* SECONDARIES */}
           <Pressable
-            style={({ pressed }) => [styles.appleButton, pressed && styles.pressed]}
-            onPress={() => handleComingSoon('Apple')}
+            style={({ pressed }) => [
+              styles.appleButton,
+              pressed && styles.pressed,
+              pendingOauth && styles.buttonDisabled,
+            ]}
+            onPress={() => handleOAuth('apple')}
+            disabled={pendingOauth !== null}
           >
-            <Ionicons name="logo-apple" size={20} color={brand.white} />
-            <Text style={styles.appleButtonText}>Apple</Text>
+            {pendingOauth === 'apple' ? (
+              <ActivityIndicator color={brand.white} />
+            ) : (
+              <>
+                <Ionicons name="logo-apple" size={20} color={brand.white} />
+                <Text style={styles.appleButtonText}>Apple</Text>
+              </>
+            )}
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
-            onPress={() => handleComingSoon('Google')}
+            style={({ pressed }) => [
+              styles.googleButton,
+              pressed && styles.pressed,
+              pendingOauth && styles.buttonDisabled,
+            ]}
+            onPress={() => handleOAuth('google')}
+            disabled={pendingOauth !== null}
           >
-            <Ionicons name="logo-google" size={20} color="#1f1f1f" />
-            <Text style={styles.googleButtonText}>Google</Text>
+            {pendingOauth === 'google' ? (
+              <ActivityIndicator color="#1f1f1f" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color="#1f1f1f" />
+                <Text style={styles.googleButtonText}>Google</Text>
+              </>
+            )}
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [styles.emailButton, pressed && styles.pressed]}
             onPress={() => setState('email')}
+            disabled={pendingOauth !== null}
           >
             <Ionicons name="mail-outline" size={20} color={brand.white} />
             <Text style={styles.emailButtonText}>Email</Text>
@@ -297,6 +363,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
   pressed: { opacity: 0.85 },
+  buttonDisabled: { opacity: 0.6 },
   legal: {
     marginTop: 28,
     textAlign: 'center',

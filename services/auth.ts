@@ -1,5 +1,10 @@
 import api, { saveTokens, clearTokens } from './api';
 import type { UserRole } from '@/store/slices/authSlice';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { supabase } from './supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export interface AuthResponse {
   user: {
@@ -70,6 +75,63 @@ export const authService = {
   async verifyPhoneOtp(phone: string, code: string): Promise<{ verificationToken: string }> {
     const { data } = await api.post('/auth/phone/verify-otp', { phone, code });
     return data.data;
+  },
+
+  // --- OAuth via Supabase (Apple, Google) ---
+
+  /**
+   * Opens an in-app browser, runs the Supabase OAuth flow for the given
+   * provider, and on success persists the resulting tokens to AsyncStorage
+   * so the existing Axios layer can use them. Returns null on user cancel.
+   */
+  async signInWithProvider(
+    provider: 'apple' | 'google',
+  ): Promise<AuthResponse | null> {
+    const redirectTo = Linking.createURL('auth/callback');
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error || !data?.url) {
+      throw new Error(error?.message ?? `Could not start ${provider} sign-in.`);
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== 'success' || !result.url) return null;
+
+    // PKCE: Supabase appends ?code=... to the redirect URL.
+    const parsed = Linking.parse(result.url);
+    const code = (parsed.queryParams?.code as string | undefined) ?? null;
+    if (!code) throw new Error('OAuth response did not include an auth code.');
+
+    const { data: exchange, error: exchangeErr } =
+      await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeErr || !exchange.session) {
+      throw new Error(exchangeErr?.message ?? 'OAuth exchange failed.');
+    }
+
+    await saveTokens({
+      accessToken: exchange.session.access_token,
+      refreshToken: exchange.session.refresh_token,
+    });
+
+    // Fetch the public.users row to discover role + onboarding state.
+    const { data: meRow } = await api.get('/users/me');
+    const me = meRow?.data ?? {};
+    const u = exchange.session.user;
+
+    return {
+      user: {
+        id: u.id,
+        email: u.email ?? me.email ?? '',
+        role: (me.role as UserRole) ?? 'athlete',
+        name: me.name ?? (u.user_metadata?.full_name as string | undefined),
+      },
+      isOnboarded: !!me.is_onboarded,
+      accessToken: exchange.session.access_token,
+      refreshToken: exchange.session.refresh_token,
+    };
   },
 
   async logout(): Promise<void> {
