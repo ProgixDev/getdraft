@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 22,
     backgroundColor: brand.primary,
-    borderRadius: 14,
+    borderRadius: 999,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',

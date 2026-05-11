@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     },
     payButton: {
         height: 56,
-        borderRadius: 12,
+        borderRadius: 999,
         overflow: 'hidden',
         marginTop: 24,
     },

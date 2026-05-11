@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     },
     verifyButton: {
         height: 54,
-        borderRadius: 12,
+        borderRadius: 999,
         overflow: 'hidden',
         marginBottom: 16,
     },

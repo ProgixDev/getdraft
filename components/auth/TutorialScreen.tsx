@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     button: {
         width: '100%',
         height: 56,
-        borderRadius: 28,
+        borderRadius: 999,
         overflow: 'hidden',
     },
     buttonGradient: {

@@ -1080,7 +1080,7 @@ const styles = StyleSheet.create({
     modalConfirmButton: {
         backgroundColor: brand.primary,
         height: 54,
-        borderRadius: 12,
+        borderRadius: 999,
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 20,
@@ -1095,7 +1095,7 @@ const styles = StyleSheet.create({
     },
     nextButton: {
         height: 54,
-        borderRadius: 12,
+        borderRadius: 999,
         overflow: 'hidden',
     },
     nextButtonDisabled: {

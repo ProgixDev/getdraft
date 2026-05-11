@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     },
     continueButton: {
         height: 54,
-        borderRadius: 12,
+        borderRadius: 999,
         overflow: 'hidden',
     },
     buttonGradient: {
