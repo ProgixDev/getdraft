@@ -259,14 +259,20 @@ const SlideContent: React.FC<SlideContentProps> = ({ slide, index, scrollX }) =>
                 style={[
                     slideStyles.imageContainer,
                     // Special adjustment for first slide - 10% bigger
-                    index === 0 && { 
-                        bottom: -SCREEN_HEIGHT * 0.15, 
+                    index === 0 && {
+                        bottom: -SCREEN_HEIGHT * 0.15,
                         right: -SCREEN_WIDTH * 0.25,
                         width: SCREEN_WIDTH * 1.21,
                         height: SCREEN_HEIGHT * 0.77,
                     },
+                    // Second slide - 15% bigger (base 1.1 * 1.15 = 1.265,
+                    // base 0.7 * 1.15 = 0.805)
+                    index === 1 && {
+                        width: SCREEN_WIDTH * 1.265,
+                        height: SCREEN_HEIGHT * 0.805,
+                    },
                     // Special adjustment for third slide - 10% bigger
-                    index === 2 && { 
+                    index === 2 && {
                         width: SCREEN_WIDTH * 1.21,
                         height: SCREEN_HEIGHT * 0.77,
                     },
