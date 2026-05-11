@@ -14,6 +14,10 @@ import {
   VerifyEmailOtpDto,
   CompleteSignupDto,
 } from './dto/email-otp.dto';
+import {
+  RequestPhoneOtpDto,
+  VerifyPhoneOtpDto,
+} from './dto/phone-otp.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -95,5 +99,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Finalize signup with verified contact + chosen password' })
   completeSignup(@Body() dto: CompleteSignupDto) {
     return this.authService.completeSignup(dto);
+  }
+
+  @Public()
+  @Post('phone/request-otp')
+  @ApiOperation({ summary: 'Send a phone OTP via SMS or WhatsApp (Twilio Verify)' })
+  requestPhoneOtp(@Body() dto: RequestPhoneOtpDto) {
+    return this.authService.requestPhoneOtp(dto.phone, dto.channel);
+  }
+
+  @Public()
+  @Post('phone/verify-otp')
+  @ApiOperation({ summary: 'Verify the phone OTP and receive a verification token' })
+  verifyPhoneOtp(@Body() dto: VerifyPhoneOtpDto) {
+    return this.authService.verifyPhoneOtp(dto.phone, dto.code);
   }
 }

@@ -5,6 +5,7 @@ import { SupabaseService } from '../../config/supabase.config';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
+import { TwilioService } from './twilio.service';
 import { UserRole } from '../../common/types';
 
 // Mock Supabase client chain builder
@@ -70,6 +71,14 @@ describe('AuthService', () => {
           useValue: {
             sign: jest.fn().mockReturnValue('signed-token'),
             verify: jest.fn().mockReturnValue({ contact: 'test@example.com', contactType: 'email' }),
+          },
+        },
+        {
+          provide: TwilioService,
+          useValue: {
+            isConfigured: jest.fn().mockReturnValue(true),
+            startVerification: jest.fn().mockResolvedValue(undefined),
+            checkVerification: jest.fn().mockResolvedValue(true),
           },
         },
       ],

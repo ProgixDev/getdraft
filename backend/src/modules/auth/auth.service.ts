@@ -12,6 +12,7 @@ import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
 import { CompleteSignupDto } from './dto/email-otp.dto';
+import { TwilioService, VerifyChannel } from './twilio.service';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +23,7 @@ export class AuthService {
     private mailService: MailService,
     private signupOtpService: SignupOtpService,
     private verificationTokenService: VerificationTokenService,
+    private twilioService: TwilioService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -211,56 +213,67 @@ export class AuthService {
   async completeSignup(dto: CompleteSignupDto) {
     const { contact, contactType } = this.verificationTokenService.verify(dto.verificationToken);
     const admin = this.supabaseService.getAdminClient();
+    const anon = this.supabaseService.getClient();
 
-    if (contactType !== 'email') {
-      // Phone path comes in Phase 2 — sharper error message until then.
-      throw new BadRequestException('Phone signup is not yet supported.');
-    }
+    const isEmail = contactType === 'email';
+    const column = isEmail ? 'email' : 'phone';
 
     // Double-check no race created the user since request-otp.
     const { data: alreadyExists } = await admin
       .from('users')
       .select('id')
-      .eq('email', contact)
+      .eq(column, contact)
       .maybeSingle();
     if (alreadyExists) {
-      throw new BadRequestException('An account with this email already exists.');
+      throw new BadRequestException(
+        isEmail
+          ? 'An account with this email already exists.'
+          : 'An account with this phone number already exists.',
+      );
     }
 
     // Create the auth user; the public.users row is inserted by the
-    // handle_new_user trigger that ships with migration 001.
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email: contact,
-      password: dto.password,
-      email_confirm: true, // OTP already proved control of the address
-      user_metadata: {
-        role: dto.role,
-        name: dto.name ?? null,
-      },
-    });
+    // handle_new_user trigger (migration 011 copies both email + phone).
+    const createPayload = isEmail
+      ? {
+          email: contact,
+          password: dto.password,
+          email_confirm: true,
+          user_metadata: { role: dto.role, name: dto.name ?? null },
+        }
+      : {
+          phone: contact,
+          password: dto.password,
+          phone_confirm: true,
+          user_metadata: { role: dto.role, name: dto.name ?? null },
+        };
+
+    const { data: created, error: createErr } = await admin.auth.admin.createUser(createPayload);
     if (createErr || !created.user) {
       this.logger.error(`createUser failed for ${contact}: ${createErr?.message}`);
       throw new BadRequestException(createErr?.message ?? 'Could not create account.');
     }
 
     // Sign them in immediately so the client gets a session.
-    const anon = this.supabaseService.getClient();
-    const { data: session, error: signInErr } = await anon.auth.signInWithPassword({
-      email: contact,
-      password: dto.password,
-    });
+    const signInPayload = isEmail
+      ? { email: contact, password: dto.password }
+      : { phone: contact, password: dto.password };
+    const { data: session, error: signInErr } = await anon.auth.signInWithPassword(signInPayload);
     if (signInErr || !session.session) {
       this.logger.error(`post-signup signInWithPassword failed for ${contact}: ${signInErr?.message}`);
       throw new BadRequestException('Account created, but sign-in failed. Try logging in.');
     }
 
-    // Cleanup OTP row — single-use; consumed.
-    await this.signupOtpService.consume(contact, 'email');
+    // Cleanup any signup_otps row (email path only — phone uses Twilio Verify).
+    if (isEmail) {
+      await this.signupOtpService.consume(contact, 'email');
+    }
 
     return {
       user: {
         id: created.user.id,
-        email: contact,
+        email: isEmail ? contact : (created.user.email ?? null),
+        phone: isEmail ? null : contact,
         role: dto.role,
         name: dto.name ?? null,
       },
@@ -268,5 +281,38 @@ export class AuthService {
       accessToken: session.session.access_token,
       refreshToken: session.session.refresh_token,
     };
+  }
+
+  // ----- Phone OTP (Twilio Verify: SMS or WhatsApp) -----
+
+  async requestPhoneOtp(phone: string, channel: VerifyChannel): Promise<{ message: string }> {
+    const normalized = phone.trim();
+
+    // Anti-enumeration — same shape as request-email-otp.
+    const admin = this.supabaseService.getAdminClient();
+    const { data: existing } = await admin
+      .from('users')
+      .select('id')
+      .eq('phone', normalized)
+      .maybeSingle();
+    if (existing) {
+      return { message: 'If this number is unused, a code has been sent.' };
+    }
+
+    await this.twilioService.startVerification(normalized, channel);
+    return { message: 'If this number is unused, a code has been sent.' };
+  }
+
+  async verifyPhoneOtp(phone: string, code: string): Promise<{ verificationToken: string }> {
+    const normalized = phone.trim();
+    const approved = await this.twilioService.checkVerification(normalized, code);
+    if (!approved) {
+      throw new BadRequestException('Incorrect or expired code.');
+    }
+    const verificationToken = this.verificationTokenService.sign({
+      contact: normalized,
+      contactType: 'phone',
+    });
+    return { verificationToken };
   }
 }

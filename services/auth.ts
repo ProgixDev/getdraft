@@ -63,6 +63,15 @@ export const authService = {
     return result;
   },
 
+  async requestPhoneOtp(phone: string, channel: 'sms' | 'whatsapp'): Promise<void> {
+    await api.post('/auth/phone/request-otp', { phone, channel });
+  },
+
+  async verifyPhoneOtp(phone: string, code: string): Promise<{ verificationToken: string }> {
+    const { data } = await api.post('/auth/phone/verify-otp', { phone, code });
+    return data.data;
+  },
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');
