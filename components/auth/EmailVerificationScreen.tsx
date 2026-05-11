@@ -22,7 +22,8 @@ import { authService } from '@/services/auth';
 
 interface EmailVerificationScreenProps {
     email: string;
-    onVerified: () => void;
+    /** Called with the signed verification token returned by /auth/email/verify-otp. */
+    onVerified: (verificationToken: string) => void;
     onBack: () => void;
 }
 
@@ -82,14 +83,14 @@ export const EmailVerificationScreen: React.FC<EmailVerificationScreenProps> = (
         setIsLoading(true);
 
         try {
-            await authService.verifyEmail(enteredCode);
+            const { verificationToken } = await authService.verifyEmailOtp(email, enteredCode);
             setIsLoading(false);
-            onVerified();
+            onVerified(verificationToken);
         } catch (err: any) {
             setIsLoading(false);
             const message =
                 err?.response?.data?.message ||
-                'Invalid or expired code. Please check the link sent to your email.';
+                'Invalid or expired code. Please check your email and try again.';
             Alert.alert('Verification failed', message);
         }
     };

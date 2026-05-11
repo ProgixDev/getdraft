@@ -40,3 +40,25 @@ CREATE INDEX IF NOT EXISTS idx_profile_views_viewer_viewed
 -- toggles, privacy flags). Client owns the schema of the contents.
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 010_signup_otps.sql
+-- ------------------------------------------------------------
+-- Backend-owned OTP storage for the new email + phone signup flow.
+-- A Supabase auth user is created only after `/auth/complete-signup`.
+CREATE TABLE IF NOT EXISTS public.signup_otps (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contact       TEXT NOT NULL,
+  contact_type  TEXT NOT NULL CHECK (contact_type IN ('email', 'phone')),
+  code_hash     TEXT NOT NULL,
+  attempts      INT  NOT NULL DEFAULT 0,
+  verified      BOOLEAN NOT NULL DEFAULT FALSE,
+  expires_at    TIMESTAMPTZ NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signup_otps_contact
+  ON public.signup_otps(contact, contact_type);
+CREATE INDEX IF NOT EXISTS idx_signup_otps_expires_at
+  ON public.signup_otps(expires_at);
+ALTER TABLE public.signup_otps ENABLE ROW LEVEL SECURITY;

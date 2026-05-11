@@ -37,7 +37,8 @@ import { images } from '@/config/assets';
 import { brand, neutral } from '@/config/colors';
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { login, loginAsync, signupAsync, completeOnboarding, completeOnboardingAsync, clearError } from '@/store/slices/authSlice';
+import { login, loginAsync, completeOnboarding, completeOnboardingAsync, clearError } from '@/store/slices/authSlice';
+import { authService } from '@/services/auth';
 import { usersService } from '@/services/users';
 import { EmailVerificationScreen } from './EmailVerificationScreen';
 import { ForgotPasswordScreen } from './ForgotPasswordScreen';
@@ -119,6 +120,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState('basic');
     const [location, setLocation] = useState({ city: '', country: '' });
+    /** Set after the OTP is verified; carried into completeSignup. */
+    const [verificationToken, setVerificationToken] = useState<string | null>(null);
 
     // Animation values
     const contentOpacity = useSharedValue(0);
@@ -143,8 +146,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         setSignupStep('role');
     };
 
-    const handleEmailVerified = () => {
-        setSignupStep('plan');
+    /**
+     * The OTP screen hands us a signed verification token. We immediately
+     * call /auth/complete-signup which creates the Supabase user (the
+     * FIRST time the user exists in Supabase), saves session tokens, and
+     * flips the app into authenticated state. The remaining steps
+     * (plan / location / profile / payment) then run as normal
+     * authenticated API calls.
+     */
+    const handleEmailVerified = async (token: string) => {
+        setVerificationToken(token);
+        try {
+            const result = await authService.completeSignup({
+                verificationToken: token,
+                password,
+                role,
+                name: email.split('@')[0],
+            });
+            dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
+            setSignupStep('plan');
+        } catch (err: any) {
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                'Could not finish creating your account. Please try again.';
+            Alert.alert('Sign-up failed', String(message));
+            // Bounce back to OTP so the user can try a fresh code if it
+            // was a timing issue.
+            setSignupStep('verify');
+        }
     };
 
     const handlePlanSelected = (planId: string) => {
@@ -211,26 +241,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
         if (mode === 'signup') {
             try {
-                const result = await dispatch(
-                    signupAsync({ email, password, role, name: email.split('@')[0] })
-                ).unwrap();
+                // Backend OWNS the verification: it sends a 6-digit OTP via
+                // Resend, and won't create a Supabase user until /auth/complete-signup.
+                await authService.requestEmailOtp(email);
                 setIsLoading(false);
-
-                // If accessToken is null, Supabase requires email confirmation
-                if (!result.accessToken) {
-                    Alert.alert(
-                        'Verify Your Email',
-                        `We sent a confirmation link to ${email}. Please click it, then sign in to continue.`,
-                        [{ text: 'OK', onPress: () => setMode('login') }]
-                    );
-                    return;
-                }
-
-                // Account created and authenticated — skip OTP, go straight to plan selection
-                setSignupStep('plan');
+                setSignupStep('verify');
             } catch (err: any) {
                 setIsLoading(false);
-                Alert.alert('Sign-up failed', err?.toString?.() || 'Could not create your account. Please try again.');
+                const message =
+                    err?.response?.data?.message ||
+                    err?.message ||
+                    'Could not send the verification code. Please try again.';
+                Alert.alert('Sign-up failed', String(message));
             }
         } else {
             // Login

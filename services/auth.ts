@@ -40,6 +40,29 @@ export const authService = {
     await api.post('/auth/resend-verification', { email });
   },
 
+  // --- OTP-driven signup (backend owns email + creates Supabase user only on completion) ---
+
+  async requestEmailOtp(email: string): Promise<void> {
+    await api.post('/auth/email/request-otp', { email });
+  },
+
+  async verifyEmailOtp(email: string, code: string): Promise<{ verificationToken: string }> {
+    const { data } = await api.post('/auth/email/verify-otp', { email, code });
+    return data.data;
+  },
+
+  async completeSignup(args: {
+    verificationToken: string;
+    password: string;
+    role: UserRole;
+    name?: string;
+  }): Promise<AuthResponse> {
+    const { data } = await api.post('/auth/complete-signup', args);
+    const result: AuthResponse = data.data;
+    await saveTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
+    return result;
+  },
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');

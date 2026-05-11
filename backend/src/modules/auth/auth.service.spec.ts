@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SupabaseService } from '../../config/supabase.config';
+import { MailService } from '../mail/mail.service';
+import { SignupOtpService } from './signup-otp.service';
+import { VerificationTokenService } from './verification-token.service';
 import { UserRole } from '../../common/types';
 
 // Mock Supabase client chain builder
@@ -47,6 +50,26 @@ describe('AuthService', () => {
           useValue: {
             getClient: () => mockClient,
             getAdminClient: () => mockAdminClient,
+          },
+        },
+        {
+          provide: MailService,
+          useValue: { sendOtp: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: SignupOtpService,
+          useValue: {
+            generateCode: jest.fn().mockReturnValue('123456'),
+            upsert: jest.fn().mockResolvedValue(undefined),
+            verify: jest.fn().mockResolvedValue(undefined),
+            consume: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: VerificationTokenService,
+          useValue: {
+            sign: jest.fn().mockReturnValue('signed-token'),
+            verify: jest.fn().mockReturnValue({ contact: 'test@example.com', contactType: 'email' }),
           },
         },
       ],
