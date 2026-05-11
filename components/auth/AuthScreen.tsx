@@ -545,8 +545,8 @@ const styles = StyleSheet.create({
     },
     header: {
         alignItems: 'center',
-        paddingTop: 44,
-        paddingBottom: 20,
+        paddingTop: 60,
+        paddingBottom: 18,
     },
     logo: {
         width: 120,
