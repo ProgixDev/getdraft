@@ -56,7 +56,13 @@
           "cameraPermission": "GetDraft uses the camera to capture profile photos and highlight clips."
         }
       ],
-      "@stripe/stripe-react-native"
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.achrefdev.myroster",
+          "enableGooglePay": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
