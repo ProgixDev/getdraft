@@ -6,6 +6,7 @@ import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
 import { TwilioService } from './twilio.service';
+import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../../common/types';
 
 // Mock Supabase client chain builder
@@ -79,6 +80,12 @@ describe('AuthService', () => {
             isConfigured: jest.fn().mockReturnValue(true),
             startVerification: jest.fn().mockResolvedValue(undefined),
             checkVerification: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue(''),
           },
         },
       ],

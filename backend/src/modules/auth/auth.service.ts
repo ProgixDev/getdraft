@@ -8,6 +8,8 @@ import { SupabaseService } from '../../config/supabase.config';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserRole } from '../../common/types';
+import { ConfigService } from '@nestjs/config';
+import { Inject } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
@@ -24,7 +26,24 @@ export class AuthService {
     private signupOtpService: SignupOtpService,
     private verificationTokenService: VerificationTokenService,
     private twilioService: TwilioService,
+    @Inject(ConfigService) private configService: ConfigService,
   ) {}
+
+  /**
+   * Set of phone numbers (E.164) that can be reused across many signups.
+   * On each completeSignup that targets one of these, any pre-existing
+   * Supabase user with the same phone is deleted before creating the
+   * new one. Configured via TEST_PHONES env var (comma-separated).
+   */
+  private testPhones(): Set<string> {
+    const raw = this.configService.get<string>('TEST_PHONES') ?? '';
+    return new Set(
+      raw
+        .split(',')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0),
+    );
+  }
 
   async signup(dto: SignupDto) {
     const supabase = this.supabaseService.getClient();
@@ -218,18 +237,42 @@ export class AuthService {
     const isEmail = contactType === 'email';
     const column = isEmail ? 'email' : 'phone';
 
-    // Double-check no race created the user since request-otp.
-    const { data: alreadyExists } = await admin
-      .from('users')
-      .select('id')
-      .eq(column, contact)
-      .maybeSingle();
-    if (alreadyExists) {
-      throw new BadRequestException(
-        isEmail
-          ? 'An account with this email already exists.'
-          : 'An account with this phone number already exists.',
-      );
+    // Test-phone bypass: when the incoming phone is in TEST_PHONES,
+    // delete any pre-existing Supabase user(s) with the same phone so
+    // the next createUser call doesn't collide. CASCADE on public.users
+    // cleans up profiles / subscriptions / etc.
+    if (!isEmail && this.testPhones().has(contact)) {
+      const { data: dupes } = await admin
+        .from('users')
+        .select('id')
+        .eq('phone', contact);
+      if (dupes && dupes.length > 0) {
+        this.logger.log(
+          `[test-phone] purging ${dupes.length} prior user(s) for ${contact}`,
+        );
+        for (const d of dupes) {
+          const { error: delErr } = await admin.auth.admin.deleteUser(d.id);
+          if (delErr) {
+            this.logger.warn(
+              `[test-phone] failed to delete user ${d.id}: ${delErr.message}`,
+            );
+          }
+        }
+      }
+    } else {
+      // Normal path: refuse duplicates.
+      const { data: alreadyExists } = await admin
+        .from('users')
+        .select('id')
+        .eq(column, contact)
+        .maybeSingle();
+      if (alreadyExists) {
+        throw new BadRequestException(
+          isEmail
+            ? 'An account with this email already exists.'
+            : 'An account with this phone number already exists.',
+        );
+      }
     }
 
     // Create the auth user; the public.users row is inserted by the
@@ -287,16 +330,20 @@ export class AuthService {
 
   async requestPhoneOtp(phone: string, channel: VerifyChannel): Promise<{ message: string }> {
     const normalized = phone.trim();
+    const isTest = this.testPhones().has(normalized);
 
-    // Anti-enumeration — same shape as request-email-otp.
-    const admin = this.supabaseService.getAdminClient();
-    const { data: existing } = await admin
-      .from('users')
-      .select('id')
-      .eq('phone', normalized)
-      .maybeSingle();
-    if (existing) {
-      return { message: 'If this number is unused, a code has been sent.' };
+    // Anti-enumeration — same shape as request-email-otp. Test phones
+    // bypass the "already taken" silent-no-op so we can retry signups.
+    if (!isTest) {
+      const admin = this.supabaseService.getAdminClient();
+      const { data: existing } = await admin
+        .from('users')
+        .select('id')
+        .eq('phone', normalized)
+        .maybeSingle();
+      if (existing) {
+        return { message: 'If this number is unused, a code has been sent.' };
+      }
     }
 
     await this.twilioService.startVerification(normalized, channel);
