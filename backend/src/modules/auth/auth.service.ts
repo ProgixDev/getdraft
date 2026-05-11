@@ -297,9 +297,18 @@ export class AuthService {
       }
     }
 
-    // Create the auth user; the public.users row is inserted by the
-    // handle_new_user trigger (migration 011 copies both email + phone).
-    const createPayload = isEmail
+    // Create the auth user. For phone signups we ALSO attach a
+    // synthetic email so we can sign the user in via email+password
+    // immediately afterwards — Supabase's "Phone Auth provider" must
+    // be explicitly enabled in the dashboard for phone-password
+    // sign-in to work, and we don't want to require that toggle.
+    // The synthetic email is never sent to anyone; it's just a
+    // stable internal identifier derived from the phone number.
+    const syntheticEmail = isEmail
+      ? null
+      : `phone-${contact.replace(/\D/g, '')}@phone.getdraft.local`;
+
+    const createPayload: any = isEmail
       ? {
           email: contact,
           password: dto.password,
@@ -308,8 +317,10 @@ export class AuthService {
         }
       : {
           phone: contact,
+          email: syntheticEmail,
           password: dto.password,
           phone_confirm: true,
+          email_confirm: true,
           user_metadata: { role: dto.role, name: dto.name ?? null },
         };
 
@@ -319,14 +330,23 @@ export class AuthService {
       throw new BadRequestException(createErr?.message ?? 'Could not create account.');
     }
 
-    // Sign them in immediately so the client gets a session.
+    // Sign them in. For phone signups, use the synthetic email since
+    // the phone-login provider may be disabled.
     const signInPayload = isEmail
       ? { email: contact, password: dto.password }
-      : { phone: contact, password: dto.password };
+      : { email: syntheticEmail!, password: dto.password };
     const { data: session, error: signInErr } = await anon.auth.signInWithPassword(signInPayload);
     if (signInErr || !session.session) {
       this.logger.error(`post-signup signInWithPassword failed for ${contact}: ${signInErr?.message}`);
       throw new BadRequestException('Account created, but sign-in failed. Try logging in.');
+    }
+
+    // For phone signups: the handle_new_user trigger copied the
+    // synthetic email into public.users. Null it out so the rest of
+    // the app sees the user as phone-only (auth.users keeps the
+    // synthetic email for re-login).
+    if (!isEmail) {
+      await admin.from('users').update({ email: null }).eq('id', created.user.id);
     }
 
     // Cleanup any signup_otps row (email path only — phone uses Twilio Verify).
@@ -337,7 +357,7 @@ export class AuthService {
     return {
       user: {
         id: created.user.id,
-        email: isEmail ? contact : (created.user.email ?? null),
+        email: isEmail ? contact : null,
         phone: isEmail ? null : contact,
         role: dto.role,
         name: dto.name ?? null,
