@@ -5,31 +5,45 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private resend!: Resend;
+  private transporter!: nodemailer.Transporter;
   private fromAddress!: string;
 
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
-    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
+    const port = Number(this.configService.get<string>('SMTP_PORT') || 465);
+    const user = this.configService.get<string>('SMTP_USER');
+    // App-Passwords are 16 chars with optional spaces — Google accepts either form.
+    const pass = (this.configService.get<string>('SMTP_PASS') || '').replace(/\s+/g, '');
     const from = this.configService.get<string>('MAIL_FROM');
-    if (!apiKey) {
+
+    if (!user || !pass) {
       this.logger.warn(
-        'RESEND_API_KEY not set — emails will fail at send time. Add it to .env.',
+        'SMTP_USER / SMTP_PASS not set — emails will fail at send time. Add them to .env.',
       );
     }
-    if (!from) {
-      this.logger.warn(
-        'MAIL_FROM not set — defaulting to onboarding@resend.dev. Set MAIL_FROM=GetDraft <hello@yourdomain> once domain is verified.',
-      );
-    }
-    this.resend = new Resend(apiKey || 'placeholder-no-api-key');
-    this.fromAddress = from || 'GetDraft <onboarding@resend.dev>';
+
+    this.transporter = nodemailer.createTransport({
+      host,
+      port,
+      // Implicit TLS on 465; STARTTLS on 587. We default to 465.
+      secure: port === 465,
+      auth: user && pass ? { user, pass } : undefined,
+    });
+    this.fromAddress = from || (user ? `GetDraft <${user}>` : 'GetDraft <noreply@getdraft.local>');
+
+    // Verify connection in the background — surfaces auth errors at boot
+    // instead of waiting for the first OTP request to discover them.
+    this.transporter
+      .verify()
+      .then(() => this.logger.log(`SMTP ready (${host}:${port})`))
+      .catch((err) => this.logger.warn(`SMTP verify failed: ${err?.message ?? err}`));
   }
 
   async sendOtp(to: string, code: string): Promise<void> {
@@ -37,21 +51,15 @@ export class MailService implements OnModuleInit {
     const text = `Your GetDraft verification code is ${code}. It expires in 10 minutes. If you didn't request this, ignore this email.`;
 
     try {
-      const { error } = await this.resend.emails.send({
+      await this.transporter.sendMail({
         from: this.fromAddress,
         to,
         subject: `${code} is your GetDraft verification code`,
         html,
         text,
       });
-      if (error) {
-        this.logger.error(`Resend rejected OTP send to ${to}: ${error.message}`);
-        throw new InternalServerErrorException('Could not send verification email.');
-      }
     } catch (err: any) {
-      // Network / SDK errors — bubble as 500 so the request retry policy kicks in.
-      if (err instanceof InternalServerErrorException) throw err;
-      this.logger.error(`Resend SDK threw on OTP send to ${to}: ${err?.message ?? err}`);
+      this.logger.error(`SMTP send failed to ${to}: ${err?.message ?? err}`);
       throw new InternalServerErrorException('Could not send verification email.');
     }
   }
