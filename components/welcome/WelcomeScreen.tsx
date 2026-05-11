@@ -271,10 +271,10 @@ const SlideContent: React.FC<SlideContentProps> = ({ slide, index, scrollX }) =>
                         width: SCREEN_WIDTH * 1.265,
                         height: SCREEN_HEIGHT * 0.805,
                     },
-                    // Special adjustment for third slide - 10% bigger
+                    // Third slide - 15% bigger (matches slide 2 scale)
                     index === 2 && {
-                        width: SCREEN_WIDTH * 1.21,
-                        height: SCREEN_HEIGHT * 0.77,
+                        width: SCREEN_WIDTH * 1.265,
+                        height: SCREEN_HEIGHT * 0.805,
                     },
                     animatedImageStyle,
                 ]}
