@@ -86,14 +86,26 @@ export class SubscriptionsService {
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'],
+      // Stripe API 2026-04-22.dahlia replaced `latest_invoice.payment_intent`
+      // with `latest_invoice.confirmation_secret`. Expand both so the
+      // service tolerates either response shape across API versions.
+      expand: [
+        'latest_invoice.confirmation_secret',
+        'latest_invoice.payment_intent',
+      ],
       metadata: { user_id: userId, plan_id: planId },
     })) as any;
 
-    const paymentIntent = subscription.latest_invoice?.payment_intent;
-    if (!paymentIntent?.client_secret) {
+    const invoice = subscription.latest_invoice;
+    // New API path (dahlia+): confirmation_secret.client_secret
+    // Legacy path:            payment_intent.client_secret
+    const clientSecret: string | undefined =
+      invoice?.confirmation_secret?.client_secret ??
+      invoice?.payment_intent?.client_secret;
+
+    if (!clientSecret) {
       this.logger.error(
-        `Subscription created but no PaymentIntent client_secret (sub=${subscription.id})`,
+        `Subscription created but no client_secret on latest_invoice (sub=${subscription.id})`,
       );
       throw new BadRequestException('Could not initialize payment.');
     }
@@ -111,7 +123,7 @@ export class SubscriptionsService {
       .eq('user_id', userId);
 
     return {
-      paymentIntentClientSecret: paymentIntent.client_secret as string,
+      paymentIntentClientSecret: clientSecret,
       ephemeralKeySecret: ephemeralKey.secret as string,
       customerId,
       publishableKey: this.configService.get<string>('STRIPE_PUBLISHABLE_KEY') ?? '',
