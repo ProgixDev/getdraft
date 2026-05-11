@@ -75,7 +75,6 @@ export const PHONE_COUNTRIES: PhoneCountry[] = [
   { iso: 'IR', name: 'Iran', dialCode: '98' },
   { iso: 'IQ', name: 'Iraq', dialCode: '964' },
   { iso: 'IE', name: 'Ireland', dialCode: '353' },
-  { iso: 'IL', name: 'Israel', dialCode: '972' },
   { iso: 'IT', name: 'Italy', dialCode: '39' },
   { iso: 'JM', name: 'Jamaica', dialCode: '1' },
   { iso: 'JP', name: 'Japan', dialCode: '81' },
