@@ -105,7 +105,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
             <View style={styles.header}>
                 <View style={styles.headerSpacer} />
                 <Image
-                    source={images.logo}
+                    source={images.logoWhite}
                     style={styles.logo}
                     resizeMode="contain"
                 />
