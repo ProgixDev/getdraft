@@ -26,7 +26,6 @@ import {
   PhoneCountry,
   PHONE_COUNTRIES,
   DEFAULT_PHONE_COUNTRY,
-  flagEmoji,
 } from '@/constants/phoneCountries';
 import { CountryPickerModal } from './CountryPickerModal';
 
@@ -153,7 +152,9 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
                 onPress={() => setPickerOpen(true)}
                 disabled={pending !== null}
               >
-                <Text style={styles.countryFlag}>{flagEmoji(country.iso)}</Text>
+                <View style={styles.isoBadge}>
+                  <Text style={styles.isoBadgeText}>{country.iso}</Text>
+                </View>
                 <Text style={styles.countryDial}>+{country.dialCode}</Text>
                 <Ionicons name="chevron-down" size={14} color={neutral.gray500} />
               </Pressable>
@@ -307,15 +308,27 @@ const styles = StyleSheet.create({
   countryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: neutral.gray100,
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 50,
   },
-  countryFlag: {
-    fontSize: 22,
-    lineHeight: 26,
+  isoBadge: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: neutral.gray200,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    minWidth: 30,
+    alignItems: 'center',
+  },
+  isoBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_700Bold',
+    color: brand.primary,
+    letterSpacing: 0.5,
   },
   countryDial: {
     fontSize: 15,

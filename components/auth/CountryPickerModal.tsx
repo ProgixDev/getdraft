@@ -19,11 +19,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
-import {
-  PhoneCountry,
-  PHONE_COUNTRIES,
-  flagEmoji,
-} from '@/constants/phoneCountries';
+import { PhoneCountry, PHONE_COUNTRIES } from '@/constants/phoneCountries';
 
 interface CountryPickerModalProps {
   visible: boolean;
@@ -108,7 +104,9 @@ export const CountryPickerModal: React.FC<CountryPickerModalProps> = ({
                   onClose();
                 }}
               >
-                <Text style={styles.flag}>{flagEmoji(item.iso)}</Text>
+                <View style={styles.isoBadge}>
+                  <Text style={styles.isoBadgeText}>{item.iso}</Text>
+                </View>
                 <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.dial}>+{item.dialCode}</Text>
                 {isSelected && (
@@ -199,10 +197,21 @@ const styles = StyleSheet.create({
   rowPressed: {
     backgroundColor: neutral.gray100,
   },
-  flag: {
-    fontSize: 26,
-    lineHeight: 30,
-    width: 32,
+  isoBadge: {
+    backgroundColor: neutral.gray100,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: neutral.gray200,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 38,
+    alignItems: 'center',
+  },
+  isoBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_700Bold',
+    color: brand.primary,
+    letterSpacing: 0.5,
   },
   name: {
     flex: 1,
