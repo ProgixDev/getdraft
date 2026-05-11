@@ -53,10 +53,26 @@ const { width, height } = Dimensions.get('window');
 interface AuthScreenProps {
     onLogin?: () => void;
     onSignup?: () => void;
+    /**
+     * Set when the user arrived via the phone signup path. We skip the
+     * email/OTP steps and just collect role + name + password, then call
+     * completeSignup with this token.
+     */
+    phoneVerificationToken?: string;
+    /** Display-only: shown on the phone-signup welcome line. */
+    initialPhone?: string;
 }
 
 type AuthMode = 'login' | 'signup' | 'forgot';
-type SignupStep = 'role' | 'verify' | 'plan' | 'location' | 'profile' | 'payment' | 'tutorial';
+type SignupStep =
+    | 'role'
+    | 'phone-role'   // role + name + password (no email) for phone signups
+    | 'verify'
+    | 'plan'
+    | 'location'
+    | 'profile'
+    | 'payment'
+    | 'tutorial';
 type UserRole = 'athlete' | 'parent' | 'coach' | 'recruiter';
 
 interface RoleOption {
@@ -98,8 +114,13 @@ const roleOptions: RoleOption[] = [
     },
 ];
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({
+    onLogin,
+    phoneVerificationToken,
+    initialPhone,
+}) => {
     const dispatch = useAppDispatch();
+    const isPhoneSignup = !!phoneVerificationToken;
 
     // Fonts
     const [fontsLoaded] = useFonts({
@@ -110,12 +131,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         Poppins_800ExtraBold,
     });
 
-    // State
-    const [mode, setMode] = useState<AuthMode>('login');
-    const [signupStep, setSignupStep] = useState<SignupStep>('role');
+    // State — when arriving with a phoneVerificationToken we jump straight
+    // into the role + name + password step.
+    const [mode, setMode] = useState<AuthMode>(isPhoneSignup ? 'signup' : 'login');
+    const [signupStep, setSignupStep] = useState<SignupStep>(isPhoneSignup ? 'phone-role' : 'role');
     const [role, setRole] = useState<UserRole>('athlete');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState('basic');
@@ -143,7 +166,47 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     };
 
     const handleBackToRoleSelection = () => {
-        setSignupStep('role');
+        setSignupStep(isPhoneSignup ? 'phone-role' : 'role');
+    };
+
+    /**
+     * Phone signup: role + name + password are already collected. Call
+     * completeSignup with the phoneVerificationToken so the Supabase user
+     * is created NOW (first time the user exists in Supabase). Then drop
+     * into the existing plan/location/profile/payment/tutorial flow.
+     */
+    const handlePhoneRoleSubmit = async () => {
+        if (isLoading) return;
+        if (!phoneVerificationToken) return;
+
+        if (!name.trim()) {
+            Alert.alert('Error', 'Please enter your name.');
+            return;
+        }
+        if (!password || password.length < 6) {
+            Alert.alert('Error', 'Password must be at least 6 characters.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const result = await authService.completeSignup({
+                verificationToken: phoneVerificationToken,
+                password,
+                role,
+                name: name.trim(),
+            });
+            dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
+            setIsLoading(false);
+            setSignupStep('plan');
+        } catch (err: any) {
+            setIsLoading(false);
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                'Could not finish creating your account. Please try again.';
+            Alert.alert('Sign-up failed', String(message));
+        }
     };
 
     /**
@@ -354,7 +417,127 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                         onComplete={handleTutorialComplete}
                     />
                 );
+            case 'phone-role':
+                return renderPhoneRoleStep();
         }
+    }
+
+    function renderPhoneRoleStep() {
+        return (
+            <LinearGradient
+                colors={[brand.primary, '#0a4d8f', brand.primary]}
+                style={styles.container}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.container}
+                >
+                    <ScrollView
+                        contentContainerStyle={styles.scrollContainer}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
+                            <Image source={images.logoWhite} style={styles.logo} resizeMode="contain" />
+                            <Text style={styles.tagline}>One last step</Text>
+                        </Animated.View>
+
+                        <Animated.View entering={FadeInDown.duration(600).delay(150)} style={styles.card}>
+                            <Text style={styles.title}>Choose Your Role</Text>
+                            <Text style={styles.subtitle}>
+                                Signing up as {initialPhone ?? 'your phone'}
+                            </Text>
+
+                            <View style={styles.rolesGrid}>
+                                {roleOptions.map((roleOption) => {
+                                    const isActive = role === roleOption.id;
+                                    return (
+                                        <Pressable
+                                            key={roleOption.id}
+                                            style={[styles.roleCard, isActive && styles.roleCardActive]}
+                                            onPress={() => setRole(roleOption.id)}
+                                        >
+                                            <View style={[styles.roleIconContainer, isActive && styles.roleIconContainerActive]}>
+                                                <Ionicons
+                                                    name={roleOption.icon}
+                                                    size={24}
+                                                    color={isActive ? brand.white : brand.primary}
+                                                />
+                                            </View>
+                                            <Text style={[styles.roleLabel, isActive && styles.roleLabelActive]}>
+                                                {roleOption.label}
+                                            </Text>
+                                            <Text style={[styles.roleDescription, isActive && { color: 'rgba(255,255,255,0.85)' }]}>
+                                                {roleOption.description}
+                                            </Text>
+                                            <Text style={[styles.rolePrice, isActive && styles.rolePriceActive]}>
+                                                {roleOption.price}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+
+                            <View style={styles.formContainer}>
+                                <View style={styles.inputWrapper}>
+                                    <Ionicons name="person-outline" size={20} color={neutral.gray400} style={styles.inputIcon} />
+                                    <TextInput
+                                        style={styles.input}
+                                        value={name}
+                                        onChangeText={setName}
+                                        placeholder="Your name"
+                                        placeholderTextColor={neutral.gray500}
+                                        autoCapitalize="words"
+                                        editable={!isLoading}
+                                        autoComplete="name"
+                                    />
+                                </View>
+
+                                <View style={styles.inputWrapper}>
+                                    <Ionicons name="lock-closed-outline" size={20} color={neutral.gray400} style={styles.inputIcon} />
+                                    <TextInput
+                                        style={styles.input}
+                                        value={password}
+                                        onChangeText={setPassword}
+                                        placeholder="Password (min. 6 characters)"
+                                        placeholderTextColor={neutral.gray500}
+                                        secureTextEntry={!isPasswordVisible}
+                                        editable={!isLoading}
+                                        autoComplete="new-password"
+                                    />
+                                    <Pressable onPress={() => setIsPasswordVisible((v) => !v)} style={styles.eyeIcon}>
+                                        <Ionicons
+                                            name={isPasswordVisible ? 'eye' : 'eye-off'}
+                                            size={20}
+                                            color={neutral.gray400}
+                                        />
+                                    </Pressable>
+                                </View>
+
+                                <Pressable
+                                    style={[styles.submitButton, isLoading && { opacity: 0.7 }]}
+                                    onPress={handlePhoneRoleSubmit}
+                                    disabled={isLoading}
+                                >
+                                    <LinearGradient
+                                        colors={[brand.primary, '#0a4d8f']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.submitButtonGradient}
+                                    >
+                                        {isLoading ? (
+                                            <ActivityIndicator color={brand.white} />
+                                        ) : (
+                                            <Text style={styles.submitButtonText}>Continue to Plans</Text>
+                                        )}
+                                    </LinearGradient>
+                                </Pressable>
+                            </View>
+                        </Animated.View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </LinearGradient>
+        );
     }
 
     // Render login or initial signup screen

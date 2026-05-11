@@ -15,7 +15,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { theme } from '@/config/colors';
 import { store, RootState } from '@/store';
-import { SplashScreen, WelcomeScreen, AuthScreen } from '@/components';
+import { SplashScreen, WelcomeScreen } from '@/components';
+import { AuthLanding } from '@/components/auth';
 import { loadAuth, saveAuth, clearAuth } from '@/store/authStorage';
 import { login } from '@/store/slices/authSlice';
 
@@ -126,12 +127,14 @@ function RootLayoutContent() {
     );
   }
 
-  // Show auth/login screens
+  // Show auth landing (phone primary + Apple/Google/Email below) — the
+  // four-button entry routes into either the phone OTP flow or the
+  // existing email/password AuthScreen.
   if (appState === 'auth') {
     return (
       <>
         <StatusBar style="light" />
-        <AuthScreen onLogin={handleAuthComplete} />
+        <AuthLanding onLogin={handleAuthComplete} />
       </>
     );
   }

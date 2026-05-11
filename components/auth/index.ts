@@ -3,6 +3,7 @@
  */
 
 export { AuthScreen } from './AuthScreen';
+export { AuthLanding } from './AuthLanding';
 export { EmailVerificationScreen } from './EmailVerificationScreen';
 export { ForgotPasswordScreen } from './ForgotPasswordScreen';
 export { PhoneInputScreen } from './PhoneInputScreen';
