@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { useStripe } from '@stripe/stripe-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useFonts,
@@ -73,6 +74,17 @@ export default function SubscriptionScreen() {
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<string | null>(null); // planId or 'portal'
 
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await subscriptionsService.getMySubscription();
+      setApiSub(data ?? null);
+    } catch {
+      setApiSub(null);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
@@ -85,19 +97,52 @@ export default function SubscriptionScreen() {
     }, []),
   );
 
-  const handleUpgrade = useCallback(async (planId: string) => {
-    if (pendingAction) return;
-    setPendingAction(planId);
-    try {
-      const { checkoutUrl } = await subscriptionsService.createCheckout(planId);
-      await WebBrowser.openBrowserAsync(checkoutUrl);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
-      Alert.alert('Could not start upgrade', String(msg));
-    } finally {
-      setPendingAction(null);
-    }
-  }, [pendingAction]);
+  /**
+   * Upgrade via Stripe's native Payment Sheet (same flow as signup) —
+   * keeps the user in the app instead of opening a browser, and avoids
+   * the legacy /subscriptions/checkout path that returned a webview URL.
+   */
+  const handleUpgrade = useCallback(
+    async (planId: string) => {
+      if (pendingAction) return;
+      setPendingAction(planId);
+      try {
+        const params = await subscriptionsService.createPaymentSheet(planId);
+        if (!params?.paymentIntentClientSecret) {
+          throw new Error('Stripe did not return a checkout session.');
+        }
+        const { error: initErr } = await initPaymentSheet({
+          merchantDisplayName: 'GetDraft',
+          customerId: params.customerId,
+          customerEphemeralKeySecret: params.ephemeralKeySecret,
+          paymentIntentClientSecret: params.paymentIntentClientSecret,
+          returnURL: 'myroster://stripe-redirect',
+          appearance: {
+            primaryButton: { colors: { background: brand.primary, text: brand.white } },
+          },
+        });
+        if (initErr) {
+          throw new Error(initErr.message || 'Could not prepare checkout.');
+        }
+        const { error: payErr } = await presentPaymentSheet();
+        if (payErr) {
+          if (payErr.code !== 'Canceled') {
+            throw new Error(payErr.message || 'Payment failed.');
+          }
+          return; // user dismissed the sheet
+        }
+        // Payment succeeded — webhook handles status transition, but refresh
+        // the local view immediately so the UI doesn't stay stale.
+        await refresh();
+      } catch (err: any) {
+        const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
+        Alert.alert('Could not start upgrade', String(msg));
+      } finally {
+        setPendingAction(null);
+      }
+    },
+    [pendingAction, initPaymentSheet, presentPaymentSheet, refresh],
+  );
 
   const handleManage = useCallback(async () => {
     if (pendingAction) return;
