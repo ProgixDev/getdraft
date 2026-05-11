@@ -35,4 +35,20 @@ export class SubscriptionsController {
   createPortal(@CurrentUser('id') userId: string) {
     return this.subscriptionsService.createPortalSession(userId);
   }
+
+  @Post('payment-sheet')
+  @ApiOperation({
+    summary:
+      'Mobile Payment Sheet: returns { paymentIntent, ephemeralKey, customer, publishableKey } for @stripe/stripe-react-native.',
+  })
+  createPaymentSheet(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateCheckoutDto,
+  ) {
+    return this.subscriptionsService.createPaymentSheet(
+      user.id,
+      user.email,
+      dto.planId,
+    );
+  }
 }

@@ -9,6 +9,7 @@ export interface Plan {
   price: number;
   period: string;
   swipes: string;
+  swipesPerDay: number;
   features: string[];
   popular?: boolean;
 }
@@ -20,31 +21,32 @@ export const plans: Plan[] = [
     price: 0,
     period: 'Free Forever',
     swipes: '10 swipes/day',
+    swipesPerDay: 10,
     features: ['Text messaging', 'Basic profile', 'Limited filters'],
   },
   {
     id: 'starter',
     name: 'Starter',
-    price: 3,
+    price: 7,
     period: 'per month',
     swipes: '30 swipes/day',
+    swipesPerDay: 30,
     features: ['Enhanced messaging', 'Priority support', 'Standard filters'],
+    popular: true,
   },
   {
     id: 'pro',
     name: 'Pro',
-    price: 7,
-    period: 'per month',
-    swipes: '100 swipes/day',
-    features: ['Advanced features', 'See who liked you', 'Advanced filters', 'No ads'],
-    popular: true,
-  },
-  {
-    id: 'premium',
-    name: 'Premium',
     price: 15,
     period: 'per month',
-    swipes: 'Unlimited',
-    features: ['Full access', 'Unlimited swipes', 'Premium badge', 'Priority matching', 'All features'],
+    swipes: '70 swipes/day',
+    swipesPerDay: 70,
+    features: [
+      'See who drafted you',
+      'Advanced filters',
+      'Premium badge',
+      'Priority matching',
+      'No ads',
+    ],
   },
 ];

@@ -135,8 +135,8 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
 
                                 <View style={styles.swipesContainer}>
                                     <Ionicons
-                                        name="heart"
-                                        size={16}
+                                        name="flash"
+                                        size={14}
                                         color={selectedPlan === plan.id ? brand.primary : neutral.gray500}
                                     />
                                     <Text style={[
@@ -209,43 +209,44 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollContent: {
-        paddingTop: 60,
-        paddingHorizontal: 24,
-        paddingBottom: 40,
+        paddingTop: 48,
+        paddingHorizontal: 20,
+        paddingBottom: 28,
     },
     backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         backgroundColor: 'rgba(255, 255, 255, 0.2)',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 30,
+        marginBottom: 14,
     },
     header: {
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 18,
     },
     title: {
-        fontSize: 32,
+        fontSize: 26,
         fontFamily: 'Poppins_800ExtraBold',
         color: brand.white,
-        marginBottom: 8,
+        marginBottom: 4,
+        textAlign: 'center',
     },
     subtitle: {
-        fontSize: 14,
+        fontSize: 13,
         fontFamily: 'Poppins_400Regular',
-        color: 'rgba(255, 255, 255, 0.9)',
+        color: 'rgba(255, 255, 255, 0.85)',
     },
     plansContainer: {
-        gap: 16,
-        marginBottom: 24,
+        gap: 10,
+        marginBottom: 14,
     },
     planCard: {
         backgroundColor: brand.white,
-        borderRadius: 20,
-        padding: 20,
-        borderWidth: 3,
+        borderRadius: 16,
+        padding: 14,
+        borderWidth: 2,
         borderColor: 'transparent',
         position: 'relative',
     },
@@ -262,12 +263,12 @@ const styles = StyleSheet.create({
     },
     popularBadge: {
         position: 'absolute',
-        top: -12,
-        right: 20,
+        top: -10,
+        right: 14,
         backgroundColor: '#FFD700',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 10,
     },
     popularText: {
         fontSize: 10,
@@ -277,13 +278,13 @@ const styles = StyleSheet.create({
     },
     planHeader: {
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 8,
     },
     planName: {
-        fontSize: 20,
+        fontSize: 17,
         fontFamily: 'Poppins_700Bold',
         color: brand.primary,
-        marginBottom: 8,
+        marginBottom: 2,
     },
     planNameSelected: {
         color: brand.primary,
@@ -291,22 +292,22 @@ const styles = StyleSheet.create({
     priceContainer: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        marginBottom: 4,
+        marginBottom: 2,
     },
     priceSymbol: {
-        fontSize: 24,
+        fontSize: 18,
         fontFamily: 'Poppins_700Bold',
         color: neutral.gray700,
         marginTop: 4,
     },
     priceAmount: {
-        fontSize: 48,
+        fontSize: 34,
         fontFamily: 'Poppins_800ExtraBold',
         color: neutral.gray700,
-        lineHeight: 56,
+        lineHeight: 40,
     },
     freeText: {
-        fontSize: 40,
+        fontSize: 28,
         fontFamily: 'Poppins_800ExtraBold',
         color: neutral.gray700,
     },
@@ -326,14 +327,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: neutral.gray50,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
+        paddingVertical: 5,
+        paddingHorizontal: 12,
+        borderRadius: 16,
         alignSelf: 'center',
-        marginBottom: 16,
+        marginBottom: 10,
     },
     swipesText: {
-        fontSize: 13,
+        fontSize: 12,
         fontFamily: 'Poppins_600SemiBold',
         color: neutral.gray600,
         marginLeft: 6,
@@ -344,10 +345,10 @@ const styles = StyleSheet.create({
     divider: {
         height: 1,
         backgroundColor: neutral.gray200,
-        marginBottom: 16,
+        marginBottom: 10,
     },
     featuresContainer: {
-        gap: 10,
+        gap: 6,
     },
     featureRow: {
         flexDirection: 'row',
@@ -355,7 +356,7 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     featureText: {
-        fontSize: 13,
+        fontSize: 12,
         fontFamily: 'Poppins_400Regular',
         color: neutral.gray700,
         flex: 1,
@@ -366,11 +367,11 @@ const styles = StyleSheet.create({
     },
     selectedIndicator: {
         position: 'absolute',
-        top: 20,
-        right: 20,
+        top: 14,
+        right: 14,
     },
     continueButton: {
-        height: 56,
+        height: 50,
         borderRadius: 999,
         overflow: 'hidden',
     },

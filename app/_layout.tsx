@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Provider, useSelector, useDispatch } from 'react-redux';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import Constants from 'expo-constants';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -163,12 +165,21 @@ function RootLayoutContent() {
   );
 }
 
+const stripePublishableKey =
+  (Constants.expoConfig?.extra as { stripePublishableKey?: string } | undefined)
+    ?.stripePublishableKey ?? '';
+
 export default function RootLayout() {
   return (
     <Provider store={store}>
-      <GestureHandlerRootView style={styles.container}>
-        <RootLayoutContent />
-      </GestureHandlerRootView>
+      <StripeProvider
+        publishableKey={stripePublishableKey}
+        merchantIdentifier="merchant.com.achrefdev.myroster"
+      >
+        <GestureHandlerRootView style={styles.container}>
+          <RootLayoutContent />
+        </GestureHandlerRootView>
+      </StripeProvider>
     </Provider>
   );
 }
