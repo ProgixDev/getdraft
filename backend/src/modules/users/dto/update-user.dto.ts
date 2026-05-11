@@ -1,5 +1,6 @@
-import { IsOptional, IsString, IsNumber } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsObject, IsIn } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { UserRole } from '../../../common/types';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'Marcus Johnson' })
@@ -31,4 +32,22 @@ export class UpdateUserDto {
   @IsOptional()
   @IsNumber()
   longitude?: number;
+
+  @ApiPropertyOptional({
+    description: 'Client-managed settings blob (notification toggles, privacy flags, etc.).',
+    example: { matchAlerts: true, profileVisible: true },
+  })
+  @IsOptional()
+  @IsObject()
+  preferences?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description:
+      'Allow changing the user role mid-onboarding — used right after OAuth signup where the provider does not carry a role.',
+    enum: UserRole,
+    example: UserRole.ATHLETE,
+  })
+  @IsOptional()
+  @IsIn(Object.values(UserRole) as string[])
+  role?: UserRole;
 }
