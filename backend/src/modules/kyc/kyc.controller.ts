@@ -1,6 +1,17 @@
-import { Controller, Get, Post, Body, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Res,
+  Req,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import type { FastifyReply } from 'fastify';
+import { ConfigService } from '@nestjs/config';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import * as crypto from 'crypto';
 import { KycService } from './kyc.service';
 import { StartKycDto } from './dto/start-kyc.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -9,7 +20,12 @@ import { Public } from '../../common/decorators/public.decorator';
 @ApiTags('KYC')
 @Controller('kyc')
 export class KycController {
-  constructor(private kycService: KycService) {}
+  private readonly logger = new Logger(KycController.name);
+
+  constructor(
+    private kycService: KycService,
+    private configService: ConfigService,
+  ) {}
 
   @Post('start')
   @ApiBearerAuth()
@@ -28,9 +44,41 @@ export class KycController {
   @Public()
   @Post('webhooks/didit')
   @ApiOperation({ summary: 'Didit webhook receiver (decision updates)' })
-  async webhook(@Body() body: unknown) {
+  async webhook(@Body() body: unknown, @Req() req: FastifyRequest) {
+    this.verifyDiditSignature(req, body);
     await this.kycService.handleWebhook(body);
     return { ok: true };
+  }
+
+  /**
+   * HMAC-SHA256 signature check using the shared secret from Didit
+   * dashboard. Header is `x-signature` (hex). When the secret isn't
+   * configured we skip — only meant for dev. Production MUST set
+   * DIDIT_WEBHOOK_SECRET.
+   */
+  private verifyDiditSignature(req: FastifyRequest, body: unknown): void {
+    const secret = this.configService.get<string>('DIDIT_WEBHOOK_SECRET');
+    if (!secret) {
+      this.logger.warn(
+        'DIDIT_WEBHOOK_SECRET not set — webhook signature verification skipped.',
+      );
+      return;
+    }
+    const headers = (req?.headers ?? {}) as Record<string, string | string[] | undefined>;
+    const sigHeader =
+      (headers['x-signature'] as string | undefined) ??
+      (headers['x-didit-signature'] as string | undefined);
+    if (!sigHeader) {
+      throw new UnauthorizedException('Missing webhook signature header.');
+    }
+    const rawBody = typeof body === 'string' ? body : JSON.stringify(body);
+    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(sigHeader.replace(/^sha256=/i, ''), 'utf8');
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      this.logger.warn('Didit webhook signature mismatch.');
+      throw new UnauthorizedException('Invalid webhook signature.');
+    }
   }
 
   /**
