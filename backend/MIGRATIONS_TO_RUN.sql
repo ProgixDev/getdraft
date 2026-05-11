@@ -96,3 +96,33 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 013_kyc.sql
+-- ------------------------------------------------------------
+-- KYC via Didit. users.kyc_status + per-session kyc_sessions table.
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS kyc_status TEXT NOT NULL DEFAULT 'none'
+    CHECK (kyc_status IN ('none', 'pending', 'in_review', 'approved', 'declined')),
+  ADD COLUMN IF NOT EXISTS kyc_completed_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS public.kyc_sessions (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  didit_session_id  TEXT NOT NULL UNIQUE,
+  workflow_id       TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'in_review', 'approved', 'declined', 'expired')),
+  decision          JSONB,
+  verification_url  TEXT,
+  callback_url      TEXT,
+  started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at      TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_user_started
+  ON public.kyc_sessions(user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_status
+  ON public.kyc_sessions(status)
+  WHERE status IN ('pending', 'in_review');
+ALTER TABLE public.kyc_sessions ENABLE ROW LEVEL SECURITY;

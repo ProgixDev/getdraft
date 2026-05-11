@@ -47,6 +47,7 @@ import { LocationSelectionScreen } from './LocationSelectionScreen';
 import { ProfileSetupScreen } from './ProfileSetupScreen';
 import { PaymentScreen } from './PaymentScreen';
 import { TutorialScreen } from './TutorialScreen';
+import { KycVerificationScreen } from './KycVerificationScreen';
 
 const { width, height } = Dimensions.get('window');
 
@@ -79,6 +80,7 @@ type SignupStep =
     | 'plan'
     | 'location'
     | 'profile'
+    | 'kyc'         // Didit identity verification — gated between profile and payment
     | 'payment'
     | 'tutorial';
 type UserRole = 'athlete' | 'parent' | 'coach' | 'recruiter';
@@ -315,6 +317,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     };
 
     const handleProfilePayment = () => {
+        // Insert the KYC gate between Profile and Payment so we don't
+        // collect money from users who'd fail verification.
+        setSignupStep('kyc');
+    };
+
+    const handleKycComplete = () => {
         setSignupStep('payment');
     };
 
@@ -457,12 +465,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         onBack={() => setSignupStep('location')}
                     />
                 );
+            case 'kyc':
+                return (
+                    <KycVerificationScreen
+                        onComplete={handleKycComplete}
+                        onBack={() => setSignupStep('profile')}
+                    />
+                );
             case 'payment':
                 return (
                     <PaymentScreen
                         selectedPlanId={selectedPlan}
                         onPaymentComplete={handlePaymentComplete}
-                        onBack={() => setSignupStep('profile')}
+                        onBack={() => setSignupStep('kyc')}
                     />
                 );
             case 'tutorial':
