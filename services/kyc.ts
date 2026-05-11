@@ -15,8 +15,8 @@ export interface KycStatusResponse {
 }
 
 export const kycService = {
-  async start(): Promise<StartKycResponse> {
-    const { data } = await api.post('/kyc/start');
+  async start(callbackUrl?: string): Promise<StartKycResponse> {
+    const { data } = await api.post('/kyc/start', callbackUrl ? { callbackUrl } : {});
     return data.data;
   },
 

@@ -99,11 +99,12 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
     setError(null);
     setIsStarting(true);
     try {
-      const { url } = await kycService.start();
+      // The browser auto-closes when Didit redirects to this deep link
+      // after verification, so we pass the same URL to BOTH the backend
+      // (as Didit's callback) and to openAuthSessionAsync (as the URL
+      // it watches for to dismiss the in-app browser).
       const returnUrl = Linking.createURL('kyc/return');
-      // Open Didit's verification page in an in-app browser. When the
-      // user closes it (or Didit redirects to our callback), we poll
-      // /kyc/status for the decision.
+      const { url } = await kycService.start(returnUrl);
       await WebBrowser.openAuthSessionAsync(url, returnUrl);
       await pollStatus();
     } catch (err: any) {

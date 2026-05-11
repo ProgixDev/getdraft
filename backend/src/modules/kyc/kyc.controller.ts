@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { FastifyReply } from 'fastify';
 import { KycService } from './kyc.service';
+import { StartKycDto } from './dto/start-kyc.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -13,8 +14,8 @@ export class KycController {
   @Post('start')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Start (or resume) a Didit verification session' })
-  start(@CurrentUser('id') userId: string) {
-    return this.kycService.startSession(userId);
+  start(@CurrentUser('id') userId: string, @Body() dto: StartKycDto) {
+    return this.kycService.startSession(userId, dto.callbackUrl);
   }
 
   @Get('status')

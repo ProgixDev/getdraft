@@ -30,7 +30,10 @@ export class KycService {
    * cached info. For 'pending'/'in_review' we return the existing
    * session url so retries don't burn credits.
    */
-  async startSession(userId: string): Promise<{
+  async startSession(
+    userId: string,
+    clientCallbackUrl?: string,
+  ): Promise<{
     sessionId: string;
     url: string;
     status: KycStatus;
@@ -66,8 +69,10 @@ export class KycService {
       };
     }
 
-    // Otherwise create a fresh session at Didit.
-    const callbackUrl = this.callbackUrlFor(userId);
+    // Otherwise create a fresh session at Didit. The client passes its
+    // own deep-link return URL (e.g. myroster://kyc/return) so the
+    // in-app browser auto-closes after verification.
+    const callbackUrl = clientCallbackUrl ?? this.callbackUrlFor(userId);
     const session = await this.diditService.createSession(userId, callbackUrl);
     const workflowId = this.diditService.getDefaultWorkflowId();
 
