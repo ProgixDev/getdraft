@@ -45,6 +45,41 @@ export class AuthService {
     );
   }
 
+  /**
+   * Delete every auth.users row whose phone matches the supplied
+   * number. Compares digits-only to handle Supabase's leading-+
+   * normalisation. CASCADE on public.users cleans up profile rows.
+   * Test-only utility — gated by the testPhones() allowlist.
+   */
+  private async purgeAuthUsersByPhone(contact: string): Promise<void> {
+    const admin = this.supabaseService.getAdminClient();
+    const wantDigits = contact.replace(/\D/g, '');
+
+    const { data, error } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (error || !data) {
+      this.logger.warn(`[test-phone] listUsers failed: ${error?.message ?? '(no data)'}`);
+      return;
+    }
+    const matches = data.users.filter((u) => {
+      const userDigits = (u.phone ?? '').replace(/\D/g, '');
+      return userDigits.length > 0 && userDigits === wantDigits;
+    });
+    if (matches.length === 0) {
+      this.logger.log(`[test-phone] no prior users found for ${contact}`);
+      return;
+    }
+    this.logger.log(`[test-phone] purging ${matches.length} prior auth user(s) for ${contact}`);
+    for (const u of matches) {
+      const { error: delErr } = await admin.auth.admin.deleteUser(u.id);
+      if (delErr) {
+        this.logger.warn(`[test-phone] deleteUser ${u.id}: ${delErr.message}`);
+      }
+    }
+  }
+
   async signup(dto: SignupDto) {
     const supabase = this.supabaseService.getClient();
 
@@ -238,27 +273,14 @@ export class AuthService {
     const column = isEmail ? 'email' : 'phone';
 
     // Test-phone bypass: when the incoming phone is in TEST_PHONES,
-    // delete any pre-existing Supabase user(s) with the same phone so
-    // the next createUser call doesn't collide. CASCADE on public.users
-    // cleans up profiles / subscriptions / etc.
+    // delete any pre-existing auth.users row with the same phone so
+    // the next createUser call doesn't collide. We query auth.users
+    // directly via listUsers (rather than public.users) because an
+    // earlier failed signup may have left an orphan auth row without
+    // a matching public.users record — and that's exactly the
+    // "phone already registered" case Supabase complains about.
     if (!isEmail && this.testPhones().has(contact)) {
-      const { data: dupes } = await admin
-        .from('users')
-        .select('id')
-        .eq('phone', contact);
-      if (dupes && dupes.length > 0) {
-        this.logger.log(
-          `[test-phone] purging ${dupes.length} prior user(s) for ${contact}`,
-        );
-        for (const d of dupes) {
-          const { error: delErr } = await admin.auth.admin.deleteUser(d.id);
-          if (delErr) {
-            this.logger.warn(
-              `[test-phone] failed to delete user ${d.id}: ${delErr.message}`,
-            );
-          }
-        }
-      }
+      await this.purgeAuthUsersByPhone(contact);
     } else {
       // Normal path: refuse duplicates.
       const { data: alreadyExists } = await admin
