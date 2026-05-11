@@ -3,9 +3,8 @@ import { StyleSheet, View, ViewStyle, StyleProp } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, {
   Defs,
-  Filter,
-  FeTurbulence,
-  FeColorMatrix,
+  Pattern,
+  Circle,
   Rect,
   RadialGradient,
   Stop,
@@ -28,7 +27,10 @@ interface GrainyGradientProps {
  * Layers (bottom to top):
  *   1. LinearGradient — base color wash (diagonal top-left → bottom-right)
  *   2. SVG radial accent — single soft glow in the bottom-right
- *   3. SVG noise — feTurbulence at low opacity for the grain
+ *   3. SVG dot pattern at low opacity — approximates film grain.
+ *      (Real feTurbulence noise isn't implemented by react-native-svg,
+ *      so we tile a small jittered dot pattern instead. Same intent,
+ *      native-friendly, no CoreGraphics warnings.)
  *
  * No animations — the foreground should be the focal point.
  */
@@ -73,20 +75,26 @@ export const GrainyGradient: React.FC<GrainyGradientProps> = ({
         <View style={[StyleSheet.absoluteFill, { opacity: grainOpacity }]}>
           <Svg width="100%" height="100%">
             <Defs>
-              <Filter id="grainy-noise" x="0" y="0" width="100%" height="100%">
-                <FeTurbulence
-                  type="fractalNoise"
-                  baseFrequency="0.9"
-                  numOctaves={2}
-                  stitchTiles="stitch"
-                />
-                <FeColorMatrix
-                  type="matrix"
-                  values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0"
-                />
-              </Filter>
+              {/*
+                A 5×5 tile with 4 jittered dots. The asymmetric placement
+                + tiling at low opacity reads as film grain rather than
+                a regular dot pattern.
+              */}
+              <Pattern
+                id="grainy-dots"
+                x="0"
+                y="0"
+                width="5"
+                height="5"
+                patternUnits="userSpaceOnUse"
+              >
+                <Circle cx="0.6" cy="1.2" r="0.45" fill="#FFFFFF" />
+                <Circle cx="2.4" cy="0.5" r="0.35" fill="#FFFFFF" />
+                <Circle cx="3.8" cy="2.6" r="0.55" fill="#FFFFFF" />
+                <Circle cx="1.5" cy="3.9" r="0.4" fill="#FFFFFF" />
+              </Pattern>
             </Defs>
-            <Rect width="100%" height="100%" filter="url(#grainy-noise)" />
+            <Rect width="100%" height="100%" fill="url(#grainy-dots)" />
           </Svg>
         </View>
       )}
