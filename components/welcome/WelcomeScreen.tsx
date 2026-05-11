@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
     View,
     StyleSheet,
@@ -16,10 +16,7 @@ import Animated, {
     Extrapolation,
     runOnJS,
     SharedValue,
-    withRepeat,
-    withTiming,
 } from 'react-native-reanimated';
-import Svg, { Defs, RadialGradient, Stop, Circle } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import {
     useFonts,
@@ -31,6 +28,7 @@ import { images } from '@/config/assets';
 import { brand, neutral } from '@/config/colors';
 import { welcomeSlides } from '@/constants/welcomeData';
 import { PaginationDots } from './PaginationDots';
+import { GrainyGradient } from './GrainyGradient';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -55,25 +53,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
         Poppins_700Bold,
         Poppins_800ExtraBold,
     });
-
-    // Background Animation: Pulse and Slight Rotation
-    const pulse = useSharedValue(1);
-
-    useEffect(() => {
-        pulse.value = withRepeat(
-            withTiming(1.15, { duration: 4000 }),
-            -1,
-            true
-        );
-    }, []);
-
-    const animatedBackgroundStyle = useAnimatedStyle(() => ({
-        transform: [
-            { scale: pulse.value },
-            { translateX: interpolate(pulse.value, [1, 1.15], [0, 20]) } // Subtle shift
-        ],
-        opacity: 0.6,
-    }));
 
     const scrollX = useSharedValue(0);
     const scrollRef = useRef<Animated.ScrollView>(null);
@@ -119,30 +98,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
 
     return (
         <View style={styles.container}>
-            {/* Background Layer: Animated SVG Orb */}
-            <View style={StyleSheet.absoluteFill}>
-                <Animated.View style={[StyleSheet.absoluteFill, animatedBackgroundStyle]}>
-                    <Svg height="100%" width="100%">
-                        <Defs>
-                            <RadialGradient
-                                id="grad"
-                                cx="100%"
-                                cy="100%"
-                                rx="80%"
-                                ry="60%"
-                                fx="100%"
-                                fy="100%"
-                                gradientUnits="userSpaceOnUse"
-                            >
-                                <Stop offset="0" stopColor={brand.primary} stopOpacity="0.5" />
-                                <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-                            </RadialGradient>
-                        </Defs>
-                        {/* Circle positioned deeply in bottom right corner */}
-                        <Circle cx="100%" cy="100%" r="90%" fill="url(#grad)" />
-                    </Svg>
-                </Animated.View>
-            </View>
+            {/* Background: clean grainy gradient (dark) */}
+            <GrainyGradient />
 
             {/* Header: Logo center + Skip top right */}
             <View style={styles.header}>
@@ -329,7 +286,7 @@ const SlideContent: React.FC<SlideContentProps> = ({ slide, index, scrollX }) =>
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: brand.white, // Fallback
+        backgroundColor: '#0a0a0a', // Fallback under the GrainyGradient
     },
     header: {
         position: 'absolute',
@@ -356,7 +313,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
     skipButtonText: {
-        color: neutral.gray500,
+        color: 'rgba(255,255,255,0.6)',
         fontSize: 16,
         fontFamily: 'Poppins_400Regular',
     },
@@ -416,14 +373,14 @@ const slideStyles = StyleSheet.create({
     title: {
         fontSize: 42,
         fontFamily: 'Poppins_800ExtraBold',
-        color: brand.primary,
+        color: '#FFFFFF',
         lineHeight: 48,
         marginBottom: 12,
     },
     subtitle: {
         fontSize: 16,
         fontFamily: 'Poppins_400Regular',
-        color: neutral.gray600,
+        color: 'rgba(255,255,255,0.7)',
         lineHeight: 24,
     },
     decorativeContainer: {
