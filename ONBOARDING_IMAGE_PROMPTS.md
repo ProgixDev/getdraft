@@ -73,20 +73,20 @@ subject edges, clean alpha mask.
 
 ```
 Isolated subject on a fully transparent background, alpha PNG output.
-Cinematic silhouette of a young athlete in mid-stride, viewed from
-behind and slightly to the side, gear bag slung over one shoulder, head
-tilted up. Strong warm golden backlight rakes across the figure,
-casting a long shadow that fades into the transparent canvas (shadow
-is part of the cut-out, partially transparent). Cool blue-black
-highlights on the front of the body, amber highlights on the back.
-Anamorphic flare emerging from behind the head — keep the flare bright
-but localised so it composites cleanly onto any background. Subject
-placed in the right half of the frame, generous transparent space on
-the left. No tunnel, no stadium, no walls, no floor — just the figure
-plus its glowing rim light and trailing shadow. No text, no logos, no
-team identifiers, sport-agnostic silhouette. Photoreal, IMAX-grade,
-35mm anamorphic. Output: transparent PNG with clean alpha, including
-soft alpha on the flare halo and shadow.
+Editorial sports photograph of a confident young athlete in dark, modern
+training apparel, standing tall in three-quarter view, looking forward
+with a determined expression and a faint smile. One hand relaxed at
+the side, the other resting on a gear bag strap slung over the
+shoulder. Evenly lit subject — soft, neutral, even studio lighting
+with no directional beams, no cast shadow, no rim glow, no backlight
+halo, no flare. Crisp, clean edges suitable for compositing onto a
+dark background. Subject placed in the right two-thirds of the frame;
+left third is empty (transparent). No backdrop, no walls, no floor —
+subject cut-out only. Sport-neutral apparel, no logos, no team
+identifiers, no jersey numbers, no text, no visible tattoos. Photoreal,
+high-end campaign quality, 50mm lens, slight film grain on the subject
+only. Tight 3:4 vertical crop. Output: transparent PNG, hard subject
+edges, clean alpha mask, no soft glow or shadow leakage.
 ```
 
 **Midjourney suffix:** `--ar 3:4 --style raw --v 6.1`
@@ -131,8 +131,7 @@ shows transparency (Preview shows a checkerboard pattern for alpha):
   `#0a0a0a`.
 - Edges of helmets, hair, and uniform straps are clean — no halo of
   dark pixels (that's the original backdrop bleeding through).
-- The shadow (slide 3) fades smoothly to transparent at the bottom
-  edge — don't crop it hard.
+- No cast shadow leaking off the subject onto the canvas.
 - Image fits the 3:4 ratio without padding bars.
 
 ---
