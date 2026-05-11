@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useStripe } from '@stripe/stripe-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -72,7 +71,8 @@ export default function SubscriptionScreen() {
 
   const [apiSub, setApiSub] = useState<ApiSubscription | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pendingAction, setPendingAction] = useState<string | null>(null); // planId or 'portal'
+  // Generic pending key: planId for upgrades, 'cancel'/'resume' for manage actions, 'buy-swipes' for nav.
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
@@ -144,19 +144,62 @@ export default function SubscriptionScreen() {
     [pendingAction, initPaymentSheet, presentPaymentSheet, refresh],
   );
 
-  const handleManage = useCallback(async () => {
+  /**
+   * Schedules a cancel-at-period-end on Stripe — keeps the user on
+   * their paid plan until the next renewal date, then drops to Basic
+   * via webhook. Confirmed once so the user doesn't trip the button.
+   */
+  const doCancel = useCallback(async () => {
     if (pendingAction) return;
-    setPendingAction('portal');
+    setPendingAction('cancel');
     try {
-      const { portalUrl } = await subscriptionsService.createPortal();
-      await WebBrowser.openBrowserAsync(portalUrl);
+      const res = await subscriptionsService.cancel(false);
+      await refresh();
+      Alert.alert(
+        'Subscription canceled',
+        res.cancelAt
+          ? `You'll keep your plan until ${new Date(res.cancelAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}, then drop to Basic.`
+          : "You'll keep your plan until the end of the billing period.",
+      );
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
-      Alert.alert('Could not open portal', String(msg));
+      Alert.alert('Could not cancel', String(msg));
     } finally {
       setPendingAction(null);
     }
-  }, [pendingAction]);
+  }, [pendingAction, refresh]);
+
+  const handleCancel = useCallback(() => {
+    if (pendingAction) return;
+    Alert.alert(
+      'Cancel subscription?',
+      "You'll keep your current plan until the end of this billing period. You can resume any time before then.",
+      [
+        { text: 'Keep plan', style: 'cancel' },
+        { text: 'Cancel subscription', style: 'destructive', onPress: doCancel },
+      ],
+    );
+  }, [pendingAction, doCancel]);
+
+  const handleResume = useCallback(async () => {
+    if (pendingAction) return;
+    setPendingAction('resume');
+    try {
+      await subscriptionsService.resume();
+      await refresh();
+      Alert.alert('Subscription resumed', 'Your plan will renew automatically.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
+      Alert.alert('Could not resume', String(msg));
+    } finally {
+      setPendingAction(null);
+    }
+  }, [pendingAction, refresh]);
+
+  const goToBuySwipes = useCallback(() => {
+    if (pendingAction) return;
+    router.push('/buy-swipes');
+  }, [pendingAction, router]);
 
   if (!fontsLoaded) return null;
 
@@ -307,20 +350,42 @@ export default function SubscriptionScreen() {
             );
           })}
 
-          {/* Manage (paid plans only — Stripe customer portal) */}
-          {showManage && (
+          {/* Buy more swipes — always shown so free users can top up too. */}
+          <Pressable
+            style={[styles.swipePackButton, pendingAction !== null && styles.upgradeButtonDisabled]}
+            onPress={goToBuySwipes}
+            disabled={pendingAction !== null}
+          >
+            <Ionicons name="add-circle-outline" size={18} color={brand.primary} />
+            <Text style={styles.swipePackButtonText}>Buy more swipes</Text>
+          </Pressable>
+
+          {/* Cancel / resume (paid plans only) */}
+          {showManage && apiSub?.cancel_at_period_end ? (
             <Pressable
-              style={[styles.manageButton, pendingAction !== null && styles.upgradeButtonDisabled]}
-              onPress={handleManage}
+              style={[styles.resumeButton, pendingAction !== null && styles.upgradeButtonDisabled]}
+              onPress={handleResume}
               disabled={pendingAction !== null}
             >
-              {pendingAction === 'portal' ? (
+              {pendingAction === 'resume' ? (
                 <ActivityIndicator color={theme.accentText} />
               ) : (
-                <Text style={styles.manageButtonText}>Manage Subscription</Text>
+                <Text style={styles.resumeButtonText}>Resume subscription</Text>
               )}
             </Pressable>
-          )}
+          ) : showManage ? (
+            <Pressable
+              style={[styles.cancelButton, pendingAction !== null && styles.upgradeButtonDisabled]}
+              onPress={handleCancel}
+              disabled={pendingAction !== null}
+            >
+              {pendingAction === 'cancel' ? (
+                <ActivityIndicator color="#E54B4B" />
+              ) : (
+                <Text style={styles.cancelButtonText}>Cancel subscription</Text>
+              )}
+            </Pressable>
+          ) : null}
         </ScrollView>
       )}
     </View>
@@ -570,16 +635,48 @@ const styles = StyleSheet.create({
   upgradeButtonTextPopular: {
     color: theme.accentText,
   },
-  manageButton: {
+  swipePackButton: {
     height: 50,
     borderRadius: 25,
-    backgroundColor: theme.accent,
+    backgroundColor: theme.cardBg,
+    borderWidth: 1,
+    borderColor: brand.primary,
+    flexDirection: 'row',
+    gap: 8,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
   },
-  manageButtonText: {
-    fontSize: 16,
+  swipePackButtonText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+    color: brand.primary,
+  },
+  cancelButton: {
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(229,75,75,0.5)',
+    backgroundColor: 'rgba(229,75,75,0.08)',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#E54B4B',
+  },
+  resumeButton: {
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: brand.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  resumeButtonText: {
+    fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
     color: theme.accentText,
   },

@@ -13,6 +13,11 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
+    // Capture the raw body on every request so Stripe webhook
+    // signature verification (which hashes the byte-exact payload)
+    // can run. Without this, req.rawBody is undefined and every
+    // webhook fails silently with "Invalid signature".
+    { rawBody: true },
   );
 
   // CORS

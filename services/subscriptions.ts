@@ -30,4 +30,36 @@ export const subscriptionsService = {
     const { data } = await api.post('/subscriptions/portal');
     return data.data;
   },
+
+  async cancel(immediate = false): Promise<{
+    canceled: boolean;
+    status?: string;
+    atPeriodEnd?: boolean;
+    cancelAt?: string | null;
+    message?: string;
+  }> {
+    const { data } = await api.post('/subscriptions/cancel', { immediate });
+    return data.data;
+  },
+
+  async resume(): Promise<{ resumed: boolean; status?: string }> {
+    const { data } = await api.post('/subscriptions/resume');
+    return data.data;
+  },
+
+  async listSwipePacks(): Promise<
+    Array<{ id: string; swipes: number; amountCents: number; label: string }>
+  > {
+    const { data } = await api.get('/subscriptions/swipe-packs');
+    return data.data;
+  },
+
+  async buySwipePackSheet(packId: string): Promise<
+    PaymentSheetParams & {
+      pack: { id: string; swipes: number; amountCents: number; label: string };
+    }
+  > {
+    const { data } = await api.post('/subscriptions/swipe-pack', { packId });
+    return data.data;
+  },
 };
