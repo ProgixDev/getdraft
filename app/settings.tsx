@@ -198,6 +198,48 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Admin tools — only shown to users with role=admin. */}
+        {user?.role === 'admin' && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={theme.text} />
+              <Text style={styles.sectionTitle}>Admin tools</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.menuRow, styles.menuRowLast, pressed && styles.menuRowPressed]}
+              onPress={() => router.push('/admin-guardian-links')}
+            >
+              <Ionicons name="people-circle-outline" size={20} color={theme.textSecondary} />
+              <View style={styles.menuRowCopy}>
+                <Text style={styles.menuRowTitle}>Guardian link reviews</Text>
+                <Text style={styles.menuRowValue}>Approve or decline pending guardian submissions</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+            </Pressable>
+          </View>
+        )}
+
+        {/* Guardians — only shown to athletes. */}
+        {user?.role === 'athlete' && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="people-outline" size={20} color={theme.text} />
+              <Text style={styles.sectionTitle}>Guardians</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.menuRow, styles.menuRowLast, pressed && styles.menuRowPressed]}
+              onPress={() => router.push('/link-guardian')}
+            >
+              <Ionicons name="qr-code-outline" size={20} color={theme.textSecondary} />
+              <View style={styles.menuRowCopy}>
+                <Text style={styles.menuRowTitle}>Link a guardian</Text>
+                <Text style={styles.menuRowValue}>Generate a QR code for a parent or guardian</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+            </Pressable>
+          </View>
+        )}
+
         {/* Account */}
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>

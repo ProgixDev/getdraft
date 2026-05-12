@@ -17,6 +17,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { KycModule } from './modules/kyc/kyc.module';
+import { GuardianLinksModule } from './modules/guardian-links/guardian-links.module';
 
 @Controller()
 class HealthController {
@@ -43,6 +44,7 @@ class HealthController {
     StatsModule,
     AdminModule,
     KycModule,
+    GuardianLinksModule,
   ],
   controllers: [HealthController],
   providers: [

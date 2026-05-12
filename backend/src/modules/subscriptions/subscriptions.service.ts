@@ -173,6 +173,32 @@ export class SubscriptionsService {
       data.swipes_reset_at = today;
     }
 
+    // We don't store cancel_at_period_end in the DB (no column for it),
+    // so for paid subs we ask Stripe for the live value. Cheap enough to
+    // do on demand — the subscription screen isn't a hot path.
+    if (data.stripe_subscription_id) {
+      try {
+        const stripe = this.stripeService.getClient();
+        const sub = (await stripe.subscriptions.retrieve(
+          data.stripe_subscription_id,
+        )) as any;
+        data.cancel_at_period_end = !!sub.cancel_at_period_end;
+        data.cancel_at = this.toIso(sub.cancel_at);
+        // If Stripe's period_end is newer than our cached one (e.g. the
+        // webhook hasn't fired yet) prefer the live value so the UI's
+        // "Cancels on {date}" line is accurate.
+        const item = sub.items?.data?.[0];
+        const livePeriodEnd = this.toIso(
+          sub.current_period_end ?? item?.current_period_end,
+        );
+        if (livePeriodEnd) data.current_period_end = livePeriodEnd;
+      } catch (err: any) {
+        this.logger.warn(
+          `Could not fetch Stripe sub ${data.stripe_subscription_id}: ${err?.message}`,
+        );
+      }
+    }
+
     return data;
   }
 

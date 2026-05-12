@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     useFonts,
     Poppins_400Regular,
@@ -28,7 +28,7 @@ interface TutorialScreenProps {
 
 interface TutorialSlide {
     id: string;
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: keyof typeof Ionicons.glyphMap | { mci: keyof typeof MaterialCommunityIcons.glyphMap };
     title: string;
     description: string;
 }
@@ -36,9 +36,9 @@ interface TutorialSlide {
 const tutorialSlides: TutorialSlide[] = [
     {
         id: '1',
-        icon: 'heart',
-        title: 'Swipe Right to Like',
-        description: 'When you see a profile you\'re interested in, swipe right or tap the heart to show your interest.',
+        icon: { mci: 'handshake' },
+        title: 'Swipe Right to Draft',
+        description: 'When you see a profile you\'re interested in, swipe right or tap the handshake to draft them.',
     },
     {
         id: '2',
@@ -93,11 +93,19 @@ export const TutorialScreen: React.FC<TutorialScreenProps> = ({ onComplete }) =>
                 entering={FadeIn.duration(600)}
                 style={styles.iconContainer}
             >
-                <Ionicons
-                    name={item.icon}
-                    size={80}
-                    color={brand.primary}
-                />
+                {typeof item.icon === 'object' && 'mci' in item.icon ? (
+                    <MaterialCommunityIcons
+                        name={item.icon.mci}
+                        size={80}
+                        color={brand.primary}
+                    />
+                ) : (
+                    <Ionicons
+                        name={item.icon}
+                        size={80}
+                        color={brand.primary}
+                    />
+                )}
             </Animated.View>
             <Animated.Text
                 entering={FadeInDown.duration(600).delay(200)}

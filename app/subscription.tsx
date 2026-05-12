@@ -356,7 +356,7 @@ export default function SubscriptionScreen() {
             onPress={goToBuySwipes}
             disabled={pendingAction !== null}
           >
-            <Ionicons name="add-circle-outline" size={18} color={brand.primary} />
+            <Ionicons name="add-circle-outline" size={18} color={theme.accentText} />
             <Text style={styles.swipePackButtonText}>Buy more swipes</Text>
           </Pressable>
 
@@ -638,9 +638,7 @@ const styles = StyleSheet.create({
   swipePackButton: {
     height: 50,
     borderRadius: 25,
-    backgroundColor: theme.cardBg,
-    borderWidth: 1,
-    borderColor: brand.primary,
+    backgroundColor: theme.accent,
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
@@ -650,7 +648,7 @@ const styles = StyleSheet.create({
   swipePackButtonText: {
     fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
-    color: brand.primary,
+    color: theme.accentText,
   },
   cancelButton: {
     height: 48,

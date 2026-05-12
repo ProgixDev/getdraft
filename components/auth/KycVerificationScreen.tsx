@@ -94,6 +94,23 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
     await tick();
   }, []);
 
+  /**
+   * Dev-only skip for the iOS simulator (and any non-prod build). The
+   * backend's /kyc/dev-approve endpoint is itself gated by NODE_ENV so
+   * even if this button leaks into a prod bundle it would be rejected.
+   */
+  const handleDevSkip = useCallback(async () => {
+    if (isStarting || isPolling) return;
+    try {
+      const r = await kycService.devApprove();
+      setStatus(r.kycStatus);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ?? err?.message ?? 'Dev bypass failed.';
+      Alert.alert('Could not skip', String(message));
+    }
+  }, [isStarting, isPolling]);
+
   const handleStart = useCallback(async () => {
     if (isStarting) return;
     setError(null);
@@ -221,6 +238,13 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
             Your ID is processed by Didit and never stored on GetDraft's servers.
             We only keep the approval status.
           </Text>
+
+          {__DEV__ && status !== 'approved' && (
+            <Pressable style={styles.devSkipButton} onPress={handleDevSkip}>
+              <Ionicons name="bug-outline" size={14} color={neutral.gray500} />
+              <Text style={styles.devSkipText}>Skip verification (dev)</Text>
+            </Pressable>
+          )}
         </Animated.View>
       </ScrollView>
     </LinearGradient>
@@ -378,6 +402,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: neutral.gray500,
     lineHeight: 16,
+  },
+  devSkipButton: {
+    marginTop: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: neutral.gray300,
+  },
+  devSkipText: {
+    fontSize: 11,
+    fontFamily: 'Poppins_500Medium',
+    color: neutral.gray500,
   },
 });
 

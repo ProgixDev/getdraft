@@ -41,12 +41,15 @@ function RootLayoutContent() {
 
   usePushNotifications(isAuthenticated && !!user);
 
-  // Restore auth on app start
+  // Restore auth on app start. Users who haven't finished onboarding
+  // (plan / location / profile / KYC / payment) MUST drop back into
+  // the auth flow — otherwise a Metro reload mid-signup would skip
+  // straight to home and leave them unverified / unpaid.
   useEffect(() => {
     loadAuth().then((persisted) => {
       if (persisted?.user) {
         dispatch(login({ user: persisted.user, isOnboarded: persisted.isOnboarded }));
-        setAppState('app');
+        setAppState(persisted.isOnboarded ? 'app' : 'auth');
       } else {
         setAppState('splash');
       }
@@ -155,6 +158,9 @@ function RootLayoutContent() {
         <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
+        <Stack.Screen name="buy-swipes" options={{ headerShown: false }} />
+        <Stack.Screen name="link-guardian" options={{ headerShown: false }} />
+        <Stack.Screen name="admin-guardian-links" options={{ headerShown: false }} />
         <Stack.Screen name="help-center" options={{ headerShown: false }} />
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />

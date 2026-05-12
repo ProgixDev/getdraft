@@ -24,4 +24,10 @@ export const kycService = {
     const { data } = await api.get('/kyc/status');
     return data.data;
   },
+
+  /** [DEV ONLY] Bypass Didit and mark the current user approved. */
+  async devApprove(): Promise<{ kycStatus: KycStatus }> {
+    const { data } = await api.post('/kyc/dev-approve');
+    return data.data;
+  },
 };

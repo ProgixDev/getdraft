@@ -62,6 +62,14 @@
           "merchantIdentifier": "merchant.com.achrefdev.myroster",
           "enableGooglePay": true
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "GetDraft uses the camera to scan QR codes for guardian linking and to record your guardian declaration video.",
+          "microphonePermission": "GetDraft uses the microphone to record your guardian declaration video.",
+          "recordAudioAndroid": true
+        }
       ]
     ],
     "experiments": {

@@ -48,6 +48,12 @@ import { ProfileSetupScreen } from './ProfileSetupScreen';
 import { PaymentScreen } from './PaymentScreen';
 import { TutorialScreen } from './TutorialScreen';
 import { KycVerificationScreen } from './KycVerificationScreen';
+import { OnboardingQuestionsScreen } from './OnboardingQuestionsScreen';
+import { GuardianLinkScreen } from './GuardianLinkScreen';
+import { guardianLinksService } from '@/services/guardianLinks';
+import { useStripe } from '@stripe/stripe-react-native';
+import { subscriptionsService } from '@/services/subscriptions';
+import { kycService } from '@/services/kyc';
 
 const { width, height } = Dimensions.get('window');
 
@@ -77,12 +83,13 @@ type SignupStep =
     | 'phone-role'   // role + name + password (no email) for phone signups
     | 'oauth-role'   // role + name (no email, no password) for OAuth signups
     | 'verify'
-    | 'plan'
     | 'location'
     | 'profile'
-    | 'kyc'         // Didit identity verification — gated between profile and payment
-    | 'payment'
-    | 'tutorial';
+    | 'kyc'         // Didit identity verification
+    | 'guardian-link' // Parent-only — scan athlete QR, answer questions, record video
+    | 'questions'   // Per-role onboarding questionnaire — feeds the matching algorithm
+    | 'tutorial'
+    | 'plan';       // Subscription pick — LAST step; tap pays via Stripe, X skips (stay on Basic)
 type UserRole = 'athlete' | 'parent' | 'coach' | 'recruiter';
 
 interface RoleOption {
@@ -163,12 +170,70 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     /** Set after the OTP is verified; carried into completeSignup. */
     const [verificationToken, setVerificationToken] = useState<string | null>(null);
 
+    const { initPaymentSheet, presentPaymentSheet } = useStripe();
+    const isAuthenticated = useAppSelector((s) => s.auth.isAuthenticated);
+    const isOnboarded = useAppSelector((s) => s.auth.isOnboarded);
+
     // Animation values
     const contentOpacity = useSharedValue(0);
 
     useEffect(() => {
         contentOpacity.value = withDelay(300, withTiming(1, { duration: 600 }));
     }, []);
+
+    /**
+     * Resume signup at the right step when the user is logged in but
+     * not onboarded (e.g. they reloaded mid-signup). We ask the backend
+     * what's been completed already and drop them at the earliest
+     * unfinished step, instead of bouncing them back to "Choose your role".
+     */
+    useEffect(() => {
+        if (!isAuthenticated || isOnboarded) return;
+        // Only auto-resume out of the initial role/phone-role/oauth-role
+        // steps — once the user has clicked into a later step we trust
+        // their in-progress local state.
+        if (
+            signupStep !== 'role' &&
+            signupStep !== 'phone-role' &&
+            signupStep !== 'oauth-role'
+        ) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const [me, kyc, guardianLink] = await Promise.all([
+                    usersService.getMe().catch(() => null),
+                    kycService.getStatus().catch(() => null),
+                    guardianLinksService.getMyLink().catch(() => null),
+                ]);
+                if (cancelled) return;
+                const meRole = me?.role ?? role;
+                const hasLocation = !!me?.location;
+                const hasProfileBio = !!me?.bio || !!me?.profile_photo_url;
+                const kycApproved = kyc?.kycStatus === 'approved';
+                const guardianDone =
+                    meRole !== 'parent' ||
+                    (guardianLink && (guardianLink.status === 'pending_admin' || guardianLink.status === 'approved'));
+                const answeredQuestions = !!me?.preferences?.onboarding?.answeredAt;
+                let resumeAt: SignupStep = 'plan';
+                if (!hasLocation) resumeAt = 'location';
+                else if (!hasProfileBio) resumeAt = 'profile';
+                else if (!kycApproved) resumeAt = 'kyc';
+                else if (!guardianDone) resumeAt = 'guardian-link';
+                else if (!answeredQuestions) resumeAt = 'questions';
+                else resumeAt = 'plan';
+                setMode('signup');
+                setSignupStep(resumeAt);
+            } catch {
+                // Fall back to starting from the location step — safer
+                // than the role picker which would corrupt their user row.
+                if (!cancelled) {
+                    setMode('signup');
+                    setSignupStep('location');
+                }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [isAuthenticated, isOnboarded]);
 
     const animatedContentStyle = useAnimatedStyle(() => ({
         opacity: contentOpacity.value,
@@ -214,7 +279,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 isOnboarded: false,
             }));
             setIsLoading(false);
-            setSignupStep('plan');
+            setSignupStep('location');
         } catch (err: any) {
             setIsLoading(false);
             const message =
@@ -254,7 +319,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             });
             dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
             setIsLoading(false);
-            setSignupStep('plan');
+            setSignupStep('location');
         } catch (err: any) {
             setIsLoading(false);
             const message =
@@ -283,7 +348,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 name: email.split('@')[0],
             });
             dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
-            setSignupStep('plan');
+            setSignupStep('location');
         } catch (err: any) {
             const message =
                 err?.response?.data?.message ||
@@ -296,9 +361,56 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         }
     };
 
-    const handlePlanSelected = (planId: string) => {
+    /**
+     * Final step in signup. Free plan = finish onboarding. Paid plan =
+     * open Stripe Payment Sheet; on success finish onboarding, on
+     * cancellation throw so PlanSelectionScreen clears its spinner.
+     */
+    const handlePlanSelected = async (planId: string) => {
         setSelectedPlan(planId);
-        setSignupStep('location');
+        const plan = (await import('@/constants/plansData')).plans.find(p => p.id === planId);
+        if (!plan || plan.price === 0) {
+            await finishOnboarding();
+            return;
+        }
+        try {
+            const params = await subscriptionsService.createPaymentSheet(planId);
+            if (!params?.paymentIntentClientSecret) {
+                throw new Error('Stripe did not return a payment session.');
+            }
+            const { error: initErr } = await initPaymentSheet({
+                merchantDisplayName: 'GetDraft',
+                customerId: params.customerId,
+                customerEphemeralKeySecret: params.ephemeralKeySecret,
+                paymentIntentClientSecret: params.paymentIntentClientSecret,
+                returnURL: 'myroster://stripe-redirect',
+                appearance: {
+                    primaryButton: { colors: { background: brand.primary, text: brand.white } },
+                },
+            });
+            if (initErr) throw new Error(initErr.message || 'Could not prepare checkout.');
+            const { error: payErr } = await presentPaymentSheet();
+            if (payErr) {
+                if (payErr.code === 'Canceled') {
+                    throw new Error('Canceled');
+                }
+                throw new Error(payErr.message || 'Payment failed.');
+            }
+            await finishOnboarding();
+        } catch (err: any) {
+            const msg = err?.response?.data?.message ?? err?.message ?? 'Payment failed.';
+            if (msg !== 'Canceled') {
+                Alert.alert('Could not complete payment', String(msg));
+            }
+            // Re-throw so the per-card spinner on PlanSelectionScreen resets.
+            throw err;
+        }
+    };
+
+    /** X-to-skip: skip plan selection, stay on Basic, finish onboarding. */
+    const handleSkipPlan = async () => {
+        setSelectedPlan('basic');
+        await finishOnboarding();
     };
 
     const handleLocationSelected = async (city: string, country: string) => {
@@ -322,21 +434,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         setSignupStep('kyc');
     };
 
+    /**
+     * After KYC: parents go through guardian-link first (scan + video),
+     * everyone else goes straight to the onboarding questionnaire.
+     */
     const handleKycComplete = () => {
-        setSignupStep('payment');
+        setSignupStep(role === 'parent' ? 'guardian-link' : 'questions');
     };
 
-    const handlePaymentComplete = () => {
+    const handleGuardianLinkComplete = () => {
+        setSignupStep('questions');
+    };
+
+    const handleQuestionsComplete = () => {
         setSignupStep('tutorial');
     };
 
-    const handleTutorialComplete = async () => {
-        // Persist is_onboarded=true to backend (and update Redux + AsyncStorage)
+    /** Tutorial → plan (the new last step). */
+    const handleTutorialComplete = () => {
+        setSignupStep('plan');
+    };
+
+    /**
+     * Mark onboarding complete on the backend + Redux + AsyncStorage,
+     * then drop the user into the main app. Called from both the
+     * plan-paid success path and the X-to-skip path.
+     */
+    const finishOnboarding = async () => {
         try {
             await dispatch(completeOnboardingAsync()).unwrap();
         } catch (err: any) {
             console.warn('[AuthScreen] completeOnboardingAsync failed:', err);
-            // Fall back to local state-only update so the user isn't stuck
             dispatch(completeOnboarding());
         }
         onLogin?.();
@@ -389,7 +517,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 } else {
                     // Resume onboarding for an existing user that never finished
                     setMode('signup');
-                    setSignupStep('plan');
+                    setSignupStep('location');
                 }
             } catch (err: any) {
                 // Fallback to mock users only if backend is unreachable (network error, no response)
@@ -442,18 +570,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         onBack={handleBackToRoleSelection}
                     />
                 );
-            case 'plan':
-                return (
-                    <PlanSelectionScreen
-                        onPlanSelected={handlePlanSelected}
-                        onBack={handleBackToRoleSelection}
-                    />
-                );
             case 'location':
                 return (
                     <LocationSelectionScreen
                         onLocationSelected={handleLocationSelected}
-                        onBack={() => setSignupStep('plan')}
+                        onBack={handleBackToRoleSelection}
                     />
                 );
             case 'profile':
@@ -472,18 +593,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         onBack={() => setSignupStep('profile')}
                     />
                 );
-            case 'payment':
+            case 'guardian-link':
                 return (
-                    <PaymentScreen
-                        selectedPlanId={selectedPlan}
-                        onPaymentComplete={handlePaymentComplete}
+                    <GuardianLinkScreen
+                        onComplete={handleGuardianLinkComplete}
                         onBack={() => setSignupStep('kyc')}
+                    />
+                );
+            case 'questions':
+                return (
+                    <OnboardingQuestionsScreen
+                        role={role}
+                        onComplete={handleQuestionsComplete}
+                        onBack={() => setSignupStep(role === 'parent' ? 'guardian-link' : 'kyc')}
                     />
                 );
             case 'tutorial':
                 return (
                     <TutorialScreen
                         onComplete={handleTutorialComplete}
+                    />
+                );
+            case 'plan':
+                return (
+                    <PlanSelectionScreen
+                        onPlanSelected={handlePlanSelected}
+                        onSkip={handleSkipPlan}
                     />
                 );
             case 'phone-role':
