@@ -56,9 +56,7 @@ export function AthleteCard({
   );
   const [videoReady, setVideoReady] = useState(false);
 
-  const videoSource = hasVideo
-    ? typeof firstVideo === 'string' ? firstVideo : firstVideo?.uri ?? ''
-    : '';
+  const videoSource: string | number = hasVideo ? firstVideo : '';
 
   const player = useVideoPlayer(videoSource, (p) => {
     p.loop = false;

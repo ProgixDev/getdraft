@@ -122,7 +122,7 @@ describe('DiscoverService', () => {
 
       expect(result.cards).toHaveLength(1);
       expect(result.cards[0].name).toBe('Coach Mike');
-      expect(result.cards[0].verified).toBe(true);
+      expect((result.cards[0] as any).verified).toBe(true);
       expect(result.swipesRemaining).toBe(7);
     });
 
@@ -170,7 +170,7 @@ describe('DiscoverService', () => {
       const result = await service.getFeed(recruiterUser, {});
 
       expect(result.cards).toHaveLength(1);
-      expect(result.cards[0].position).toBe('QB');
+      expect((result.cards[0] as any).position).toBe('QB');
       expect(result.swipesRemaining).toBe(30);
     });
   });
