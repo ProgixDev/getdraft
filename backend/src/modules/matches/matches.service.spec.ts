@@ -63,9 +63,7 @@ describe('MatchesService', () => {
     });
 
     it('should throw NotFoundException when match not found', async () => {
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: null }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: null }));
 
       await expect(service.getMatch('no-match', 'user-1')).rejects.toThrow(
         NotFoundException,
@@ -82,9 +80,9 @@ describe('MatchesService', () => {
         mockQueryBuilder({ data: matchData }),
       );
 
-      await expect(
-        service.getMatch('match-1', 'user-X'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getMatch('match-1', 'user-X')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -110,9 +108,7 @@ describe('MatchesService', () => {
     });
 
     it('should throw NotFoundException for non-existent match', async () => {
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: null }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: null }));
 
       await expect(service.unmatch('no-match', 'user-1')).rejects.toThrow(
         NotFoundException,
@@ -129,9 +125,9 @@ describe('MatchesService', () => {
         mockQueryBuilder({ data: matchData }),
       );
 
-      await expect(
-        service.unmatch('match-1', 'user-X'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.unmatch('match-1', 'user-X')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 });

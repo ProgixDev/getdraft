@@ -1,8 +1,8 @@
-import api from './api';
+import api from "./api";
 
 export const matchesService = {
   async getMatches(): Promise<any[]> {
-    const { data } = await api.get('/matches');
+    const { data } = await api.get("/matches");
     return data.data;
   },
 

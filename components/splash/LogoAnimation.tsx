@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect } from "react";
+import { View, StyleSheet, Dimensions } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,10 +8,10 @@ import Animated, {
   withSequence,
   Easing,
   runOnJS,
-} from 'react-native-reanimated';
-import { theme } from '@/config/colors';
+} from "react-native-reanimated";
+import { theme } from "@/config/colors";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const LOGO_SIZE = SCREEN_WIDTH * 0.45;
 
 interface LogoAnimationProps {
@@ -34,7 +34,7 @@ export function LogoAnimation({ onComplete, active }: LogoAnimationProps) {
       withTiming(1, {
         duration: 800,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      })
+      }),
     );
 
     logoScale.value = withDelay(
@@ -48,13 +48,13 @@ export function LogoAnimation({ onComplete, active }: LogoAnimationProps) {
         // Subtle pulse
         withTiming(1.04, { duration: 400, easing: Easing.inOut(Easing.ease) }),
         withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-      )
+      ),
     );
 
     // Glow halo
     glowOpacity.value = withDelay(
       300,
-      withTiming(0.35, { duration: 700, easing: Easing.out(Easing.ease) })
+      withTiming(0.35, { duration: 700, easing: Easing.out(Easing.ease) }),
     );
 
     // Exit: fade out after hold
@@ -87,7 +87,7 @@ export function LogoAnimation({ onComplete, active }: LogoAnimationProps) {
 
       {/* Logo */}
       <Animated.Image
-        source={require('@/assets/logo_white.png')}
+        source={require("@/assets/logo_white.png")}
         style={[styles.logo, logoStyle]}
         resizeMode="contain"
       />
@@ -98,20 +98,20 @@ export function LogoAnimation({ onComplete, active }: LogoAnimationProps) {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: theme.bg,
   },
   glow: {
-    position: 'absolute',
+    position: "absolute",
     width: LOGO_SIZE * 2.5,
     height: LOGO_SIZE * 2.5,
     borderRadius: LOGO_SIZE * 1.25,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
   logo: {
     width: LOGO_SIZE,
     height: LOGO_SIZE,
-    tintColor: '#FFFFFF',
+    tintColor: "#FFFFFF",
   },
 });

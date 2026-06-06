@@ -62,9 +62,7 @@ describe('SubscriptionsService', () => {
 
   describe('getMySubscription', () => {
     it('should return default basic plan when no subscription found', async () => {
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: null }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: null }));
 
       const result = await service.getMySubscription('user-1');
       expect(result.plan_id).toBe(PlanId.BASIC);
@@ -81,9 +79,7 @@ describe('SubscriptionsService', () => {
         swipes_reset_at: today,
       };
 
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: subData }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: subData }));
 
       const result = await service.getMySubscription('user-1');
       expect(result.plan_id).toBe(PlanId.PRO);
@@ -135,7 +131,9 @@ describe('SubscriptionsService', () => {
         PlanId.PRO,
       );
 
-      expect(result.checkoutUrl).toBe('https://checkout.stripe.com/session-url');
+      expect(result.checkoutUrl).toBe(
+        'https://checkout.stripe.com/session-url',
+      );
     });
 
     it('should create Stripe customer if not exists', async () => {
@@ -170,9 +168,7 @@ describe('SubscriptionsService', () => {
 
   describe('createPortalSession', () => {
     it('should throw NotFoundException when no subscription', async () => {
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: null }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: null }));
 
       await expect(service.createPortalSession('user-1')).rejects.toThrow(
         NotFoundException,

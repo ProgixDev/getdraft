@@ -1,4 +1,4 @@
-import api from './api';
+import api from "./api";
 
 export interface DiscoverQuery {
   distanceKm?: number;
@@ -28,17 +28,23 @@ export interface SwipeResponse {
 
 export const discoverService = {
   async getFeed(query: DiscoverQuery = {}): Promise<FeedResponse> {
-    const { data } = await api.get('/discover/feed', { params: query });
+    const { data } = await api.get("/discover/feed", { params: query });
     return data.data;
   },
 
-  async swipe(targetUserId: string, direction: 'draft' | 'pass'): Promise<SwipeResponse> {
-    const { data } = await api.post('/discover/swipe', { targetUserId, direction });
+  async swipe(
+    targetUserId: string,
+    direction: "draft" | "pass",
+  ): Promise<SwipeResponse> {
+    const { data } = await api.post("/discover/swipe", {
+      targetUserId,
+      direction,
+    });
     return data.data;
   },
 
   async whoDraftedMe(): Promise<any[]> {
-    const { data } = await api.get('/discover/who-drafted-me');
+    const { data } = await api.get("/discover/who-drafted-me");
     return data.data;
   },
 };

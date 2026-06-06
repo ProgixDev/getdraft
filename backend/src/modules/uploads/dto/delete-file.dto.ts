@@ -5,7 +5,7 @@ import type { UploadBucket } from './signed-url.dto';
 
 export class DeleteFileDto {
   @ApiProperty({ enum: UPLOAD_BUCKETS })
-  @IsIn(UPLOAD_BUCKETS as unknown as string[])
+  @IsIn(UPLOAD_BUCKETS)
   bucket: UploadBucket;
 
   @ApiProperty({ example: '<userId>/1735659383928-photo.jpg' })

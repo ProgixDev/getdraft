@@ -3,10 +3,10 @@
  * Keeps user logged in until explicit logout
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { UserRole } from './slices/authSlice';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { UserRole } from "./slices/authSlice";
 
-const AUTH_STORAGE_KEY = '@getdraft/auth';
+const AUTH_STORAGE_KEY = "@getdraft/auth";
 
 export interface PersistedAuth {
   user: {

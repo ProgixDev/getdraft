@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -6,37 +6,67 @@ import {
   Pressable,
   Dimensions,
   ActivityIndicator,
-} from 'react-native';
-import { WebView } from 'react-native-webview';
+} from "react-native";
+import { WebView } from "react-native-webview";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withDelay,
   Easing,
-} from 'react-native-reanimated';
+} from "react-native-reanimated";
 import {
   useFonts,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
   Poppins_800ExtraBold,
-} from '@expo-google-fonts/poppins';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import { theme } from '@/config/colors';
-import { statsService } from '@/services/stats';
+} from "@expo-google-fonts/poppins";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
+import { theme } from "@/config/colors";
+import { statsService } from "@/services/stats";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ── Continent talent data (defaults) ──
 const DEFAULT_CONTINENTS = [
-  { name: 'North America', athletes: '4,200+', recruiters: '180+', icon: 'american-football' as const },
-  { name: 'Europe', athletes: '2,800+', recruiters: '150+', icon: 'football' as const },
-  { name: 'Africa', athletes: '1,500+', recruiters: '60+', icon: 'fitness' as const },
-  { name: 'South America', athletes: '900+', recruiters: '45+', icon: 'football' as const },
-  { name: 'Asia', athletes: '400+', recruiters: '35+', icon: 'tennisball' as const },
-  { name: 'Oceania', athletes: '200+', recruiters: '30+', icon: 'basketball' as const },
+  {
+    name: "North America",
+    athletes: "4,200+",
+    recruiters: "180+",
+    icon: "american-football" as const,
+  },
+  {
+    name: "Europe",
+    athletes: "2,800+",
+    recruiters: "150+",
+    icon: "football" as const,
+  },
+  {
+    name: "Africa",
+    athletes: "1,500+",
+    recruiters: "60+",
+    icon: "fitness" as const,
+  },
+  {
+    name: "South America",
+    athletes: "900+",
+    recruiters: "45+",
+    icon: "football" as const,
+  },
+  {
+    name: "Asia",
+    athletes: "400+",
+    recruiters: "35+",
+    icon: "tennisball" as const,
+  },
+  {
+    name: "Oceania",
+    athletes: "200+",
+    recruiters: "30+",
+    icon: "basketball" as const,
+  },
 ];
 
 // ── Interactive Three.js Globe HTML ──
@@ -103,7 +133,13 @@ document.addEventListener('touchend',function(){isDragging=false;setTimeout(func
 function a(){if(autoRotate)rotY+=0.003;G.rotation.y=rotY;G.rotation.x=rotX;r.render(s,c);requestAnimationFrame(a)}a();
 <\/script></body></html>`;
 
-function ContinentCard({ continent, index }: { continent: typeof DEFAULT_CONTINENTS[0]; index: number }) {
+function ContinentCard({
+  continent,
+  index,
+}: {
+  continent: (typeof DEFAULT_CONTINENTS)[0];
+  index: number;
+}) {
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(-20);
 
@@ -111,9 +147,15 @@ function ContinentCard({ continent, index }: { continent: typeof DEFAULT_CONTINE
     useCallback(() => {
       opacity.value = 0;
       translateX.value = -20;
-      opacity.value = withDelay(300 + index * 120, withTiming(1, { duration: 400 }));
-      translateX.value = withDelay(300 + index * 120, withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) }));
-    }, [])
+      opacity.value = withDelay(
+        300 + index * 120,
+        withTiming(1, { duration: 400 }),
+      );
+      translateX.value = withDelay(
+        300 + index * 120,
+        withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) }),
+      );
+    }, []),
   );
 
   const style = useAnimatedStyle(() => ({
@@ -129,7 +171,7 @@ function ContinentCard({ continent, index }: { continent: typeof DEFAULT_CONTINE
       <View style={styles.continentInfo}>
         <Text style={styles.continentName}>{continent.name}</Text>
         <Text style={styles.continentStats}>
-          {continent.athletes} athletes  ·  {continent.recruiters} recruiters
+          {continent.athletes} athletes · {continent.recruiters} recruiters
         </Text>
       </View>
     </Animated.View>
@@ -137,7 +179,12 @@ function ContinentCard({ continent, index }: { continent: typeof DEFAULT_CONTINE
 }
 
 export default function GlobeTab() {
-  useFonts({ Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold, Poppins_800ExtraBold });
+  useFonts({
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+  });
 
   const [isActive, setIsActive] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -146,14 +193,19 @@ export default function GlobeTab() {
 
   // Fetch globe stats from API
   useEffect(() => {
-    statsService.getGlobeStats().then((data) => {
-      if (Array.isArray(data) && data.length > 0) {
-        setContinents(data.map((d: any, i: number) => ({
-          ...DEFAULT_CONTINENTS[i],
-          ...d,
-        })));
-      }
-    }).catch(() => {});
+    statsService
+      .getGlobeStats()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setContinents(
+            data.map((d: any, i: number) => ({
+              ...DEFAULT_CONTINENTS[i],
+              ...d,
+            })),
+          );
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Lazy load: only render WebView when tab is focused
@@ -161,7 +213,7 @@ export default function GlobeTab() {
     useCallback(() => {
       setIsActive(true);
       return () => setIsActive(false);
-    }, [])
+    }, []),
   );
 
   return (
@@ -200,12 +252,12 @@ export default function GlobeTab() {
           onPress={() => setShowStats(!showStats)}
         >
           <Ionicons
-            name={showStats ? 'chevron-down' : 'chevron-up'}
+            name={showStats ? "chevron-down" : "chevron-up"}
             size={18}
             color="rgba(255,255,255,0.7)"
           />
           <Text style={styles.toggleText}>
-            {showStats ? 'Hide' : 'Talent Hotspots'}
+            {showStats ? "Hide" : "Talent Hotspots"}
           </Text>
         </Pressable>
 
@@ -221,7 +273,11 @@ export default function GlobeTab() {
       {/* Instruction hint — centered above bottom panel */}
       {!showStats && (
         <View style={styles.hint}>
-          <Ionicons name="hand-left-outline" size={14} color="rgba(255,255,255,0.4)" />
+          <Ionicons
+            name="hand-left-outline"
+            size={14}
+            color="rgba(255,255,255,0.4)"
+          />
           <Text style={styles.hintText}>Drag to rotate the globe</Text>
         </View>
       )}
@@ -239,113 +295,113 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   globePlaceholder: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   bottomGradient: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     height: 200,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   header: {
-    position: 'absolute',
+    position: "absolute",
     top: 60,
     left: 24,
     right: 24,
   },
   headerTitle: {
     fontSize: 28,
-    fontFamily: 'Poppins_800ExtraBold',
-    color: '#FFFFFF',
+    fontFamily: "Poppins_800ExtraBold",
+    color: "#FFFFFF",
     letterSpacing: 0.3,
   },
   headerSubtitle: {
     fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255, 255, 255, 0.5)",
     marginTop: 2,
   },
   bottomPanel: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 90,
     left: 16,
     right: 16,
   },
   toggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    alignSelf: 'center',
+    borderColor: "rgba(255, 255, 255, 0.06)",
+    alignSelf: "center",
   },
   toggleText: {
     fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-    color: 'rgba(255, 255, 255, 0.7)',
+    fontFamily: "Poppins_600SemiBold",
+    color: "rgba(255, 255, 255, 0.7)",
   },
   continentList: {
     marginTop: 10,
     gap: 6,
   },
   continentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 14,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: "rgba(255, 255, 255, 0.06)",
   },
   continentIcon: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(0, 184, 148, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 184, 148, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   continentInfo: {
     flex: 1,
   },
   continentName: {
     fontSize: 14,
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
   },
   continentStats: {
     fontSize: 11,
-    fontFamily: 'Poppins_500Medium',
-    color: 'rgba(255, 255, 255, 0.45)',
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255, 255, 255, 0.45)",
     marginTop: 1,
   },
   hint: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 140,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
   },
   hintText: {
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
-    color: 'rgba(255, 255, 255, 0.4)',
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255, 255, 255, 0.4)",
   },
 });

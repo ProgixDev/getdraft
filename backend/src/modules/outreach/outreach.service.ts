@@ -63,11 +63,13 @@ export class OutreachService {
       throw new BadRequestException(error.message);
     }
 
-    const { error: msgError } = await supabase.from('outreach_messages').insert({
-      outreach_id: outreach.id,
-      sender_id: user.id,
-      text: dto.message,
-    });
+    const { error: msgError } = await supabase
+      .from('outreach_messages')
+      .insert({
+        outreach_id: outreach.id,
+        sender_id: user.id,
+        text: dto.message,
+      });
 
     if (msgError) {
       // Compensating action: roll the outreach back so we don't leave an

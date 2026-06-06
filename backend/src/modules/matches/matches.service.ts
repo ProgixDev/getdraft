@@ -37,10 +37,7 @@ export class MatchesService {
         let recruiterRole = 'agent';
         let organization = '';
         let verified = false;
-        if (
-          otherUser?.role === 'recruiter' ||
-          otherUser?.role === 'coach'
-        ) {
+        if (otherUser?.role === 'recruiter' || otherUser?.role === 'coach') {
           const { data: rp } = await supabase
             .from('recruiter_profiles')
             .select('role_type, organization, verified')

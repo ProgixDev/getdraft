@@ -29,19 +29,24 @@
 ## App Identity
 
 ### Name
+
 **GetDraft**
 
 ### Tagline
-*"From the field to the next level — connect, match, get drafted."*
+
+_"From the field to the next level — connect, match, get drafted."_
 
 ### Elevator Pitch
+
 GetDraft is a premium mobile platform connecting American football athletes with coaches, recruiters, and agents through a swipe-to-match workflow. Athletes showcase their talent, parents manage their child's recruiting journey, coaches scout for on-field performance, and recruiters/agents discover talent for professional opportunities. USA-only, payment-first access ensures a professional, secure environment.
 
 ### Platform
+
 - **Primary:** iOS and Android via Expo/React Native
 - **Future:** Web companion app (admin dashboard)
 
 ### Market
+
 - **Geography:** USA only (V1)
 - **Target Age:** 16-28 years (athletes), 30-60+ (parents, coaches, recruiters)
 - **Sport Focus:** American Football (V1)
@@ -53,9 +58,11 @@ GetDraft is a premium mobile platform connecting American football athletes with
 GetDraft supports five distinct user roles, each with unique capabilities and access:
 
 ### 1. Athlete
+
 **Who:** High school, college, semi-pro, and free agent football players  
 **Goal:** Get discovered by coaches, recruiters, and agents  
 **Capabilities:**
+
 - Create and manage profile (stats, media, highlights)
 - Upload videos (HUDL/YouTube links or direct upload)
 - Receive match notifications
@@ -68,9 +75,11 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 ---
 
 ### 2. Parent
+
 **Who:** Parents/guardians of athlete users (ages 16-17 primarily)  
 **Goal:** Oversee and manage their child's recruiting journey  
 **Capabilities:**
+
 - Link to athlete's account
 - View and manage athlete's profile
 - Monitor incoming matches and messages
@@ -83,9 +92,11 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 ---
 
 ### 3. Coach
+
 **Who:** High school coaches, college coaches, team scouts  
 **Goal:** Discover athletes for team recruitment based on on-field performance  
 **Capabilities:**
+
 - Browse athlete feed with swipe interface
 - Filter by position, level, location, and stats
 - Express interest in athletes (swipe right)
@@ -99,9 +110,11 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 ---
 
 ### 4. Recruiter/Agent
+
 **Who:** Certified agents, professional recruiters, sports management firms  
 **Goal:** Discover and sign talent for professional representation or contracts  
 **Capabilities:**
+
 - Browse athlete feed with advanced filters
 - Express full recruitment interest (swipe right)
 - Match with interested athletes
@@ -115,9 +128,11 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 ---
 
 ### 5. Admin
+
 **Who:** Internal GetDraft team members  
 **Goal:** Manage platform operations, moderation, and analytics  
 **Capabilities:**
+
 - Full dashboard with metrics
 - User management (CRUD operations)
 - Content moderation and profile review
@@ -133,6 +148,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 ## Account Creation & Authentication
 
 ### Pre-Registration State
+
 - **No Public Access:** Users cannot browse or access the app without payment
 - **Marketing Site:** Product shown via landing page, demo videos, or screen-by-screen walkthrough
 
@@ -237,12 +253,14 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Onboarding (First-Time Setup)
 
 **Step 1: Personal Information**
+
 - First name, last name
 - Date of birth
 - Current city and state (USA only)
 - Profile photo upload
 
 **Step 2: Athletic Profile**
+
 - Position: QB, WR, RB, TE, OL, DL, LB, DB, K, P, etc.
 - Level: High School, College, Semi-Pro, Free Agent
 - Height (feet/inches)
@@ -250,6 +268,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Jersey number (optional)
 
 **Step 3: Media & Highlights**
+
 - Add highlight videos:
   - HUDL link
   - YouTube link
@@ -258,6 +277,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Add achievements/awards (optional)
 
 **Step 4: Recruiting Goals**
+
 - Select goal(s):
   - Looking for college coach
   - Looking for professional recruiter
@@ -265,6 +285,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Open to all opportunities
 
 **Step 5: Profile Review**
+
 - Preview profile as it appears to coaches/recruiters
 - Profile completeness score displayed (0-100%)
 - Submit to go live
@@ -276,12 +297,14 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Main App Experience (Athlete)
 
 **Home Tab**
+
 - Profile completeness score widget
 - Recent activity feed (views, likes, matches)
 - Suggested profile improvements
 - Quick stats: Profile views, likes received, matches
 
 **Matches Tab**
+
 - List of mutual matches
 - Filter by: All, Coaches, Recruiters/Agents
 - Each match card shows:
@@ -292,6 +315,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - CTA: "Message"
 
 **Profile Tab**
+
 - View own profile (as others see it)
 - Edit button → full profile editing
 - Sections:
@@ -303,6 +327,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Profile completeness score tracker
 
 **Settings Tab**
+
 - Account settings
 - Privacy settings
 - Notification preferences
@@ -318,12 +343,14 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Onboarding (First-Time Setup)
 
 **Step 1: Parent Information**
+
 - First name, last name
 - Relationship to athlete (Parent, Guardian, etc.)
 - Contact email (verified)
 - Contact phone (optional)
 
 **Step 2: Link to Athlete**
+
 - **Option A:** Athlete already has account
   - Enter athlete's email
   - System sends link request to athlete
@@ -333,12 +360,14 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Athlete receives credentials after setup
 
 **Step 3: Permissions Setup**
+
 - Set control level:
   - View-only (monitor activity)
   - Manage matches (approve/decline match requests)
   - Full control (manage profile + matches + messaging)
 
 **Step 4: Notifications**
+
 - Configure notification preferences:
   - New match requests
   - New messages
@@ -352,6 +381,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Main App Experience (Parent)
 
 **Dashboard Tab**
+
 - Athlete profile summary card
 - Quick stats:
   - Profile views
@@ -361,24 +391,28 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Recent activity timeline
 
 **Athlete Profile Tab**
+
 - View athlete's full profile
 - Edit profile (if permission granted)
 - Manage media uploads
 - Update athletic info
 
 **Matches Tab**
+
 - View all athlete's matches
 - Filter by: Pending, Active, Archived
 - Approve/decline match requests (if permission granted)
 - View conversation previews
 
 **Messages Tab**
+
 - View all athlete's conversations
 - Read messages (if permission granted)
 - Respond on behalf of athlete (if permission granted)
 - Flag inappropriate content
 
 **Settings Tab**
+
 - Account settings
 - Linked athlete management
 - Permission levels
@@ -394,6 +428,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Onboarding (First-Time Setup)
 
 **Step 1: Coach Profile**
+
 - First name, last name
 - Organization name (school, team, club)
 - Role/title (Head Coach, Assistant Coach, Scout, etc.)
@@ -401,6 +436,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Profile photo
 
 **Step 2: Scouting Preferences**
+
 - Positions of interest (select multiple):
   - QB, WR, RB, TE, OL, DL, LB, DB, K, P
 - Levels of interest:
@@ -413,11 +449,13 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Or: Nationwide
 
 **Step 3: Organization Verification (Optional)**
+
 - Upload verification document
 - Organization website
 - Phone number for verification callback
 
 **Step 4: Preferences**
+
 - Feed sorting preference:
   - Best match first
   - Recently active
@@ -431,6 +469,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Main App Experience (Coach)
 
 **Discover Tab (Swipe Feed)**
+
 - Card-based swipe interface (Tinder-style)
 - Each athlete card displays:
   - Primary photo
@@ -451,6 +490,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Profile score minimum
 
 **Matches Tab**
+
 - List of mutual matches
 - Sort by: Recent, Last active, Name
 - Each match card shows:
@@ -461,18 +501,21 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - CTA: "Message"
 
 **Favorites Tab**
+
 - Saved athletes (can save without matching)
 - Watchlist feature
 - Add notes to saved athletes (private)
 - Export list (CSV)
 
 **Messages Tab**
+
 - All active conversations
 - Unread badge
 - Search conversations
 - Archive/delete conversations
 
 **Profile Tab**
+
 - View own coach profile
 - Edit profile
 - Organization info
@@ -480,6 +523,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Subscription status
 
 **Settings Tab**
+
 - Account settings
 - Notification preferences
 - Feed preferences
@@ -493,6 +537,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Onboarding (First-Time Setup)
 
 **Step 1: Recruiter Profile**
+
 - First name, last name
 - Organization name (agency, firm, team)
 - Role type:
@@ -503,12 +548,14 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Profile photo
 
 **Step 2: Certification & Verification**
+
 - Agent license number (if applicable)
 - Upload certification documents
 - Organization website
 - Phone number for verification
 
 **Step 3: Recruitment Preferences**
+
 - Positions of interest (select multiple)
 - Levels targeted:
   - College (for pro recruitment)
@@ -521,6 +568,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Minimum stats thresholds
 
 **Step 4: Advanced Settings**
+
 - Shortlist/board setup
 - Deal pipeline stages (optional)
 - Notification preferences
@@ -532,6 +580,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Main App Experience (Recruiter/Agent)
 
 **Discover Tab (Swipe Feed)**
+
 - Enhanced card-based swipe interface
 - Each athlete card displays:
   - Primary photo + media count
@@ -556,6 +605,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Availability status
 
 **Matches Tab**
+
 - List of mutual matches
 - Status indicators: New, Active, In Negotiation, Closed
 - Each match card shows:
@@ -568,6 +618,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - CTA: "Message" or "View Deal"
 
 **Shortlist Tab**
+
 - Private saved athletes board
 - Kanban-style columns (optional):
   - Interested
@@ -580,6 +631,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Export shortlist (CSV, PDF)
 
 **Messages Tab**
+
 - All active conversations
 - Deal-focused messaging
 - Attach documents (contracts, offers)
@@ -587,6 +639,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Archive conversations
 
 **Profile Tab**
+
 - View own recruiter/agent profile
 - Edit profile
 - Organization info
@@ -594,6 +647,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Subscription status
 
 **Settings Tab**
+
 - Account settings
 - Notification preferences
 - Feed preferences
@@ -608,6 +662,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 #### Main App Experience (Admin)
 
 **Dashboard Tab**
+
 - **Key Metrics (Cards):**
   - Total Users
   - Active Subscriptions
@@ -627,6 +682,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Subscription cancellations
 
 **Users Tab**
+
 - Searchable user list
 - Filters: Role, Status, Subscription Status, Date Joined
 - User cards show:
@@ -644,6 +700,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - View activity log
 
 **Moderation Tab**
+
 - Flagged content queue
 - Reports list:
   - Reporter, reported user
@@ -659,6 +716,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Dismiss report
 
 **Subscriptions Tab**
+
 - All subscriptions list
 - Filters: Status (Active, Canceled, Past Due), Plan Type
 - Subscription cards show:
@@ -674,6 +732,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
   - Extend trial
 
 **Analytics Tab**
+
 - Deep dive analytics:
   - User acquisition sources
   - Retention cohorts
@@ -685,6 +744,7 @@ GetDraft supports five distinct user roles, each with unique capabilities and ac
 - Export reports (CSV, PDF)
 
 **Settings Tab**
+
 - Platform settings
 - Feature flags
 - Email templates
@@ -704,11 +764,13 @@ GetDraft uses a **mutual interest model** similar to popular dating apps, adapte
 ### Swipe Actions
 
 **For Coaches & Recruiters/Agents:**
+
 - **Swipe Right / Tap Heart:** Express interest in athlete
 - **Swipe Left / Tap X:** Pass on athlete
 - **Tap Profile:** View full athlete profile before deciding
 
 **For Athletes:**
+
 - Athletes do not swipe; they receive interest passively
 - Athletes are notified when a coach/recruiter swipes right
 - Athletes can approve or decline interest
@@ -769,12 +831,12 @@ Athletes appear in coach/recruiter feeds based on:
 
 While both roles use the same swipe mechanism, they differ in:
 
-| Feature | Coach | Recruiter/Agent |
-|---------|-------|-----------------|
-| **Focus** | On-field performance, team fit | Contract negotiation, representation |
-| **Shortlist** | Favorites (informal watchlist) | Full shortlist with pipeline stages |
-| **Messaging** | Casual recruiting conversations | Contract discussions, offers |
-| **Match Intent** | Express team interest | Express representation interest |
+| Feature          | Coach                           | Recruiter/Agent                      |
+| ---------------- | ------------------------------- | ------------------------------------ |
+| **Focus**        | On-field performance, team fit  | Contract negotiation, representation |
+| **Shortlist**    | Favorites (informal watchlist)  | Full shortlist with pipeline stages  |
+| **Messaging**    | Casual recruiting conversations | Contract discussions, offers         |
+| **Match Intent** | Express team interest           | Express representation interest      |
 
 ---
 
@@ -783,6 +845,7 @@ While both roles use the same swipe mechanism, they differ in:
 ### 1:1 Chat
 
 **Features:**
+
 - Real-time messaging (Supabase Realtime)
 - Text messages
 - Media sharing (photos, videos)
@@ -796,12 +859,14 @@ While both roles use the same swipe mechanism, they differ in:
 ### Notifications
 
 **Push Notifications:**
+
 - New match
 - New message
 - Match request (for athletes)
 - Profile view (optional)
 
 **Email Notifications:**
+
 - Weekly summary of activity
 - Important match notifications
 - Subscription reminders
@@ -809,6 +874,7 @@ While both roles use the same swipe mechanism, they differ in:
 ### Safety Features
 
 **For Athletes & Parents:**
+
 - Block users
 - Report inappropriate messages
 - Content moderation (AI + manual review)
@@ -816,6 +882,7 @@ While both roles use the same swipe mechanism, they differ in:
 - Parental oversight for minor accounts
 
 **For Coaches/Recruiters:**
+
 - Verified badge (after certification check)
 - Report athletes (fake profiles, etc.)
 
@@ -823,20 +890,22 @@ While both roles use the same swipe mechanism, they differ in:
 
 ## Pricing Structure
 
-| Role | Annual Price | What's Included |
-|------|--------------|-----------------|
-| **Athlete** | **$550/year** | • Full profile creation<br>• Unlimited matches<br>• Unlimited messaging<br>• Video/photo uploads<br>• Profile analytics<br>• Priority support |
-| **Parent** | **Included with Athlete** OR **$250/year standalone** | • Link to 1 athlete account<br>• Dashboard access<br>• Match monitoring<br>• Message oversight (if enabled)<br>• Notifications |
-| **Coach** | **$250/year** | • Unlimited swipes<br>• Unlimited matches<br>• Unlimited messaging<br>• Favorites/watchlist<br>• Advanced filters<br>• Profile analytics |
-| **Recruiter/Agent** | **$250/year** | • Unlimited swipes<br>• Unlimited matches<br>• Unlimited messaging<br>• Full shortlist with pipeline<br>• Advanced filters<br>• Document sharing<br>• Profile analytics<br>• Verified badge |
+| Role                | Annual Price                                          | What's Included                                                                                                                                                                             |
+| ------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Athlete**         | **$550/year**                                         | • Full profile creation<br>• Unlimited matches<br>• Unlimited messaging<br>• Video/photo uploads<br>• Profile analytics<br>• Priority support                                               |
+| **Parent**          | **Included with Athlete** OR **$250/year standalone** | • Link to 1 athlete account<br>• Dashboard access<br>• Match monitoring<br>• Message oversight (if enabled)<br>• Notifications                                                              |
+| **Coach**           | **$250/year**                                         | • Unlimited swipes<br>• Unlimited matches<br>• Unlimited messaging<br>• Favorites/watchlist<br>• Advanced filters<br>• Profile analytics                                                    |
+| **Recruiter/Agent** | **$250/year**                                         | • Unlimited swipes<br>• Unlimited matches<br>• Unlimited messaging<br>• Full shortlist with pipeline<br>• Advanced filters<br>• Document sharing<br>• Profile analytics<br>• Verified badge |
 
 ### Payment Processing
+
 - **Provider:** Stripe
 - **Billing Cycle:** Annual (auto-renewal)
 - **Refund Policy:** 30-day money-back guarantee
 - **Trial:** None (payment required before access)
 
 ### Subscription Management
+
 - Users can cancel anytime via Settings
 - Access continues until end of billing period
 - Canceled accounts retain data for 90 days
@@ -1077,24 +1146,29 @@ sequenceDiagram
 ### Files Requiring Updates for GetDraft Rebrand
 
 #### App Configuration
+
 - **`app.json`** — Update `name`, `slug`, `scheme` to "getdraft"
 - **`package.json`** — Update project name and version
 
 #### Branding & Assets
+
 - **`config/colors.ts`** — Replace MyRoster navy/red with new GetDraft brand colors
 - **`config/assets.ts`** — Update all logo references, splash images, welcome images
 - **`assets/`** — Replace all brand assets (Logo.png, Logo-two.png, splash, etc.)
 
 #### Components
+
 - **`components/SplashScreen.tsx`** — New GetDraft branding and animation
 - **`components/welcome/WelcomeScreen.tsx`** — Update welcome slides with GetDraft content
 - **`components/auth/AuthScreen.tsx`** — Add 4 role options (Athlete, Parent, Coach, Recruiter)
 
 #### Constants & Content
+
 - **`constants/welcomeData.ts`** — Update slide copy for GetDraft
 - **`PROJECT.md`** — Rename to GetDraft, update all references
 
 #### State Management
+
 - **`store/slices/authSlice.ts`** — Add new roles: `'parent' | 'coach'` to `UserRole` type
 - Create new slices:
   - `matchSlice.ts` — Manage swipes, likes, matches
@@ -1102,6 +1176,7 @@ sequenceDiagram
   - `profileSlice.ts` — Manage athlete/coach/recruiter profiles
 
 #### Backend Integration (Supabase)
+
 - Database schema setup:
   - `users` table
   - `athlete_profiles` table
@@ -1117,6 +1192,7 @@ sequenceDiagram
 - Stripe webhook handlers
 
 #### New Screens to Build
+
 - Athlete onboarding flow (5 steps)
 - Parent onboarding flow (4 steps)
 - Coach onboarding flow (4 steps)
@@ -1128,6 +1204,7 @@ sequenceDiagram
 - Admin dashboard (all admin screens)
 
 ### Tech Stack Confirmation
+
 - **Frontend:** Expo SDK 54, React Native 0.81, React 19
 - **State:** Redux Toolkit, React Redux
 - **Backend:** Supabase (Auth, Database, Realtime, Storage)
@@ -1138,30 +1215,35 @@ sequenceDiagram
 ### Development Priorities
 
 **Phase 1: Foundation**
+
 1. Update branding (colors, assets, names)
 2. Add new user roles to auth system
 3. Build core database schema
 4. Set up Stripe integration
 
 **Phase 2: Onboarding**
+
 1. Build athlete onboarding
 2. Build coach onboarding
 3. Build recruiter onboarding
 4. Build parent onboarding
 
 **Phase 3: Core Features**
+
 1. Swipe feed for coaches/recruiters
 2. Match system
 3. Athlete match approval flow
 4. Chat/messaging
 
 **Phase 4: Advanced Features**
+
 1. Parent linking and dashboard
 2. Recruiter shortlist
 3. Admin dashboard
 4. Push notifications
 
 **Phase 5: Polish & Launch**
+
 1. Analytics integration
 2. Testing and QA
 3. App store submissions
@@ -1171,15 +1253,15 @@ sequenceDiagram
 
 ## Appendix: Key Differences from Original MyRoster
 
-| Aspect | MyRoster | GetDraft |
-|--------|----------|----------|
-| **Name** | MyRoster | GetDraft |
-| **Roles** | Athlete, Recruiter, Admin | Athlete, Parent, Coach, Recruiter/Agent, Admin |
-| **Parent Role** | N/A | New: Manages athlete's recruiting journey |
-| **Coach Role** | Grouped under "Recruiter" | Separate: On-field scouting only |
-| **Recruiter/Agent** | Single "Recruiter" role | Renamed: Focuses on contracts/deals |
-| **Matching** | Basic swipe | Enhanced: Athlete approval flow, parent involvement |
-| **Pricing** | Athlete $550, Recruiter $250 | Athlete $550, Parent $0-250, Coach $250, Recruiter $250 |
+| Aspect              | MyRoster                     | GetDraft                                                |
+| ------------------- | ---------------------------- | ------------------------------------------------------- |
+| **Name**            | MyRoster                     | GetDraft                                                |
+| **Roles**           | Athlete, Recruiter, Admin    | Athlete, Parent, Coach, Recruiter/Agent, Admin          |
+| **Parent Role**     | N/A                          | New: Manages athlete's recruiting journey               |
+| **Coach Role**      | Grouped under "Recruiter"    | Separate: On-field scouting only                        |
+| **Recruiter/Agent** | Single "Recruiter" role      | Renamed: Focuses on contracts/deals                     |
+| **Matching**        | Basic swipe                  | Enhanced: Athlete approval flow, parent involvement     |
+| **Pricing**         | Athlete $550, Recruiter $250 | Athlete $550, Parent $0-250, Coach $250, Recruiter $250 |
 
 ---
 

@@ -6,7 +6,7 @@ export type UploadBucket = (typeof UPLOAD_BUCKETS)[number];
 
 export class SignedUrlDto {
   @ApiProperty({ enum: UPLOAD_BUCKETS })
-  @IsIn(UPLOAD_BUCKETS as unknown as string[])
+  @IsIn(UPLOAD_BUCKETS)
   bucket: UploadBucket;
 
   @ApiProperty({ example: 'highlight-reel.mp4' })

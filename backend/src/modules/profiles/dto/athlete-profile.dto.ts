@@ -40,7 +40,7 @@ export class UpsertAthleteProfileDto {
   @Max(4.0)
   gpa?: number;
 
-  @ApiPropertyOptional({ example: "6'2\"" })
+  @ApiPropertyOptional({ example: '6\'2"' })
   @IsOptional()
   @IsString()
   height?: string;

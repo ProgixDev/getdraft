@@ -1,18 +1,18 @@
-import api from './api';
+import api from "./api";
 
 export const usersService = {
   async getMe(): Promise<any> {
-    const { data } = await api.get('/users/me');
+    const { data } = await api.get("/users/me");
     return data.data;
   },
 
   async updateMe(updates: Record<string, any>): Promise<any> {
-    const { data } = await api.put('/users/me', updates);
+    const { data } = await api.put("/users/me", updates);
     return data.data;
   },
 
   async completeOnboarding(): Promise<void> {
-    await api.put('/users/me/onboarding');
+    await api.put("/users/me/onboarding");
   },
 
   async getPublicUser(userId: string): Promise<any> {

@@ -1,12 +1,11 @@
-import api, { API_ORIGIN } from './api';
-import { io, Socket } from 'socket.io-client';
-import { loadTokens } from './api';
+import api, { API_ORIGIN , loadTokens } from "./api";
+import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
 
 export const chatService = {
   async getThreads(): Promise<any[]> {
-    const { data } = await api.get('/chat/threads');
+    const { data } = await api.get("/chat/threads");
     return data.data;
   },
 
@@ -18,7 +17,9 @@ export const chatService = {
   },
 
   async sendMessage(matchId: string, text: string): Promise<any> {
-    const { data } = await api.post(`/chat/threads/${matchId}/messages`, { text });
+    const { data } = await api.post(`/chat/threads/${matchId}/messages`, {
+      text,
+    });
     return data.data;
   },
 
@@ -33,7 +34,7 @@ export const chatService = {
 
     socket = io(`${API_ORIGIN}/chat`, {
       query: { userId },
-      transports: ['websocket'],
+      transports: ["websocket"],
     });
 
     return socket;
@@ -49,18 +50,18 @@ export const chatService = {
   },
 
   joinThread(matchId: string) {
-    socket?.emit('join_thread', { matchId });
+    socket?.emit("join_thread", { matchId });
   },
 
   leaveThread(matchId: string) {
-    socket?.emit('leave_thread', { matchId });
+    socket?.emit("leave_thread", { matchId });
   },
 
   sendSocketMessage(matchId: string, text: string) {
-    socket?.emit('send_message', { matchId, text });
+    socket?.emit("send_message", { matchId, text });
   },
 
   emitTyping(matchId: string, isTyping: boolean) {
-    socket?.emit('typing', { matchId, isTyping });
+    socket?.emit("typing", { matchId, isTyping });
   },
 };

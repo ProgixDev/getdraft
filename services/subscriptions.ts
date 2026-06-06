@@ -1,18 +1,18 @@
-import api from './api';
+import api from "./api";
 
 export const subscriptionsService = {
   async getMySubscription(): Promise<any> {
-    const { data } = await api.get('/subscriptions/me');
+    const { data } = await api.get("/subscriptions/me");
     return data.data;
   },
 
   async createCheckout(planId: string): Promise<{ checkoutUrl: string }> {
-    const { data } = await api.post('/subscriptions/checkout', { planId });
+    const { data } = await api.post("/subscriptions/checkout", { planId });
     return data.data;
   },
 
   async createPortal(): Promise<{ portalUrl: string }> {
-    const { data } = await api.post('/subscriptions/portal');
+    const { data } = await api.post("/subscriptions/portal");
     return data.data;
   },
 };

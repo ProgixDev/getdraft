@@ -6,8 +6,16 @@ import { SupabaseService } from '../../config/supabase.config';
 const mockQueryBuilder = (finalResult: any = { data: null, error: null }) => {
   const builder: any = {};
   [
-    'select', 'eq', 'neq', 'or', 'order', 'limit', 'single',
-    'insert', 'update', 'lt',
+    'select',
+    'eq',
+    'neq',
+    'or',
+    'order',
+    'limit',
+    'single',
+    'insert',
+    'update',
+    'lt',
   ].forEach((m) => {
     builder[m] = jest.fn().mockReturnValue(builder);
   });
@@ -79,9 +87,7 @@ describe('ChatService', () => {
     });
 
     it('should throw NotFoundException when match does not exist', async () => {
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: null }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: null }));
 
       await expect(
         service.sendMessage('no-match', 'user-1', 'Hello!'),
@@ -145,13 +151,11 @@ describe('ChatService', () => {
 
   describe('getMessages', () => {
     it('should throw NotFoundException if match not found', async () => {
-      mockAdminClient.from.mockReturnValue(
-        mockQueryBuilder({ data: null }),
-      );
+      mockAdminClient.from.mockReturnValue(mockQueryBuilder({ data: null }));
 
-      await expect(
-        service.getMessages('no-match', 'user-1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getMessages('no-match', 'user-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

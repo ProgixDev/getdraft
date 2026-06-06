@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,29 +8,32 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useSelector } from 'react-redux';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSelector } from "react-redux";
 import {
   useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import { brand, neutral, semantic, theme } from '@/config/colors';
-import { RootState } from '@/store';
-import { mockParentChatThreads, ParentChatMessage } from '@/constants/parentData';
-import { chatService } from '@/services/chat';
+} from "@expo-google-fonts/poppins";
+import { brand, neutral, semantic, theme } from "@/config/colors";
+import { RootState } from "@/store";
+import {
+  mockParentChatThreads,
+  ParentChatMessage,
+} from "@/constants/parentData";
+import { chatService } from "@/services/chat";
 
 export default function ParentChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
   const { threadId } = useLocalSearchParams<{ threadId?: string }>();
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ParentChatMessage[]>([]);
 
   const [fontsLoaded] = useFonts({
@@ -42,7 +45,7 @@ export default function ParentChatScreen() {
 
   const thread = useMemo(
     () => (threadId ? mockParentChatThreads[String(threadId)] : undefined),
-    [threadId]
+    [threadId],
   );
 
   // Load messages from API, fallback to mock
@@ -53,9 +56,9 @@ export default function ParentChatScreen() {
       .then((res) => {
         const apiMessages = (res.messages || res || []).map((m: any) => ({
           id: m.id,
-          sender: m.sender_id === user?.id ? 'parent' : 'recruiter',
+          sender: m.sender_id === user?.id ? "parent" : "recruiter",
           text: m.text,
-          sentAt: m.created_at || 'Now',
+          sentAt: m.created_at || "Now",
         }));
         if (apiMessages.length > 0) {
           setMessages(apiMessages);
@@ -72,14 +75,14 @@ export default function ParentChatScreen() {
       chatService.connectSocket(user.id).then(() => {
         chatService.joinThread(String(threadId));
         const socket = chatService.getSocket();
-        socket?.on('new_message', (msg: any) => {
+        socket?.on("new_message", (msg: any) => {
           setMessages((prev) => [
             ...prev,
             {
               id: msg.id,
-              sender: msg.senderId === user?.id ? 'parent' : 'recruiter',
+              sender: msg.senderId === user?.id ? "parent" : "recruiter",
               text: msg.text,
-              sentAt: msg.createdAt || 'Now',
+              sentAt: msg.createdAt || "Now",
             },
           ]);
         });
@@ -107,12 +110,12 @@ export default function ParentChatScreen() {
       ...prev,
       {
         id: `local-${Date.now()}`,
-        sender: 'parent',
+        sender: "parent",
         text,
-        sentAt: 'Now',
+        sentAt: "Now",
       },
     ]);
-    setDraft('');
+    setDraft("");
   };
 
   const handleAskForCall = () => {
@@ -120,19 +123,23 @@ export default function ParentChatScreen() {
       ...prev,
       {
         id: `call-${Date.now()}`,
-        sender: 'parent',
-        text: 'Would you be available for a quick call this week to discuss next steps?',
-        sentAt: 'Now',
+        sender: "parent",
+        text: "Would you be available for a quick call this week to discuss next steps?",
+        sentAt: "Now",
       },
     ]);
   };
 
   if (!fontsLoaded) return null;
 
-  if (!thread || user?.role !== 'parent') {
+  if (!thread || user?.role !== "parent") {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top + 20 }]}>
-        <Ionicons name="chatbox-ellipses-outline" size={54} color={neutral.gray400} />
+        <Ionicons
+          name="chatbox-ellipses-outline"
+          size={54}
+          color={neutral.gray400}
+        />
         <Text style={styles.emptyTitle}>Conversation not available</Text>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
@@ -144,17 +151,24 @@ export default function ParentChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
-        <Pressable style={styles.headerIconButton} onPress={() => router.back()}>
+        <Pressable
+          style={styles.headerIconButton}
+          onPress={() => router.back()}
+        >
           <Ionicons name="chevron-back" size={22} color={theme.text} />
         </Pressable>
         <View style={styles.headerCenter}>
           <View style={styles.headerTitleRow}>
             <Text style={styles.headerTitle}>{thread.recruiterName}</Text>
             {thread.verified && (
-              <Ionicons name="checkmark-circle" size={16} color={semantic.success} />
+              <Ionicons
+                name="checkmark-circle"
+                size={16}
+                color={semantic.success}
+              />
             )}
           </View>
           <Text style={styles.headerSubtitle}>
@@ -174,11 +188,14 @@ export default function ParentChatScreen() {
 
       <ScrollView
         style={styles.messagesScroll}
-        contentContainerStyle={[styles.messagesContent, { paddingBottom: insets.bottom + 18 }]}
+        contentContainerStyle={[
+          styles.messagesContent,
+          { paddingBottom: insets.bottom + 18 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {messages.map((message) => {
-          const isParentMessage = message.sender === 'parent';
+          const isParentMessage = message.sender === "parent";
           return (
             <View
               key={message.id}
@@ -190,13 +207,17 @@ export default function ParentChatScreen() {
               <View
                 style={[
                   styles.bubble,
-                  isParentMessage ? styles.parentBubble : styles.recruiterBubble,
+                  isParentMessage
+                    ? styles.parentBubble
+                    : styles.recruiterBubble,
                 ]}
               >
                 <Text
                   style={[
                     styles.bubbleText,
-                    isParentMessage ? styles.parentBubbleText : styles.recruiterBubbleText,
+                    isParentMessage
+                      ? styles.parentBubbleText
+                      : styles.recruiterBubbleText,
                   ]}
                 >
                   {message.text}
@@ -204,7 +225,9 @@ export default function ParentChatScreen() {
                 <Text
                   style={[
                     styles.timeText,
-                    isParentMessage ? styles.parentTimeText : styles.recruiterTimeText,
+                    isParentMessage
+                      ? styles.parentTimeText
+                      : styles.recruiterTimeText,
                   ]}
                 >
                   {message.sentAt}
@@ -245,44 +268,44 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.border,
     paddingHorizontal: 10,
     paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   headerIconButton: {
     width: 36,
     height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerCenter: {
     flex: 1,
   },
   headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
   },
   headerTitle: {
     fontSize: 16,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     color: theme.text,
   },
   headerSubtitle: {
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     color: theme.textSecondary,
   },
   headerChild: {
     fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textMuted,
   },
   actionsBar: {
     backgroundColor: theme.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
     paddingLeft: 12,
     paddingRight: 12,
     paddingTop: 8,
@@ -293,14 +316,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 12,
     backgroundColor: theme.accent,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
   },
   callButtonText: {
     fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
   },
   messagesScroll: {
@@ -312,16 +335,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bubbleRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   bubbleRowLeft: {
-    justifyContent: 'flex-start',
+    justifyContent: "flex-start",
   },
   bubbleRowRight: {
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
   },
   bubble: {
-    maxWidth: '82%',
+    maxWidth: "82%",
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -337,7 +360,7 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: 13,
     lineHeight: 19,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
   },
   recruiterBubbleText: {
     color: theme.text,
@@ -348,13 +371,13 @@ const styles = StyleSheet.create({
   timeText: {
     marginTop: 4,
     fontSize: 10,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
   },
   recruiterTimeText: {
     color: theme.textMuted,
   },
   parentTimeText: {
-    color: 'rgba(255,255,255,0.85)',
+    color: "rgba(255,255,255,0.85)",
   },
   composer: {
     borderTopWidth: 1,
@@ -362,8 +385,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.headerBg,
     paddingHorizontal: 12,
     paddingTop: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: 8,
   },
   inputWrap: {
@@ -378,7 +401,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.inputText,
   },
   sendButton: {
@@ -386,19 +409,19 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     backgroundColor: theme.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyContainer: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: theme.bg,
     paddingHorizontal: 24,
   },
   emptyTitle: {
     marginTop: 12,
     fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   backButton: {
@@ -407,12 +430,12 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     paddingHorizontal: 18,
     backgroundColor: theme.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   backButtonText: {
     color: theme.accentText,
     fontSize: 13,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
   },
 });

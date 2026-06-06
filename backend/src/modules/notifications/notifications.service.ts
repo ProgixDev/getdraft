@@ -19,11 +19,7 @@ export class NotificationsService {
     private configService: ConfigService,
   ) {}
 
-  async registerToken(
-    userId: string,
-    token: string,
-    platform: PushPlatform,
-  ) {
+  async registerToken(userId: string, token: string, platform: PushPlatform) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { error } = await supabase
@@ -83,9 +79,7 @@ export class NotificationsService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(accessToken
-            ? { Authorization: `Bearer ${accessToken}` }
-            : {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify(messages),
       });

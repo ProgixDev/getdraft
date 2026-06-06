@@ -108,27 +108,19 @@ describeIfConfigured('GetDraft API (e2e)', () => {
   // ─── Protected Routes ───
   describe('Protected Routes (no auth)', () => {
     it('GET /api/users/me should return 401 without token', () => {
-      return request(app.getHttpServer())
-        .get('/api/users/me')
-        .expect(401);
+      return request(app.getHttpServer()).get('/api/users/me').expect(401);
     });
 
     it('GET /api/discover/feed should return 401 without token', () => {
-      return request(app.getHttpServer())
-        .get('/api/discover/feed')
-        .expect(401);
+      return request(app.getHttpServer()).get('/api/discover/feed').expect(401);
     });
 
     it('GET /api/matches should return 401 without token', () => {
-      return request(app.getHttpServer())
-        .get('/api/matches')
-        .expect(401);
+      return request(app.getHttpServer()).get('/api/matches').expect(401);
     });
 
     it('GET /api/chat/threads should return 401 without token', () => {
-      return request(app.getHttpServer())
-        .get('/api/chat/threads')
-        .expect(401);
+      return request(app.getHttpServer()).get('/api/chat/threads').expect(401);
     });
 
     it('GET /api/subscriptions/me should return 401 without token', () => {
@@ -145,24 +137,18 @@ describeIfConfigured('GetDraft API (e2e)', () => {
     });
 
     it('GET /api/admin/users should return 401 without token', () => {
-      return request(app.getHttpServer())
-        .get('/api/admin/users')
-        .expect(401);
+      return request(app.getHttpServer()).get('/api/admin/users').expect(401);
     });
   });
 
   // ─── Public Routes ───
   describe('Public Routes', () => {
     it('GET /api/stats/globe should return 200', () => {
-      return request(app.getHttpServer())
-        .get('/api/stats/globe')
-        .expect(200);
+      return request(app.getHttpServer()).get('/api/stats/globe').expect(200);
     });
 
     it('GET /api/stats/welcome should return 200', () => {
-      return request(app.getHttpServer())
-        .get('/api/stats/welcome')
-        .expect(200);
+      return request(app.getHttpServer()).get('/api/stats/welcome').expect(200);
     });
   });
 });

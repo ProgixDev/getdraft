@@ -149,7 +149,8 @@ export class ChatService {
       .single();
 
     if (!match) throw new NotFoundException('Match not found');
-    if (!match.is_active) throw new ForbiddenException('Match is no longer active');
+    if (!match.is_active)
+      throw new ForbiddenException('Match is no longer active');
     if (match.user_1_id !== userId && match.user_2_id !== userId) {
       throw new ForbiddenException('Not authorized');
     }

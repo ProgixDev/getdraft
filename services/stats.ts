@@ -1,13 +1,13 @@
-import api from './api';
+import api from "./api";
 
 export const statsService = {
   async getGlobeStats(): Promise<any> {
-    const { data } = await api.get('/stats/globe');
+    const { data } = await api.get("/stats/globe");
     return data.data;
   },
 
   async getWelcomeStats(): Promise<any> {
-    const { data } = await api.get('/stats/welcome');
+    const { data } = await api.get("/stats/welcome");
     return data.data;
   },
 

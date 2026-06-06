@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   View,
   StyleSheet,
@@ -7,29 +7,41 @@ import {
   ScrollView,
   Linking,
   Alert,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import {
   useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import { brand, neutral, semantic, theme } from '@/config/colors';
+} from "@expo-google-fonts/poppins";
+import { brand, neutral, semantic, theme } from "@/config/colors";
 
 const SOCIAL_LINKS = [
-  { icon: 'logo-instagram' as const, label: 'Instagram', url: 'https://instagram.com/getdraft' },
-  { icon: 'logo-twitter' as const, label: 'X / Twitter', url: 'https://x.com/getdraft' },
-  { icon: 'musical-notes-outline' as const, label: 'TikTok', url: 'https://tiktok.com/@getdraft' },
+  {
+    icon: "logo-instagram" as const,
+    label: "Instagram",
+    url: "https://instagram.com/getdraft",
+  },
+  {
+    icon: "logo-twitter" as const,
+    label: "X / Twitter",
+    url: "https://x.com/getdraft",
+  },
+  {
+    icon: "musical-notes-outline" as const,
+    label: "TikTok",
+    url: "https://tiktok.com/@getdraft",
+  },
 ];
 
 const LEGAL_LINKS = [
-  { icon: 'document-text-outline' as const, label: 'Terms of Service' },
-  { icon: 'shield-checkmark-outline' as const, label: 'Privacy Policy' },
-  { icon: 'code-slash-outline' as const, label: 'Licenses' },
+  { icon: "document-text-outline" as const, label: "Terms of Service" },
+  { icon: "shield-checkmark-outline" as const, label: "Privacy Policy" },
+  { icon: "code-slash-outline" as const, label: "Licenses" },
 ];
 
 export default function AboutScreen() {
@@ -57,7 +69,10 @@ export default function AboutScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 40 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Brand */}
@@ -73,7 +88,9 @@ export default function AboutScreen() {
         {/* Description */}
         <View style={styles.descriptionCard}>
           <Text style={styles.descriptionText}>
-            GetDraft connects athletes with coaches, agents, and recruiters. We believe every talented athlete deserves to be seen, regardless of where they play.
+            GetDraft connects athletes with coaches, agents, and recruiters. We
+            believe every talented athlete deserves to be seen, regardless of
+            where they play.
           </Text>
         </View>
 
@@ -87,11 +104,21 @@ export default function AboutScreen() {
                 idx === LEGAL_LINKS.length - 1 && styles.legalRowLast,
                 pressed && styles.legalRowPressed,
               ]}
-              onPress={() => Alert.alert(item.label, `${item.label} page is coming soon.`)}
+              onPress={() =>
+                Alert.alert(item.label, `${item.label} page is coming soon.`)
+              }
             >
-              <Ionicons name={item.icon} size={20} color={theme.textSecondary} />
+              <Ionicons
+                name={item.icon}
+                size={20}
+                color={theme.textSecondary}
+              />
               <Text style={styles.legalLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={theme.textMuted}
+              />
             </Pressable>
           ))}
         </View>
@@ -102,7 +129,10 @@ export default function AboutScreen() {
           {SOCIAL_LINKS.map((item) => (
             <Pressable
               key={item.label}
-              style={({ pressed }) => [styles.socialButton, pressed && styles.socialButtonPressed]}
+              style={({ pressed }) => [
+                styles.socialButton,
+                pressed && styles.socialButtonPressed,
+              ]}
               onPress={() => Linking.openURL(item.url)}
             >
               <Ionicons name={item.icon} size={24} color={theme.text} />
@@ -113,9 +143,8 @@ export default function AboutScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Made with{' '}
-            <Text style={{ color: semantic.error }}>♥</Text>
-            {' '}for athletes everywhere
+            Made with <Text style={{ color: semantic.error }}>♥</Text> for
+            athletes everywhere
           </Text>
         </View>
       </ScrollView>
@@ -129,9 +158,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bg,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 12,
     paddingVertical: 14,
     backgroundColor: theme.headerBg,
@@ -141,24 +170,24 @@ const styles = StyleSheet.create({
   headerButton: {
     width: 40,
     height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    alignItems: 'center',
+    alignItems: "center",
     padding: 24,
   },
   // Brand
   brandSection: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
   },
   logoCircle: {
@@ -166,29 +195,29 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: brand.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoText: {
     fontSize: 36,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     color: brand.white,
   },
   brandName: {
     fontSize: 30,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     color: theme.text,
     marginTop: 16,
   },
   version: {
     fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textMuted,
     marginTop: 4,
   },
   tagline: {
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.textSecondary,
     marginTop: 8,
   },
@@ -198,26 +227,26 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginTop: 28,
-    width: '100%',
+    width: "100%",
   },
   descriptionText: {
     fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textSecondary,
     lineHeight: 22,
-    textAlign: 'center',
+    textAlign: "center",
   },
   // Legal
   legalSection: {
     backgroundColor: theme.cardBg,
     borderRadius: 16,
-    width: '100%',
+    width: "100%",
     marginTop: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   legalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 15,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
@@ -233,19 +262,19 @@ const styles = StyleSheet.create({
   legalLabel: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     color: theme.text,
   },
   // Social
   socialHeading: {
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
     marginTop: 28,
     marginBottom: 12,
   },
   socialRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 16,
   },
   socialButton: {
@@ -253,8 +282,8 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: theme.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: theme.border,
   },
@@ -267,8 +296,8 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textMuted,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });

@@ -33,7 +33,13 @@ export class DiscoverService {
 
     const isAthlete = user.role === UserRole.ATHLETE;
     if (isAthlete) {
-      return this.getRecruiterFeed(user.id, query, offset, limit, swipesRemaining);
+      return this.getRecruiterFeed(
+        user.id,
+        query,
+        offset,
+        limit,
+        swipesRemaining,
+      );
     }
     return this.getAthleteFeed(user.id, query, offset, limit, swipesRemaining);
   }

@@ -81,10 +81,7 @@ export class ProfilesService {
     return data;
   }
 
-  async upsertRecruiterProfile(
-    userId: string,
-    dto: UpsertRecruiterProfileDto,
-  ) {
+  async upsertRecruiterProfile(userId: string, dto: UpsertRecruiterProfileDto) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: existing } = await supabase

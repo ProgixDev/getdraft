@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from "react";
+import { StyleSheet, Dimensions } from "react-native";
 import Svg, {
   Circle,
   Ellipse,
@@ -7,7 +7,7 @@ import Svg, {
   Defs,
   RadialGradient,
   Stop,
-} from 'react-native-svg';
+} from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -17,10 +17,10 @@ import Animated, {
   withRepeat,
   Easing,
   runOnJS,
-} from 'react-native-reanimated';
-import { theme } from '@/config/colors';
+} from "react-native-reanimated";
+import { theme } from "@/config/colors";
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GLOBE_SIZE = Math.min(SCREEN_WIDTH * 0.7, 320);
 const R = GLOBE_SIZE / 2;
 const CX = R;
@@ -31,24 +31,31 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 // City locations as angles on the globe (longitude-like, latitude-like)
 const CITIES = [
-  { name: 'New York', angle: 0, lat: 0.15 },
-  { name: 'London', angle: 45, lat: 0.2 },
-  { name: 'Paris', angle: 55, lat: 0.18 },
-  { name: 'Lagos', angle: 60, lat: -0.05 },
-  { name: 'São Paulo', angle: -30, lat: -0.25 },
-  { name: 'Tokyo', angle: 150, lat: 0.14 },
-  { name: 'Sydney', angle: 170, lat: -0.3 },
-  { name: 'Mumbai', angle: 100, lat: 0.05 },
-  { name: 'Toronto', angle: -10, lat: 0.22 },
-  { name: 'Dubai', angle: 80, lat: 0.08 },
-  { name: 'Cape Town', angle: 55, lat: -0.35 },
-  { name: 'Mexico City', angle: -20, lat: 0.0 },
+  { name: "New York", angle: 0, lat: 0.15 },
+  { name: "London", angle: 45, lat: 0.2 },
+  { name: "Paris", angle: 55, lat: 0.18 },
+  { name: "Lagos", angle: 60, lat: -0.05 },
+  { name: "São Paulo", angle: -30, lat: -0.25 },
+  { name: "Tokyo", angle: 150, lat: 0.14 },
+  { name: "Sydney", angle: 170, lat: -0.3 },
+  { name: "Mumbai", angle: 100, lat: 0.05 },
+  { name: "Toronto", angle: -10, lat: 0.22 },
+  { name: "Dubai", angle: 80, lat: 0.08 },
+  { name: "Cape Town", angle: 55, lat: -0.35 },
+  { name: "Mexico City", angle: -20, lat: 0.0 },
 ];
 
 // Connection arcs between cities (indices)
 const ARCS = [
-  [0, 1], [0, 4], [1, 5], [2, 7], [3, 10],
-  [8, 1], [9, 7], [6, 5], [11, 4],
+  [0, 1],
+  [0, 4],
+  [1, 5],
+  [2, 7],
+  [3, 10],
+  [8, 1],
+  [9, 7],
+  [6, 5],
+  [11, 4],
 ];
 
 interface GlobeAnimationProps {
@@ -70,21 +77,27 @@ export function GlobeAnimation({ onComplete, active }: GlobeAnimationProps) {
     hasStarted.current = true;
 
     // Entrance
-    containerOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) });
-    containerScale.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
+    containerOpacity.value = withTiming(1, {
+      duration: 600,
+      easing: Easing.out(Easing.ease),
+    });
+    containerScale.value = withTiming(1, {
+      duration: 700,
+      easing: Easing.out(Easing.cubic),
+    });
 
     // Globe rotation
     rotation.value = withRepeat(
       withTiming(360, { duration: 12000, easing: Easing.linear }),
       -1,
-      false
+      false,
     );
 
     // Pulsing dots
     dotPulse.value = withRepeat(
       withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
       -1,
-      true
+      true,
     );
 
     // Text appears after globe
@@ -123,18 +136,18 @@ export function GlobeAnimation({ onComplete, active }: GlobeAnimationProps) {
   const gridLines = [];
   // Longitude lines
   for (let i = 0; i < 8; i++) {
-    const angle = (i * 45);
+    const angle = i * 45;
     gridLines.push(
       <Ellipse
         key={`lng-${i}`}
         cx={CX}
         cy={CY}
-        rx={R * 0.85 * Math.sin(angle * Math.PI / 180) || 1}
+        rx={R * 0.85 * Math.sin((angle * Math.PI) / 180) || 1}
         ry={R * 0.85}
         fill="none"
         stroke="rgba(0, 184, 148, 0.12)"
         strokeWidth={0.8}
-      />
+      />,
     );
   }
   // Latitude lines
@@ -151,7 +164,7 @@ export function GlobeAnimation({ onComplete, active }: GlobeAnimationProps) {
         fill="none"
         stroke="rgba(0, 184, 148, 0.1)"
         strokeWidth={0.8}
-      />
+      />,
     );
   }
 
@@ -193,7 +206,11 @@ export function GlobeAnimation({ onComplete, active }: GlobeAnimationProps) {
   return (
     <Animated.View style={[styles.container, containerStyle]}>
       <Animated.View style={styles.globeWrap}>
-        <Svg width={GLOBE_SIZE} height={GLOBE_SIZE} viewBox={`0 0 ${GLOBE_SIZE} ${GLOBE_SIZE}`}>
+        <Svg
+          width={GLOBE_SIZE}
+          height={GLOBE_SIZE}
+          viewBox={`0 0 ${GLOBE_SIZE} ${GLOBE_SIZE}`}
+        >
           <Defs>
             <RadialGradient id="globeGrad" cx="40%" cy="35%" rx="50%" ry="50%">
               <Stop offset="0%" stopColor="#1a3a5c" stopOpacity="1" />
@@ -251,8 +268,8 @@ export function GlobeAnimation({ onComplete, active }: GlobeAnimationProps) {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: theme.bg,
   },
   globeWrap: {
@@ -262,9 +279,9 @@ const styles = StyleSheet.create({
   tagline: {
     marginTop: 28,
     fontSize: 18,
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
+    textAlign: "center",
     letterSpacing: 0.5,
   },
 });

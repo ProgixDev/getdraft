@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -6,13 +6,13 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useDispatch, useSelector } from 'react-redux';
-import { LinearGradient } from 'expo-linear-gradient';
-import { WebView } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { useDispatch, useSelector } from "react-redux";
+import { LinearGradient } from "expo-linear-gradient";
+import { WebView } from "react-native-webview";
+import { Ionicons } from "@expo/vector-icons";
 import {
   useFonts,
   Poppins_400Regular,
@@ -20,11 +20,15 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
   Poppins_800ExtraBold,
-} from '@expo-google-fonts/poppins';
-import { brand, neutral, theme } from '@/config/colors';
-import { COUNTRY_OPTIONS, CountryOption, findCountryByName } from '@/constants/countryData';
-import { RootState } from '@/store';
-import { setDiscoverPreferences } from '@/store/slices/discoverPreferencesSlice';
+} from "@expo-google-fonts/poppins";
+import { brand, neutral, theme } from "@/config/colors";
+import {
+  COUNTRY_OPTIONS,
+  CountryOption,
+  findCountryByName,
+} from "@/constants/countryData";
+import { RootState } from "@/store";
+import { setDiscoverPreferences } from "@/store/slices/discoverPreferencesSlice";
 
 const globeHtml = `
 <!DOCTYPE html>
@@ -119,12 +123,14 @@ export default function PreferencesCountryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const dispatch = useDispatch();
-  const preferences = useSelector((state: RootState) => state.discoverPreferences);
+  const preferences = useSelector(
+    (state: RootState) => state.discoverPreferences,
+  );
   const webViewRef = useRef<WebView | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [globeReady, setGlobeReady] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryOption>(
-    findCountryByName(preferences.country) ?? COUNTRY_OPTIONS[0]
+    findCountryByName(preferences.country) ?? COUNTRY_OPTIONS[0],
   );
 
   const [fontsLoaded] = useFonts({
@@ -142,7 +148,7 @@ export default function PreferencesCountryScreen() {
     return COUNTRY_OPTIONS.filter(
       (country) =>
         country.name.toLowerCase().includes(query) ||
-        country.code.toLowerCase().includes(query)
+        country.code.toLowerCase().includes(query),
     );
   }, [searchQuery]);
 
@@ -150,7 +156,7 @@ export default function PreferencesCountryScreen() {
     if (!globeReady || !selectedCountry) return;
 
     const message = JSON.stringify({
-      type: 'selectCountry',
+      type: "selectCountry",
       lat: selectedCountry.lat,
       lng: selectedCountry.lng,
     });
@@ -165,8 +171,8 @@ export default function PreferencesCountryScreen() {
         ...preferences,
         country: selectedCountry.name,
         // Reset city when country changes so stale selections don't persist
-        city: countryChanged ? '' : preferences.city,
-      })
+        city: countryChanged ? "" : preferences.city,
+      }),
     );
     router.back();
   };
@@ -174,7 +180,10 @@ export default function PreferencesCountryScreen() {
   if (!fontsLoaded) return null;
 
   return (
-    <LinearGradient colors={['#0A1830', '#10294A', '#0A1830']} style={styles.container}>
+    <LinearGradient
+      colors={["#0A1830", "#10294A", "#0A1830"]}
+      style={styles.container}
+    >
       <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -184,7 +193,9 @@ export default function PreferencesCountryScreen() {
           <View style={styles.backButton} />
         </View>
 
-        <Text style={styles.subtitle}>Search and select where you want opportunities.</Text>
+        <Text style={styles.subtitle}>
+          Search and select where you want opportunities.
+        </Text>
 
         <View style={styles.globeContainer}>
           <WebView
@@ -213,7 +224,10 @@ export default function PreferencesCountryScreen() {
             />
           </View>
 
-          <ScrollView style={styles.results} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.results}
+            showsVerticalScrollIndicator={false}
+          >
             {filteredCountries.map((country) => {
               const selected = selectedCountry.name === country.name;
               return (
@@ -227,19 +241,42 @@ export default function PreferencesCountryScreen() {
                   ]}
                 >
                   <View style={styles.countryLeft}>
-                    <View style={[styles.countryCodeBadge, selected && styles.countryCodeBadgeSelected]}>
-                      <Text style={[styles.countryCode, selected && styles.countryCodeSelected]}>
+                    <View
+                      style={[
+                        styles.countryCodeBadge,
+                        selected && styles.countryCodeBadgeSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.countryCode,
+                          selected && styles.countryCodeSelected,
+                        ]}
+                      >
                         {country.code}
                       </Text>
                     </View>
-                    <Text style={[styles.countryName, selected && styles.countryNameSelected]}>
+                    <Text
+                      style={[
+                        styles.countryName,
+                        selected && styles.countryNameSelected,
+                      ]}
+                    >
                       {country.name}
                     </Text>
                   </View>
                   {selected ? (
-                    <Ionicons name="checkmark-circle" size={20} color={brand.white} />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={brand.white}
+                    />
                   ) : (
-                    <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={theme.textMuted}
+                    />
                   )}
                 </Pressable>
               );
@@ -250,9 +287,14 @@ export default function PreferencesCountryScreen() {
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           <Pressable
             onPress={handleApplyCountry}
-            style={({ pressed }) => [styles.applyButton, pressed && styles.rowPressed]}
+            style={({ pressed }) => [
+              styles.applyButton,
+              pressed && styles.rowPressed,
+            ]}
           >
-            <Text style={styles.applyButtonText}>Use {selectedCountry.name}</Text>
+            <Text style={styles.applyButtonText}>
+              Use {selectedCountry.name}
+            </Text>
             <Ionicons name="arrow-forward" size={18} color={theme.accentText} />
           </Pressable>
         </View>
@@ -269,41 +311,41 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 18,
   },
   backButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     color: brand.white,
   },
   subtitle: {
     marginTop: 10,
     marginBottom: 12,
     paddingHorizontal: 24,
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 13,
     lineHeight: 20,
-    fontFamily: 'Poppins_400Regular',
-    color: 'rgba(255,255,255,0.9)',
+    fontFamily: "Poppins_400Regular",
+    color: "rgba(255,255,255,0.9)",
   },
   globeContainer: {
-    height: '34%',
+    height: "34%",
     marginBottom: 10,
   },
   globe: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   card: {
     flex: 1,
@@ -320,23 +362,23 @@ const styles = StyleSheet.create({
     borderColor: theme.inputBorder,
     backgroundColor: theme.inputBg,
     paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   searchInput: {
     flex: 1,
     marginLeft: 8,
     fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.inputText,
   },
   results: {
     marginTop: 12,
   },
   countryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderRadius: 12,
@@ -350,8 +392,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surfaceElevated,
   },
   countryLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
     flexShrink: 1,
   },
@@ -362,17 +404,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surfaceSecondary,
     borderWidth: 1,
     borderColor: theme.borderLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 8,
   },
   countryCodeBadgeSelected: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(255,255,255,0.35)",
   },
   countryCode: {
     fontSize: 11,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.textSecondary,
   },
   countryCodeSelected: {
@@ -380,7 +422,7 @@ const styles = StyleSheet.create({
   },
   countryName: {
     fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     color: theme.text,
   },
   countryNameSelected: {
@@ -397,14 +439,14 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     backgroundColor: theme.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
     gap: 8,
   },
   applyButtonText: {
     fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
   },
   rowPressed: {

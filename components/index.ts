@@ -7,19 +7,19 @@
  */
 
 // Screens
-export { SplashExperience as SplashScreen } from './splash';
+export { SplashExperience as SplashScreen } from "./splash";
 
 // Welcome / Onboarding
-export { WelcomeScreen, PaginationDots } from './welcome';
+export { WelcomeScreen, PaginationDots } from "./welcome";
 
 // Auth
 export {
-    AuthScreen,
-    EmailVerificationScreen,
-    PlanSelectionScreen,
-    LocationSelectionScreen,
-    ProfileSetupScreen,
-} from './auth';
+  AuthScreen,
+  EmailVerificationScreen,
+  PlanSelectionScreen,
+  LocationSelectionScreen,
+  ProfileSetupScreen,
+} from "./auth";
 
 // UI Components (add as you build)
 // export { Button } from './ui/Button';

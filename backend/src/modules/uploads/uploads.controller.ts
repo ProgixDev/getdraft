@@ -20,10 +20,7 @@ export class UploadsController {
 
   @Post('signed-url')
   @ApiOperation({ summary: 'Get a signed URL for file upload' })
-  getSignedUrl(
-    @CurrentUser('id') userId: string,
-    @Body() dto: SignedUrlDto,
-  ) {
+  getSignedUrl(@CurrentUser('id') userId: string, @Body() dto: SignedUrlDto) {
     return this.uploadsService.getSignedUploadUrl(
       userId,
       dto.bucket,
@@ -33,7 +30,9 @@ export class UploadsController {
 
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete an uploaded file owned by the current user' })
+  @ApiOperation({
+    summary: 'Delete an uploaded file owned by the current user',
+  })
   async deleteFile(
     @CurrentUser('id') userId: string,
     @Body() dto: DeleteFileDto,

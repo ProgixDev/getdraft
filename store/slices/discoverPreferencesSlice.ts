@@ -1,4 +1,4 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export interface DiscoverPreferences {
   distanceKm: number | null;
@@ -6,7 +6,7 @@ export interface DiscoverPreferences {
   country: string;
   city: string;
   sport: string;
-  recruiterType: 'all' | 'agent' | 'coach';
+  recruiterType: "all" | "agent" | "coach";
   athletePosition: string;
   athleteLevel: string;
   verifiedRecruitersOnly: boolean;
@@ -15,20 +15,23 @@ export interface DiscoverPreferences {
 export const defaultDiscoverPreferences: DiscoverPreferences = {
   distanceKm: 160,
   includeInternational: false,
-  country: 'United States',
-  city: '',
-  sport: 'all',
-  recruiterType: 'all',
-  athletePosition: 'all',
-  athleteLevel: 'all',
+  country: "United States",
+  city: "",
+  sport: "all",
+  recruiterType: "all",
+  athletePosition: "all",
+  athleteLevel: "all",
   verifiedRecruitersOnly: false,
 };
 
 const discoverPreferencesSlice = createSlice({
-  name: 'discoverPreferences',
+  name: "discoverPreferences",
   initialState: defaultDiscoverPreferences,
   reducers: {
-    setDiscoverPreferences: (_state, action: PayloadAction<DiscoverPreferences>) => ({
+    setDiscoverPreferences: (
+      _state,
+      action: PayloadAction<DiscoverPreferences>,
+    ) => ({
       ...action.payload,
     }),
     resetDiscoverPreferences: () => ({
@@ -37,6 +40,7 @@ const discoverPreferencesSlice = createSlice({
   },
 });
 
-export const { setDiscoverPreferences, resetDiscoverPreferences } = discoverPreferencesSlice.actions;
+export const { setDiscoverPreferences, resetDiscoverPreferences } =
+  discoverPreferencesSlice.actions;
 
 export default discoverPreferencesSlice.reducer;

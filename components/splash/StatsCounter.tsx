@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import React, { useEffect, useRef } from "react";
+import { View, StyleSheet, Text } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -7,11 +7,11 @@ import Animated, {
   withDelay,
   Easing,
   runOnJS,
-} from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { theme } from '@/config/colors';
-import { PLATFORM_STATS } from '@/constants/statsData';
-import { AnimatedCounter } from './AnimatedCounter';
+} from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
+import { theme } from "@/config/colors";
+import { PLATFORM_STATS } from "@/constants/statsData";
+import { AnimatedCounter } from "./AnimatedCounter";
 
 interface StatsCounterProps {
   onComplete: () => void;
@@ -42,11 +42,11 @@ function StatCard({
 
     cardOpacity.value = withDelay(
       stagger,
-      withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) })
+      withTiming(1, { duration: 500, easing: Easing.out(Easing.ease) }),
     );
     cardTranslateY.value = withDelay(
       stagger,
-      withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) })
+      withTiming(0, { duration: 500, easing: Easing.out(Easing.cubic) }),
     );
   }, [active]);
 
@@ -137,54 +137,54 @@ export function StatsCounter({ onComplete, active }: StatsCounterProps) {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     backgroundColor: theme.bg,
     paddingHorizontal: 28,
   },
   title: {
     fontSize: 22,
-    fontFamily: 'Poppins_800ExtraBold',
-    color: '#FFFFFF',
-    textAlign: 'center',
+    fontFamily: "Poppins_800ExtraBold",
+    color: "#FFFFFF",
+    textAlign: "center",
     marginBottom: 36,
     letterSpacing: 0.3,
   },
   statsWrap: {
-    width: '100%',
+    width: "100%",
     gap: 16,
   },
   statCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: 16,
     padding: 18,
     gap: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: "rgba(255, 255, 255, 0.08)",
   },
   iconCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(0, 184, 148, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 184, 148, 0.12)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   statContent: {
     flex: 1,
   },
   statNumber: {
     fontSize: 32,
-    fontFamily: 'Poppins_800ExtraBold',
-    color: '#FFFFFF',
+    fontFamily: "Poppins_800ExtraBold",
+    color: "#FFFFFF",
     lineHeight: 38,
   },
   statLabel: {
     fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
-    color: 'rgba(255, 255, 255, 0.6)',
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255, 255, 255, 0.6)",
     marginTop: 2,
   },
 });

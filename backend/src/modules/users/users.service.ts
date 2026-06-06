@@ -132,13 +132,11 @@ export class UsersService {
 
     const supabase = this.supabaseService.getAdminClient();
 
-    const { error } = await supabase
-      .from('blocks')
-      .insert({
-        blocker_id: blockerId,
-        blocked_id: blockedId,
-        reason: dto.reason ?? null,
-      });
+    const { error } = await supabase.from('blocks').insert({
+      blocker_id: blockerId,
+      blocked_id: blockedId,
+      reason: dto.reason ?? null,
+    });
 
     if (error) {
       if (error.code === '23505') {

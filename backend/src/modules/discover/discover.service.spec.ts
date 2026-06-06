@@ -17,8 +17,20 @@ import {
 const mockQueryBuilder = (finalResult: any = { data: [], error: null }) => {
   const builder: any = {};
   const methods = [
-    'select', 'eq', 'neq', 'not', 'in', 'or', 'order', 'range',
-    'limit', 'single', 'maybeSingle', 'insert', 'update', 'lt',
+    'select',
+    'eq',
+    'neq',
+    'not',
+    'in',
+    'or',
+    'order',
+    'range',
+    'limit',
+    'single',
+    'maybeSingle',
+    'insert',
+    'update',
+    'lt',
   ];
   methods.forEach((m) => {
     builder[m] = jest.fn().mockReturnValue(builder);
@@ -81,7 +93,11 @@ describe('DiscoverService', () => {
     it('should return recruiter feed for athlete users', async () => {
       // Mock subscriptions query (getSwipesRemaining)
       const subBuilder = mockQueryBuilder({
-        data: { daily_swipe_limit: 10, swipes_used_today: 3, swipes_reset_at: new Date().toISOString().split('T')[0] },
+        data: {
+          daily_swipe_limit: 10,
+          swipes_used_today: 3,
+          swipes_reset_at: new Date().toISOString().split('T')[0],
+        },
       });
       // Mock swipes query
       const swipesBuilder = mockQueryBuilder({ data: [] });
@@ -109,7 +125,7 @@ describe('DiscoverService', () => {
         error: null,
       });
 
-      let callCount = 0;
+      const callCount = 0;
       mockAdminClient.from.mockImplementation((table: string) => {
         if (table === 'subscriptions') return subBuilder;
         if (table === 'swipes') return swipesBuilder;
@@ -128,7 +144,11 @@ describe('DiscoverService', () => {
 
     it('should return athlete feed for recruiter users', async () => {
       const subBuilder = mockQueryBuilder({
-        data: { daily_swipe_limit: 30, swipes_used_today: 0, swipes_reset_at: new Date().toISOString().split('T')[0] },
+        data: {
+          daily_swipe_limit: 30,
+          swipes_used_today: 0,
+          swipes_reset_at: new Date().toISOString().split('T')[0],
+        },
       });
       const swipesBuilder = mockQueryBuilder({ data: [] });
       const blocksBuilder = mockQueryBuilder({ data: [] });
@@ -147,7 +167,7 @@ describe('DiscoverService', () => {
               bio: 'Star QB',
               class_year: '2025',
               gpa: 3.7,
-              height: "6'2\"",
+              height: '6\'2"',
               weight: '215 lbs',
               photos: [],
               videos: [],
@@ -178,7 +198,11 @@ describe('DiscoverService', () => {
   describe('swipe', () => {
     it('should throw ForbiddenException when swipe limit reached', async () => {
       const subBuilder = mockQueryBuilder({
-        data: { daily_swipe_limit: 10, swipes_used_today: 10, swipes_reset_at: new Date().toISOString().split('T')[0] },
+        data: {
+          daily_swipe_limit: 10,
+          swipes_used_today: 10,
+          swipes_reset_at: new Date().toISOString().split('T')[0],
+        },
       });
       const blocksBuilder = mockQueryBuilder({ data: null });
 
@@ -207,7 +231,11 @@ describe('DiscoverService', () => {
 
     it('should throw ConflictException on duplicate swipe', async () => {
       const subBuilder = mockQueryBuilder({
-        data: { daily_swipe_limit: 10, swipes_used_today: 5, swipes_reset_at: new Date().toISOString().split('T')[0] },
+        data: {
+          daily_swipe_limit: 10,
+          swipes_used_today: 5,
+          swipes_reset_at: new Date().toISOString().split('T')[0],
+        },
       });
       const blocksBuilder = mockQueryBuilder({ data: null });
       const insertBuilder = mockQueryBuilder({

@@ -1,25 +1,19 @@
-import React, { useCallback, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  Text,
-  Pressable,
-  Share,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
+import React, { useCallback, useState } from "react";
+import { View, StyleSheet, Text, Pressable, Share } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import {
   useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
-import { brand, neutral, semantic, theme } from '@/config/colors';
+} from "@expo-google-fonts/poppins";
+import { brand, neutral, semantic, theme } from "@/config/colors";
 
-const REFERRAL_LINK = 'https://getdraft.com/invite/ABC123';
+const REFERRAL_LINK = "https://getdraft.com/invite/ABC123";
 
 export default function InviteFriendsScreen() {
   const insets = useSafeAreaInsets();
@@ -68,7 +62,8 @@ export default function InviteFriendsScreen() {
         </View>
         <Text style={styles.heading}>Invite Your Teammates</Text>
         <Text style={styles.subtitle}>
-          Share GetDraft and help your teammates get discovered by top recruiters and coaches.
+          Share GetDraft and help your teammates get discovered by top
+          recruiters and coaches.
         </Text>
 
         {/* Referral link */}
@@ -81,12 +76,17 @@ export default function InviteFriendsScreen() {
             onPress={handleCopy}
           >
             <Ionicons
-              name={copied ? 'checkmark' : 'copy-outline'}
+              name={copied ? "checkmark" : "copy-outline"}
               size={16}
               color={copied ? semantic.success : theme.text}
             />
-            <Text style={[styles.copyButtonText, copied && styles.copyButtonTextCopied]}>
-              {copied ? 'Copied!' : 'Copy'}
+            <Text
+              style={[
+                styles.copyButtonText,
+                copied && styles.copyButtonTextCopied,
+              ]}
+            >
+              {copied ? "Copied!" : "Copy"}
             </Text>
           </Pressable>
         </View>
@@ -118,9 +118,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bg,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 12,
     paddingVertical: 14,
     backgroundColor: theme.headerBg,
@@ -130,18 +130,18 @@ const styles = StyleSheet.create({
   headerButton: {
     width: 40,
     height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   content: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingHorizontal: 32,
     paddingBottom: 40,
   },
@@ -150,27 +150,27 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: brand.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 24,
   },
   heading: {
     fontSize: 26,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: "Poppins_700Bold",
     color: theme.text,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 15,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 10,
     lineHeight: 22,
   },
   linkCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: theme.cardBg,
     borderRadius: 14,
     borderWidth: 1,
@@ -179,18 +179,18 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     paddingVertical: 6,
     marginTop: 32,
-    width: '100%',
+    width: "100%",
     gap: 8,
   },
   linkText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textSecondary,
   },
   copyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     backgroundColor: theme.surface,
     paddingHorizontal: 14,
@@ -198,22 +198,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   copyButtonCopied: {
-    backgroundColor: 'rgba(0,184,148,0.15)',
+    backgroundColor: "rgba(0,184,148,0.15)",
   },
   copyButtonText: {
     fontSize: 13,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   copyButtonTextCopied: {
     color: semantic.success,
   },
   shareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-    width: '100%',
+    width: "100%",
     height: 50,
     borderRadius: 25,
     backgroundColor: theme.accent,
@@ -221,30 +221,30 @@ const styles = StyleSheet.create({
   },
   shareButtonText: {
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
   },
   benefitCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     backgroundColor: theme.surface,
     borderRadius: 16,
     padding: 18,
     marginTop: 28,
-    width: '100%',
+    width: "100%",
   },
   benefitCopy: {
     flex: 1,
   },
   benefitTitle: {
     fontSize: 15,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   benefitSubtitle: {
     fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textSecondary,
     marginTop: 2,
   },

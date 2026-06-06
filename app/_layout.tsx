@@ -1,37 +1,43 @@
-import { useCallback, useState, useEffect } from 'react';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { Provider, useSelector, useDispatch } from 'react-redux';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { useCallback, useState, useEffect } from "react";
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { Provider, useSelector, useDispatch } from "react-redux";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { StyleSheet, View, ActivityIndicator } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-} from 'react-native-reanimated';
+} from "react-native-reanimated";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { theme } from '@/config/colors';
-import { store, RootState } from '@/store';
-import { SplashScreen, WelcomeScreen, AuthScreen } from '@/components';
-import { loadAuth, saveAuth, clearAuth } from '@/store/authStorage';
-import { login } from '@/store/slices/authSlice';
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { theme } from "@/config/colors";
+import { store, RootState } from "@/store";
+import { SplashScreen, WelcomeScreen, AuthScreen } from "@/components";
+import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
+import { login } from "@/store/slices/authSlice";
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: "(tabs)",
 };
 
-type AppState = 'loading' | 'splash' | 'welcome' | 'auth' | 'app';
+type AppState = "loading" | "splash" | "welcome" | "auth" | "app";
 
 function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const dispatch = useDispatch();
-  const isAuthenticated = useSelector((state: RootState) => state.auth.isAuthenticated);
+  const isAuthenticated = useSelector(
+    (state: RootState) => state.auth.isAuthenticated,
+  );
   const isOnboarded = useSelector((state: RootState) => state.auth.isOnboarded);
   const user = useSelector((state: RootState) => state.auth.user);
 
-  const [appState, setAppState] = useState<AppState>('loading');
+  const [appState, setAppState] = useState<AppState>("loading");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionOpacity = useSharedValue(1);
 
@@ -39,10 +45,12 @@ function RootLayoutContent() {
   useEffect(() => {
     loadAuth().then((persisted) => {
       if (persisted?.user) {
-        dispatch(login({ user: persisted.user, isOnboarded: persisted.isOnboarded }));
-        setAppState('app');
+        dispatch(
+          login({ user: persisted.user, isOnboarded: persisted.isOnboarded }),
+        );
+        setAppState("app");
       } else {
-        setAppState('splash');
+        setAppState("splash");
       }
     });
   }, [dispatch]);
@@ -56,16 +64,16 @@ function RootLayoutContent() {
 
   // When user logs out from app, go back to auth screen
   useEffect(() => {
-    if (appState === 'app' && !isAuthenticated) {
+    if (appState === "app" && !isAuthenticated) {
       clearAuth().catch(() => {});
-      setAppState('auth');
+      setAppState("auth");
     }
   }, [appState, isAuthenticated]);
 
   const handleSplashComplete = useCallback(() => {
     transitionOpacity.value = 1;
     setIsTransitioning(true);
-    setAppState('welcome');
+    setAppState("welcome");
     setTimeout(() => {
       transitionOpacity.value = withTiming(0, { duration: 800 });
     }, 50);
@@ -75,11 +83,11 @@ function RootLayoutContent() {
   }, []);
 
   const handleWelcomeComplete = useCallback(() => {
-    setAppState('auth');
+    setAppState("auth");
   }, []);
 
   const handleAuthComplete = useCallback(() => {
-    setAppState('app');
+    setAppState("app");
   }, []);
 
   const transitionStyle = useAnimatedStyle(() => ({
@@ -87,7 +95,7 @@ function RootLayoutContent() {
   }));
 
   // Show loading while checking persisted auth
-  if (appState === 'loading') {
+  if (appState === "loading") {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#FFFFFF" />
@@ -96,7 +104,7 @@ function RootLayoutContent() {
   }
 
   // Show splash screen on initial load
-  if (appState === 'splash') {
+  if (appState === "splash") {
     return (
       <SplashScreen
         onAnimationComplete={handleSplashComplete}
@@ -108,7 +116,7 @@ function RootLayoutContent() {
   }
 
   // Show welcome/onboarding screens
-  if (appState === 'welcome') {
+  if (appState === "welcome") {
     return (
       <View style={{ flex: 1 }}>
         <StatusBar style="light" />
@@ -124,7 +132,7 @@ function RootLayoutContent() {
   }
 
   // Show auth/login screens
-  if (appState === 'auth') {
+  if (appState === "auth") {
     return (
       <>
         <StatusBar style="light" />
@@ -139,14 +147,20 @@ function RootLayoutContent() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="preferences" options={{ headerShown: false }} />
-        <Stack.Screen name="preferences-country" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="preferences-country"
+          options={{ headerShown: false }}
+        />
         <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
         <Stack.Screen name="help-center" options={{ headerShown: false }} />
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen
+          name="modal"
+          options={{ presentation: "modal", title: "Modal" }}
+        />
       </Stack>
       <StatusBar style="light" />
     </ThemeProvider>
@@ -168,12 +182,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0A0A0A',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#0A0A0A",
   },
   transitionOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: "#0A0A0A",
   },
 });

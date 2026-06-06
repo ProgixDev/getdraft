@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from "react";
+import { Text, StyleSheet } from "react-native";
 import {
   useSharedValue,
   withTiming,
@@ -7,7 +7,7 @@ import {
   Easing,
   useAnimatedReaction,
   runOnJS,
-} from 'react-native-reanimated';
+} from "react-native-reanimated";
 
 interface AnimatedCounterProps {
   targetValue: number;
@@ -19,19 +19,19 @@ interface AnimatedCounterProps {
 }
 
 function formatNumber(n: number): string {
-  return n.toLocaleString('en-US');
+  return n.toLocaleString("en-US");
 }
 
 export function AnimatedCounter({
   targetValue,
   duration = 1800,
   delay = 0,
-  suffix = '',
-  prefix = '',
+  suffix = "",
+  prefix = "",
   style,
 }: AnimatedCounterProps) {
   const counter = useSharedValue(0);
-  const [display, setDisplay] = useState('0');
+  const [display, setDisplay] = useState("0");
 
   useEffect(() => {
     counter.value = withDelay(
@@ -39,7 +39,7 @@ export function AnimatedCounter({
       withTiming(targetValue, {
         duration,
         easing: Easing.out(Easing.cubic),
-      })
+      }),
     );
   }, [targetValue, duration, delay]);
 
@@ -49,12 +49,14 @@ export function AnimatedCounter({
       if (current !== previous) {
         runOnJS(setDisplay)(formatNumber(current));
       }
-    }
+    },
   );
 
   return (
     <Text style={[styles.text, style]}>
-      {prefix}{display}{suffix}
+      {prefix}
+      {display}
+      {suffix}
     </Text>
   );
 }
@@ -62,7 +64,7 @@ export function AnimatedCounter({
 const styles = StyleSheet.create({
   text: {
     fontSize: 36,
-    fontFamily: 'Poppins_800ExtraBold',
-    color: '#FFFFFF',
+    fontFamily: "Poppins_800ExtraBold",
+    color: "#FFFFFF",
   },
 });

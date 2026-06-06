@@ -1,9 +1,9 @@
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import axios from "axios";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
-const TOKEN_KEY = '@getdraft/tokens';
+const TOKEN_KEY = "@getdraft/tokens";
 
 // Resolve the dev API URL.
 // - Physical device or LAN: use the same host the Expo dev server is reachable on
@@ -15,11 +15,11 @@ const BACKEND_PORT = 3000;
 function extractHost(value: string | undefined | null): string | null {
   if (!value) return null;
   // Strip any scheme: exp://, http://, https://, exps://
-  const stripped = value.replace(/^[a-z+]+:\/\//i, '');
+  const stripped = value.replace(/^[a-z+]+:\/\//i, "");
   // Take the first segment before "/" or "?"
-  const beforePath = stripped.split('/')[0].split('?')[0];
+  const beforePath = stripped.split("/")[0].split("?")[0];
   // Take everything before ":" (drop the port)
-  const host = beforePath.split(':')[0];
+  const host = beforePath.split(":")[0];
   return host || null;
 }
 
@@ -39,12 +39,12 @@ function resolveDevApiUrl(): string {
 
   for (const candidate of candidates) {
     const host = extractHost(candidate);
-    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
       return `http://${host}:${BACKEND_PORT}/api`;
     }
   }
 
-  if (Platform.OS === 'android') {
+  if (Platform.OS === "android") {
     return `http://10.0.2.2:${BACKEND_PORT}/api`;
   }
 
@@ -53,22 +53,22 @@ function resolveDevApiUrl(): string {
 
 export const API_BASE_URL = __DEV__
   ? resolveDevApiUrl()
-  : 'https://getdraft-api.up.railway.app/api';
+  : "https://getdraft-api.up.railway.app/api";
 
 // Same host without the /api suffix — used for WebSocket connections
-export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const baseURL = API_BASE_URL;
 
 if (__DEV__) {
-  // eslint-disable-next-line no-console
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  // eslint-disable-next-line no-console
-  console.log('[api] baseURL =', baseURL);
-  // eslint-disable-next-line no-console
-  console.log('[api] override with EXPO_PUBLIC_API_URL if wrong');
-  // eslint-disable-next-line no-console
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+   
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+   
+  console.log("[api] baseURL =", baseURL);
+   
+  console.log("[api] override with EXPO_PUBLIC_API_URL if wrong");
+   
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 
 export interface Tokens {
@@ -100,7 +100,7 @@ export async function clearTokens(): Promise<void> {
 const api = axios.create({
   baseURL,
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
 });
 
 // Request interceptor — attach JWT
@@ -123,7 +123,7 @@ api.interceptors.response.use(
 
       try {
         const tokens = await loadTokens();
-        if (!tokens?.refreshToken) throw new Error('No refresh token');
+        if (!tokens?.refreshToken) throw new Error("No refresh token");
 
         const { data } = await axios.post(
           `${api.defaults.baseURL}/auth/refresh`,

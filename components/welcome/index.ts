@@ -2,5 +2,5 @@
  * Welcome components barrel file
  */
 
-export { WelcomeScreen } from './WelcomeScreen';
-export { PaginationDots } from './PaginationDots';
+export { WelcomeScreen } from "./WelcomeScreen";
+export { PaginationDots } from "./PaginationDots";

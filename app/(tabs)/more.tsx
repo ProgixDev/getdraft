@@ -1,19 +1,19 @@
-import React from 'react';
-import { View, StyleSheet, Text, Pressable, Alert, Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useDispatch, useSelector } from 'react-redux';
-import { useRouter } from 'expo-router';
+import React from "react";
+import { View, StyleSheet, Text, Pressable, Alert, Image } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useDispatch, useSelector } from "react-redux";
+import { useRouter } from "expo-router";
 import {
   useFonts,
   Poppins_400Regular,
   Poppins_500Medium,
   Poppins_600SemiBold,
-} from '@expo-google-fonts/poppins';
-import { brand, semantic, theme } from '@/config/colors';
-import { logout } from '@/store/slices/authSlice';
-import { RootState } from '@/store';
-import { mockAthletes, MediaSource } from '@/constants/discoverData';
+} from "@expo-google-fonts/poppins";
+import { brand, semantic, theme } from "@/config/colors";
+import { logout } from "@/store/slices/authSlice";
+import { RootState } from "@/store";
+import { mockAthletes, MediaSource } from "@/constants/discoverData";
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
@@ -26,41 +26,62 @@ export default function MoreScreen() {
     Poppins_600SemiBold,
   });
 
-  const athleteProfile = user?.role === 'athlete'
-    ? mockAthletes.find((a) => a.email === user?.email)
-    : null;
+  const athleteProfile =
+    user?.role === "athlete"
+      ? mockAthletes.find((a) => a.email === user?.email)
+      : null;
   const avatarPhoto: MediaSource | null = athleteProfile?.photos?.[0] ?? null;
 
   const handleLogout = () => {
-    Alert.alert(
-      'Log out',
-      'Are you sure you want to log out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Log out', style: 'destructive', onPress: () => dispatch(logout()) },
-      ]
-    );
+    Alert.alert("Log out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: () => dispatch(logout()),
+      },
+    ]);
   };
 
   if (!fontsLoaded) return null;
 
   const roleLabel =
-    user?.role === 'recruiter'
-      ? 'Agent / Recruiter'
-      : user?.role === 'coach'
-        ? 'Coach'
-        : user?.role === 'athlete' && athleteProfile
+    user?.role === "recruiter"
+      ? "Agent / Recruiter"
+      : user?.role === "coach"
+        ? "Coach"
+        : user?.role === "athlete" && athleteProfile
           ? `${athleteProfile.position} · ${athleteProfile.level}`
-          : user?.role === 'parent'
-            ? 'Parent'
-            : 'User';
+          : user?.role === "parent"
+            ? "Parent"
+            : "User";
 
   const menuItems = [
-    { icon: 'settings-outline', label: 'Settings', onPress: () => router.push('/settings') },
-    { icon: 'diamond-outline', label: 'My Subscription', onPress: () => router.push('/subscription') },
-    { icon: 'help-circle-outline', label: 'Help Center', onPress: () => router.push('/help-center') },
-    { icon: 'people-outline', label: 'Invite Friends', onPress: () => router.push('/invite-friends') },
-    { icon: 'information-circle-outline', label: 'About GetDraft', onPress: () => router.push('/about') },
+    {
+      icon: "settings-outline",
+      label: "Settings",
+      onPress: () => router.push("/settings"),
+    },
+    {
+      icon: "diamond-outline",
+      label: "My Subscription",
+      onPress: () => router.push("/subscription"),
+    },
+    {
+      icon: "help-circle-outline",
+      label: "Help Center",
+      onPress: () => router.push("/help-center"),
+    },
+    {
+      icon: "people-outline",
+      label: "Invite Friends",
+      onPress: () => router.push("/invite-friends"),
+    },
+    {
+      icon: "information-circle-outline",
+      label: "About GetDraft",
+      onPress: () => router.push("/about"),
+    },
   ];
 
   return (
@@ -74,7 +95,11 @@ export default function MoreScreen() {
           <View style={styles.userAvatar}>
             {avatarPhoto ? (
               <Image
-                source={typeof avatarPhoto === 'string' ? { uri: avatarPhoto } : avatarPhoto}
+                source={
+                  typeof avatarPhoto === "string"
+                    ? { uri: avatarPhoto }
+                    : avatarPhoto
+                }
                 style={styles.userAvatarImage}
                 resizeMode="cover"
               />
@@ -83,7 +108,7 @@ export default function MoreScreen() {
             )}
           </View>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user.name ?? 'User'}</Text>
+            <Text style={styles.userName}>{user.name ?? "User"}</Text>
             <Text style={styles.userEmail}>{user.email}</Text>
             <View style={styles.userRoleBadge}>
               <Text style={styles.userRoleText}>{roleLabel}</Text>
@@ -106,14 +131,22 @@ export default function MoreScreen() {
           >
             <Ionicons name={item.icon as any} size={22} color={theme.text} />
             <Text style={styles.menuLabel}>{item.label}</Text>
-            <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.textMuted}
+            />
           </Pressable>
         ))}
       </View>
 
       <View style={styles.logoutCard}>
         <Pressable
-          style={({ pressed }) => [styles.menuItem, styles.menuItemLast, pressed && styles.menuItemPressed]}
+          style={({ pressed }) => [
+            styles.menuItem,
+            styles.menuItemLast,
+            pressed && styles.menuItemPressed,
+          ]}
           onPress={handleLogout}
         >
           <Ionicons name="log-out-outline" size={22} color={semantic.error} />
@@ -139,12 +172,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   userCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     backgroundColor: theme.cardBg,
     marginHorizontal: 16,
@@ -157,13 +190,13 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: brand.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
   },
   userAvatarImage: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   userInfo: {
     flex: 1,
@@ -171,17 +204,17 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 17,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: "Poppins_600SemiBold",
     color: theme.text,
   },
   userEmail: {
     fontSize: 13,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: "Poppins_400Regular",
     color: theme.textSecondary,
   },
   userRoleBadge: {
     marginTop: 4,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     backgroundColor: theme.badgeBg,
     borderRadius: 10,
     paddingHorizontal: 10,
@@ -189,7 +222,7 @@ const styles = StyleSheet.create({
   },
   userRoleText: {
     fontSize: 11,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     color: theme.badgeText,
   },
   menuCard: {
@@ -197,11 +230,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginHorizontal: 16,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 15,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
@@ -217,7 +250,7 @@ const styles = StyleSheet.create({
   menuLabel: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     color: theme.text,
   },
   logoutCard: {
@@ -225,12 +258,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginHorizontal: 16,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   logoutLabel: {
     flex: 1,
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: "Poppins_500Medium",
     color: semantic.error,
   },
 });

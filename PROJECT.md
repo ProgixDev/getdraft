@@ -1,4 +1,5 @@
 🏈 GetDraft – Complete Web App Overview
+
 1. General Presentation
 
 GetDraft is a swipe-based sports networking platform designed to connect:
@@ -66,8 +67,7 @@ GetDraft highlights strong community statistics:
 
 This is used as social proof to show the platform’s credibility and reach.
 
-📝 User Workflow
-5. Sign Up Process
+📝 User Workflow 5. Sign Up Process
 
 The registration workflow is structured in multiple steps:
 
@@ -104,11 +104,11 @@ Only after validation can the user continue.
 After signing up, the user is asked to choose a plan.
 
 Available Plans
-Plan	Price / Month	Swipes per day	Features
-Basic	$0	10	Text messaging
-Starter	$3	30	Enhanced messaging
-Pro	$7	100	Advanced features
-Premium	$15	Unlimited	Full access
+Plan Price / Month Swipes per day Features
+Basic $0 10 Text messaging
+Starter $3 30 Enhanced messaging
+Pro $7 100 Advanced features
+Premium $15 Unlimited Full access
 
 The Pro plan is highlighted as the most popular.
 
@@ -162,8 +162,7 @@ A progress bar shows:
 
 Once enough information is added, the user can proceed.
 
-📱 Application Sections After Registration
-8. Tutorial – “How Matching Works”
+📱 Application Sections After Registration 8. Tutorial – “How Matching Works”
 
 Before accessing the app, the user is guided through a short tutorial:
 
