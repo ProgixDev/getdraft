@@ -14,8 +14,10 @@ export interface DiscoverPreferences {
 
 export const defaultDiscoverPreferences: DiscoverPreferences = {
   distanceKm: 160,
-  includeInternational: false,
-  country: "United States",
+  // Default: show EVERYONE (no country filter). Filtering is opt-in — the user
+  // turns "Include international" off and/or picks a country in Preferences.
+  includeInternational: true,
+  country: "",
   city: "",
   sport: "all",
   recruiterType: "all",

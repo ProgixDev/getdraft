@@ -1,7 +1,7 @@
 import { IsIn, IsString, Matches, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-export const UPLOAD_BUCKETS = ['avatars', 'photos', 'videos'] as const;
+export const UPLOAD_BUCKETS = ['avatars', 'photos', 'videos', 'posts'] as const;
 export type UploadBucket = (typeof UPLOAD_BUCKETS)[number];
 
 export class SignedUrlDto {

@@ -23,13 +23,11 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
-import axios from "axios";
 
 const { width, height } = Dimensions.get("window");
 const GLOBE_HEIGHT = height * 0.4;
 
-// Geoapify API (free tier - 3000 requests/day)
-const GEOAPIFY_API_KEY = "51b09ca65d074edcb755c57e9ab69937"; // Get free key at https://www.geoapify.com/
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 
 interface Location {
   name: string;
@@ -66,28 +64,49 @@ export const LocationSelectionScreen: React.FC<
   const webViewRef = useRef<WebView>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Popular cities as fallback
+  // Popular cities as fallback. Country names are FULL ("United States", not "USA") so they match
+  // the seeded data and the Discover country filter.
   const popularCities: Location[] = [
     {
       name: "New York",
       city: "New York",
-      country: "USA",
+      country: "United States",
+      state: "New York",
       lat: 40.7128,
       lng: -74.006,
-      formatted: "New York, NY, USA",
+      formatted: "New York, NY, United States",
     },
     {
       name: "Los Angeles",
       city: "Los Angeles",
-      country: "USA",
+      country: "United States",
+      state: "California",
       lat: 34.0522,
       lng: -118.2437,
-      formatted: "Los Angeles, CA, USA",
+      formatted: "Los Angeles, CA, United States",
+    },
+    {
+      name: "Toronto",
+      city: "Toronto",
+      country: "Canada",
+      state: "Ontario",
+      lat: 43.6532,
+      lng: -79.3832,
+      formatted: "Toronto, ON, Canada",
+    },
+    {
+      name: "Montreal",
+      city: "Montreal",
+      country: "Canada",
+      state: "Quebec",
+      lat: 45.5019,
+      lng: -73.5674,
+      formatted: "Montreal, QC, Canada",
     },
     {
       name: "London",
       city: "London",
-      country: "UK",
+      country: "United Kingdom",
       lat: 51.5074,
       lng: -0.1278,
       formatted: "London, United Kingdom",
@@ -111,50 +130,125 @@ export const LocationSelectionScreen: React.FC<
     {
       name: "Dubai",
       city: "Dubai",
-      country: "UAE",
+      country: "United Arab Emirates",
       lat: 25.2048,
       lng: 55.2708,
-      formatted: "Dubai, UAE",
+      formatted: "Dubai, United Arab Emirates",
     },
   ];
 
-  // Search locations using Geoapify API
+  // Mapbox forward geocoding (v6, with v5 fallback on 404). Returns FULL country names like
+  // "United States" / "Canada" so the saved user.country matches the Discover filter.
   const searchLocations = async (query: string) => {
     if (!query || query.length < 2) {
       setSearchResults([]);
       return;
     }
 
+    if (!MAPBOX_TOKEN) {
+      console.warn(
+        "[LocationSelectionScreen] EXPO_PUBLIC_MAPBOX_TOKEN missing; using popularCities filter.",
+      );
+      setSearchResults(
+        popularCities.filter((c) =>
+          c.name.toLowerCase().includes(query.toLowerCase()),
+        ),
+      );
+      return;
+    }
+
     setIsSearching(true);
 
     try {
-      // Using Geoapify Autocomplete API (free tier)
-      const response = await axios.get(
-        `https://api.geoapify.com/v1/geocode/autocomplete`,
-        {
-          params: {
-            text: query,
-            type: "city",
-            limit: 8,
-            apiKey: GEOAPIFY_API_KEY,
-          },
-        },
-      );
+      const v6Params = new URLSearchParams({
+        q: query,
+        access_token: MAPBOX_TOKEN,
+        types: "place,locality,region",
+        autocomplete: "true",
+        limit: "8",
+        language: "en",
+      });
+      const v6Url = `https://api.mapbox.com/search/geocode/v6/forward?${v6Params.toString()}`;
+      let resp = await fetch(v6Url);
 
-      const locations: Location[] = response.data.features.map(
-        (feature: any) => {
-          const props = feature.properties;
-          return {
-            name: props.city || props.name,
-            city: props.city || props.name,
-            country: props.country,
-            state: props.state,
-            lat: props.lat,
-            lng: props.lon,
-            formatted: props.formatted,
-          };
-        },
-      );
+      let locations: Location[] = [];
+
+      if (resp.ok) {
+        const json = await resp.json();
+        locations = (json.features || [])
+          .map((feature: any): Location | null => {
+            const props = feature.properties ?? {};
+            const ctx = props.context ?? {};
+            const coords = props.coordinates ?? {};
+            const lng = Number(
+              coords.longitude ?? feature.geometry?.coordinates?.[0],
+            );
+            const lat = Number(
+              coords.latitude ?? feature.geometry?.coordinates?.[1],
+            );
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+            const country = ctx.country?.name ?? "";
+            const state = ctx.region?.name;
+            const city = props.name ?? "";
+            const formatted =
+              props.full_address ?? props.place_formatted ?? city;
+            return {
+              name: city,
+              city,
+              country,
+              state,
+              lat,
+              lng,
+              formatted,
+            };
+          })
+          .filter((x: Location | null): x is Location => x !== null);
+      } else if (resp.status === 404) {
+        const v5Params = new URLSearchParams({
+          access_token: MAPBOX_TOKEN,
+          types: "place,locality,region",
+          autocomplete: "true",
+          limit: "8",
+          language: "en",
+        });
+        const v5Url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+          query,
+        )}.json?${v5Params.toString()}`;
+        resp = await fetch(v5Url);
+        if (!resp.ok) throw new Error(`Mapbox v5 returned ${resp.status}`);
+        const json = await resp.json();
+        locations = (json.features || [])
+          .map((feature: any): Location | null => {
+            const center = feature.center;
+            if (!Array.isArray(center) || center.length < 2) return null;
+            const lng = Number(center[0]);
+            const lat = Number(center[1]);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+            const city = feature.text ?? "";
+            const formatted = feature.place_name ?? city;
+            const ctxArr: any[] = Array.isArray(feature.context)
+              ? feature.context
+              : [];
+            const countryEntry = ctxArr.find((c) =>
+              typeof c?.id === "string" && c.id.startsWith("country"),
+            );
+            const stateEntry = ctxArr.find((c) =>
+              typeof c?.id === "string" && c.id.startsWith("region"),
+            );
+            return {
+              name: city,
+              city,
+              country: countryEntry?.text ?? "",
+              state: stateEntry?.text,
+              lat,
+              lng,
+              formatted,
+            };
+          })
+          .filter((x: Location | null): x is Location => x !== null);
+      } else {
+        throw new Error(`Mapbox v6 returned ${resp.status}`);
+      }
 
       setSearchResults(locations);
     } catch (error) {

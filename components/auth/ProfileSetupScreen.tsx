@@ -12,7 +12,9 @@ import {
   Switch,
   Alert,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from "@react-native-community/datetimepicker";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -33,6 +35,11 @@ import {
 import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { profilesService } from "@/services/profiles";
+import { usersService } from "@/services/users";
+
+function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
 
 const { width } = Dimensions.get("window");
 
@@ -236,7 +243,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     return `${month}/${day}/${year}`;
   };
 
-  const handleDateChange = (_event: any, selectedDate?: Date) => {
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    if (event?.type === "dismissed") return;
     if (selectedDate) {
       setDateOfBirth(selectedDate);
       handleFieldChange("dateOfBirth", formatDate(selectedDate));
@@ -249,6 +257,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   };
 
   const handleOpenDateModal = () => {
+    let initial = dateOfBirth;
     const existing = formData.dateOfBirth;
     if (existing) {
       const parts = existing.split("/");
@@ -257,11 +266,23 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         const day = parseInt(parts[1], 10);
         const year = parseInt(parts[2], 10);
         if (!isNaN(month) && !isNaN(day) && !isNaN(year)) {
-          setDateOfBirth(new Date(year, month, day));
+          initial = new Date(year, month, day);
+          setDateOfBirth(initial);
         }
       }
     }
-    setDateModalVisible(true);
+
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: initial,
+        mode: "date",
+        maximumDate: new Date(),
+        minimumDate: new Date(1900, 0, 1),
+        onChange: handleDateChange,
+      });
+    } else {
+      setDateModalVisible(true);
+    }
   };
 
   const handleSportSelect = (sportName: string) => {
@@ -312,6 +333,15 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
       setCurrentStep((prev) => prev + 1);
     } else {
       try {
+        const fullName = `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
+        if (fullName) {
+          try {
+            await usersService.updateMe({ name: fullName });
+          } catch (e) {
+            console.warn("[ProfileSetup] updateMe(name) failed (non-blocking):", e);
+          }
+        }
+
         await profilesService.upsertAthleteProfile({
           sport: formData.sport,
           position: formData.position,
@@ -324,6 +354,10 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           weight: formData.weight
             ? `${formData.weight} ${weightUnit}`
             : undefined,
+          gender: formData.gender || undefined,
+          date_of_birth: formData.dateOfBirth ? toIsoDate(dateOfBirth) : undefined,
+          experience: formData.experience || undefined,
+          jersey_number: formData.jerseyNumber || undefined,
         });
         onPayment();
       } catch (err: any) {
@@ -719,44 +753,50 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               ))}
             </View>
 
-            {/* Date of Birth Modal */}
-            <Modal visible={dateModalVisible} transparent animationType="slide">
-              <Pressable
-                style={styles.modalOverlay}
-                onPress={() => setDateModalVisible(false)}
+            {/* Date of Birth Modal (iOS only — Android uses imperative DateTimePickerAndroid) */}
+            {Platform.OS === "ios" && (
+              <Modal
+                visible={dateModalVisible}
+                transparent
+                animationType="slide"
               >
                 <Pressable
-                  style={styles.modalContent}
-                  onPress={(e) => e.stopPropagation()}
+                  style={styles.modalOverlay}
+                  onPress={() => setDateModalVisible(false)}
                 >
-                  <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Date of Birth</Text>
-                    <Pressable onPress={() => setDateModalVisible(false)}>
-                      <Ionicons
-                        name="close"
-                        size={24}
-                        color={neutral.gray600}
-                      />
-                    </Pressable>
-                  </View>
-                  <DateTimePicker
-                    value={dateOfBirth}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                    minimumDate={new Date(1900, 0, 1)}
-                    themeVariant="light"
-                  />
                   <Pressable
-                    style={styles.modalConfirmButton}
-                    onPress={handleDateModalConfirm}
+                    style={styles.modalContent}
+                    onPress={(e) => e.stopPropagation()}
                   >
-                    <Text style={styles.modalConfirmText}>Confirm</Text>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Date of Birth</Text>
+                      <Pressable onPress={() => setDateModalVisible(false)}>
+                        <Ionicons
+                          name="close"
+                          size={24}
+                          color={neutral.gray600}
+                        />
+                      </Pressable>
+                    </View>
+                    <DateTimePicker
+                      value={dateOfBirth}
+                      mode="date"
+                      display="spinner"
+                      onChange={handleDateChange}
+                      maximumDate={new Date()}
+                      minimumDate={new Date(1900, 0, 1)}
+                      themeVariant="light"
+                    />
+                    <Pressable
+                      style={styles.modalConfirmButton}
+                      onPress={handleDateModalConfirm}
+                    >
+                      <Text style={styles.modalConfirmText}>Confirm</Text>
+                    </Pressable>
                   </Pressable>
                 </Pressable>
-              </Pressable>
-            </Modal>
+              </Modal>
+            )}
 
             {/* Gender Selection Modal */}
             <Modal

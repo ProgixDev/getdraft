@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
@@ -48,6 +49,17 @@ export class UsersController {
   @ApiOperation({ summary: 'List users I have blocked' })
   listMyBlocks(@CurrentUser('id') userId: string) {
     return this.usersService.listMyBlocks(userId);
+  }
+
+  @Get('search')
+  @ApiOperation({ summary: 'Search users by name (for compose)' })
+  searchUsers(
+    @CurrentUser('id') userId: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const lim = Math.max(1, Math.min(50, Number(limit ?? 20) || 20));
+    return this.usersService.searchUsers(userId, q ?? '', lim);
   }
 
   @Get('me/profile-views')

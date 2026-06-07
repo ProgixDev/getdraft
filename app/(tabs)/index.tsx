@@ -15,6 +15,8 @@ import {
   ScrollView,
   useWindowDimensions,
   Alert,
+  BackHandler,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,9 +30,14 @@ import Animated, {
   runOnJS,
   FadeIn,
   FadeOut,
+  SlideInDown,
+  SlideOutDown,
+  useReducedMotion,
 } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image as ExpoImage } from "expo-image";
 import {
   useFonts,
   Poppins_400Regular,
@@ -40,112 +47,149 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral, semantic, theme } from "@/config/colors";
-import {
-  mockRecruiters,
-  mockAthletes,
+import type {
   RecruiterCard,
   AthleteProfile,
 } from "@/constants/discoverData";
-import { mockParentProfiles } from "@/constants/parentData";
 import { AthleteCard } from "@/components/discover/AthleteCard";
 import { RootState } from "@/store";
 import { discoverService } from "@/services/discover";
+import {
+  getSportTheme,
+  SportTheme,
+  SPORT_IMAGES,
+} from "@/constants/sportThemes";
+import { Asset } from "expo-asset";
+import {
+  useCarouselGesture,
+  type SwipeTrigger,
+} from "@/hooks/useCarouselGesture";
+import type { SharedValue } from "react-native-reanimated";
+import { Easing, withRepeat } from "react-native-reanimated";
+
+type LastSwipe = { index: number; action: "draft" | "pass"; name: string } | null;
+type SnackbarState = { visible: boolean; message: string; canUndo: boolean };
+
+const successNotify = () => {
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+    () => {},
+  );
+};
 
 // ------------------------------------------------------------------
 // DiscoverCard — shown to athletes swiping on recruiters
 // ------------------------------------------------------------------
 function DiscoverCard({
   recruiter,
-  onSwipeLeft,
-  onSwipeRight,
-  isTop,
+  absoluteIndex,
+  isFocused,
+  canGesture,
   cardWidth,
   cardHeight,
-  screenWidth,
+  slotWidth,
+  screenHeight,
+  focusedIndexSV,
+  carouselTranslateX,
+  onSwipeLeft,
+  onSwipeRight,
+  goNext,
+  goPrev,
+  canGoNext,
+  canGoPrev,
+  trigger,
+  onTriggerHandled,
 }: {
   recruiter: RecruiterCard;
-  onSwipeLeft: () => void;
-  onSwipeRight: () => void;
-  isTop: boolean;
+  absoluteIndex: number;
+  isFocused: boolean;
+  canGesture: boolean;
   cardWidth: number;
   cardHeight: number;
-  screenWidth: number;
+  slotWidth: number;
+  screenHeight: number;
+  focusedIndexSV: SharedValue<number>;
+  carouselTranslateX: SharedValue<number>;
+  onSwipeLeft: () => void;
+  onSwipeRight: () => void;
+  goNext: () => void;
+  goPrev: () => void;
+  canGoNext: boolean;
+  canGoPrev: boolean;
+  trigger: SwipeTrigger;
+  onTriggerHandled: () => void;
 }) {
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const swipeThreshold = Math.min(140, Math.max(90, cardWidth * 0.28));
-  const overlayDivisor = Math.max(80, cardWidth * 0.25);
+  const reducedMotion = useReducedMotion();
+  const sportAccent = getSportTheme(recruiter.sport).accent;
+  const roleLabel = recruiter.role === "agent" ? "Agent" : "Coach";
+  const accessibilityLabel = `${recruiter.name}, ${roleLabel}, ${recruiter.sport}, ${recruiter.location}`;
 
-  const panGesture = Gesture.Pan()
-    .enabled(isTop)
-    .activeOffsetX(20)
-    .failOffsetY([-15, 15])
-    .onUpdate((e) => {
-      translateX.value = e.translationX;
-      translateY.value = e.translationY * 0.2;
-    })
-    .onEnd((e) => {
-      const shouldSwipeLeft =
-        e.translationX < -swipeThreshold || e.velocityX < -400;
-      const shouldSwipeRight =
-        e.translationX > swipeThreshold || e.velocityX > 400;
-
-      if (shouldSwipeLeft) {
-        translateX.value = withSpring(
-          -screenWidth * 1.2,
-          { damping: 15 },
-          () => {
-            runOnJS(onSwipeLeft)();
-          },
-        );
-      } else if (shouldSwipeRight) {
-        translateX.value = withSpring(
-          screenWidth * 1.2,
-          { damping: 15 },
-          () => {
-            runOnJS(onSwipeRight)();
-          },
-        );
-      } else {
-        translateX.value = withSpring(0, { damping: 15 });
-        translateY.value = withSpring(0, { damping: 15 });
-      }
+  const { gesture, cardAnimStyle, draftOverlayStyle, passOverlayStyle } =
+    useCarouselGesture({
+      absoluteIndex,
+      isFocused,
+      canGesture,
+      cardHeight,
+      slotWidth,
+      screenHeight,
+      focusedIndexSV,
+      carouselTranslateX,
+      onSwipeLeft,
+      onSwipeRight,
+      goNext,
+      goPrev,
+      canGoNext,
+      canGoPrev,
+      reducedMotion: !!reducedMotion,
+      trigger,
+      onTriggerHandled,
     });
 
-  const animatedStyle = useAnimatedStyle(() => {
-    const rotate = (translateX.value / screenWidth) * 12;
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { rotate: `${rotate}deg` },
-      ],
-    };
-  });
-
-  const likeOverlayStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(translateX.value / overlayDivisor, 1) * 0.9,
-  }));
-
-  const nopeOverlayStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(-translateX.value / overlayDivisor, 1) * 0.9,
-  }));
-
   return (
-    <GestureDetector gesture={panGesture}>
+    <GestureDetector gesture={gesture}>
       <Animated.View
+        accessible={isFocused}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityActions={[
+          { name: "activate", label: `Draft ${recruiter.name}` },
+          { name: "magicTap", label: `Pass on ${recruiter.name}` },
+          { name: "increment", label: "Next profile" },
+          { name: "decrement", label: "Previous profile" },
+        ]}
+        onAccessibilityAction={(e) => {
+          switch (e.nativeEvent.actionName) {
+            case "activate":
+              onSwipeRight();
+              break;
+            case "magicTap":
+              onSwipeLeft();
+              break;
+            case "increment":
+              if (canGoNext) goNext();
+              break;
+            case "decrement":
+              if (canGoPrev) goPrev();
+              break;
+          }
+        }}
+        pointerEvents={isFocused ? "auto" : "none"}
         style={[
           styles.card,
+          styles.cardAbs,
           { width: cardWidth, height: cardHeight },
-          animatedStyle,
+          cardAnimStyle,
         ]}
       >
         <View style={styles.cardImage}>
           {recruiter.imageUrl ? (
-            <Image
-              source={{ uri: recruiter.imageUrl }}
+            <ExpoImage
+              source={recruiter.imageUrl}
+              placeholder={getSportTheme(recruiter.sport).image}
+              placeholderContentFit="cover"
               style={styles.media}
-              resizeMode="cover"
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={120}
+              recyclingKey={String(recruiter.id)}
             />
           ) : (
             <View style={styles.placeholderImage}>
@@ -157,20 +201,22 @@ function DiscoverCard({
             </View>
           )}
 
-          <View style={styles.cardTag}>
+          <View
+            style={[styles.cardTag, { borderColor: sportAccent + "55" }]}
+          >
             <Ionicons name="diamond" size={12} color={brand.white} />
             <Text style={styles.cardTagText}>Open to Recruiting</Text>
           </View>
 
           <Animated.View
-            style={[styles.overlay, styles.likeOverlay, likeOverlayStyle]}
+            style={[styles.overlay, styles.likeOverlay, draftOverlayStyle]}
           >
             <Text style={[styles.overlayText, { color: semantic.success }]}>
               DRAFT
             </Text>
           </Animated.View>
           <Animated.View
-            style={[styles.overlay, styles.nopeOverlay, nopeOverlayStyle]}
+            style={[styles.overlay, styles.nopeOverlay, passOverlayStyle]}
           >
             <Text style={[styles.overlayText, { color: semantic.error }]}>
               PASS
@@ -178,17 +224,32 @@ function DiscoverCard({
           </Animated.View>
 
           <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.9)"]}
+            colors={[
+              "transparent",
+              "rgba(0,0,0,0.55)",
+              "rgba(0,0,0,0.92)",
+            ]}
             style={styles.cardOverlay}
+            locations={[0, 0.55, 1]}
           >
             <View style={styles.overlayLocation}>
               <Ionicons name="location" size={14} color={brand.white} />
               <Text style={styles.overlayLocationText}>
                 {recruiter.location}
               </Text>
+              <View
+                style={[
+                  styles.sportPill,
+                  { backgroundColor: sportAccent + "33", borderColor: sportAccent },
+                ]}
+              >
+                <Text style={[styles.sportPillText, { color: sportAccent }]}>
+                  {recruiter.sport}
+                </Text>
+              </View>
             </View>
             <View style={styles.overlayNameRow}>
-              <Text style={styles.overlayName}>
+              <Text style={styles.overlayName} numberOfLines={1}>
                 {recruiter.name},{" "}
                 {recruiter.role === "agent" ? "Agent" : "Coach"}
               </Text>
@@ -202,7 +263,7 @@ function DiscoverCard({
             </View>
             <Text style={styles.overlayOrg}>{recruiter.organization}</Text>
             <View style={styles.tagRow}>
-              {recruiter.tags.slice(0, 3).map((tag) => (
+              {(recruiter.tags ?? []).slice(0, 3).map((tag) => (
                 <View key={tag} style={styles.tag}>
                   <Text style={styles.tagText}>{tag}</Text>
                 </View>
@@ -221,15 +282,18 @@ function DiscoverCard({
 function MatchOverlay({
   recruiterName,
   onDismiss,
+  onMessage,
 }: {
   recruiterName: string;
   onDismiss: () => void;
+  onMessage: () => void;
 }) {
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
       exiting={FadeOut.duration(300)}
       style={styles.matchOverlay}
+      accessibilityViewIsModal
     >
       <LinearGradient
         colors={["rgba(0,0,0,0.85)", "rgba(18,18,18,0.97)"]}
@@ -240,14 +304,207 @@ function MatchOverlay({
         <Text style={styles.matchSubtitle}>
           You and {recruiterName} are ready to connect.
         </Text>
-        <Pressable style={styles.matchMessageButton} onPress={onDismiss}>
+        <Pressable
+          style={styles.matchMessageButton}
+          onPress={onMessage}
+          accessibilityRole="button"
+          accessibilityLabel={`Send a message to ${recruiterName}`}
+        >
           <Ionicons name="chatbubble-outline" size={18} color={brand.white} />
           <Text style={styles.matchMessageButtonText}>Send a Message</Text>
         </Pressable>
-        <Pressable style={styles.matchKeepButton} onPress={onDismiss}>
+        <Pressable
+          style={styles.matchKeepButton}
+          onPress={onDismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Keep scouting"
+        >
           <Text style={styles.matchKeepButtonText}>Keep Scouting</Text>
         </Pressable>
       </LinearGradient>
+    </Animated.View>
+  );
+}
+
+// Single backdrop layer — gradient base + bundled blurred hero. Opacity is
+// driven by the wrapping Animated.View in DiscoverBackground (so the layer
+// can fade in/out during a drag without animating any of its internals).
+function BackdropLayer({
+  sport,
+  sportTheme,
+}: {
+  sport?: string;
+  sportTheme: SportTheme;
+}) {
+  return (
+    <>
+      <LinearGradient
+        colors={sportTheme.gradient}
+        style={StyleSheet.absoluteFill}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+      />
+      <ExpoImage
+        source={sportTheme.image}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        transition={0}
+        recyclingKey={sport ?? "default"}
+        blurRadius={20}
+        priority="high"
+        cachePolicy="memory-disk"
+        accessible={false}
+      />
+    </>
+  );
+}
+
+// ------------------------------------------------------------------
+// DiscoverBackground — drag-tracked sport-themed photo backdrop.
+//
+// Three layers (PREV / NEXT / CURRENT) plus a shared scrim. Each layer
+// renders that sport's gradient + bundled blurred hero. Opacities are
+// driven by carouselTranslateX on the UI thread, so the crossfade
+// follows the finger with zero JS-thread lag:
+//
+//   tx = carouselTranslateX.value          (− = dragging left/next,
+//                                            + = dragging right/prev)
+//   right = clamp(max(tx,0) / slot, 0, 1)  (only when prev exists)
+//   left  = clamp(max(-tx,0) / slot, 0, 1) (only when next exists)
+//   CURRENT.opacity = 1 - right - left
+//   PREV.opacity    = right
+//   NEXT.opacity    = left
+//
+// At commit, the parent advances currentIndex and resets tx to 0 in the
+// same tick — the slot props reshuffle (what was NEXT becomes CURRENT;
+// PREV gets the just-decided card), and the new CURRENT is already at
+// opacity 1 with its bundled image painted. No fade, no flicker.
+//
+// Reduced motion (or before slotWidth is measured) skips the live
+// crossfade: only CURRENT is visible, swapping instantly on commit
+// (Quick Sync fallback).
+// ------------------------------------------------------------------
+function DiscoverBackground({
+  sport,
+  sportTheme,
+  prevSport,
+  prevTheme,
+  nextSport,
+  nextTheme,
+  carouselTranslateX,
+  slotWidth,
+  reducedMotion,
+}: {
+  sport?: string;
+  sportTheme: SportTheme;
+  prevSport?: string;
+  prevTheme?: SportTheme;
+  nextSport?: string;
+  nextTheme?: SportTheme;
+  carouselTranslateX: SharedValue<number>;
+  slotWidth: number;
+  reducedMotion: boolean;
+}) {
+  const liveCrossfade = !reducedMotion && slotWidth > 0;
+  const hasPrev = !!prevTheme;
+  const hasNext = !!nextTheme;
+
+  const currentStyle = useAnimatedStyle(() => {
+    if (!liveCrossfade) return { opacity: 1 };
+    const tx = carouselTranslateX.value;
+    const right = tx > 0 && hasPrev ? Math.min(tx / slotWidth, 1) : 0;
+    const left = tx < 0 && hasNext ? Math.min(-tx / slotWidth, 1) : 0;
+    return { opacity: 1 - right - left };
+  });
+
+  const prevStyle = useAnimatedStyle(() => {
+    if (!liveCrossfade || !hasPrev) return { opacity: 0 };
+    const tx = carouselTranslateX.value;
+    return { opacity: tx > 0 ? Math.min(tx / slotWidth, 1) : 0 };
+  });
+
+  const nextStyle = useAnimatedStyle(() => {
+    if (!liveCrossfade || !hasNext) return { opacity: 0 };
+    const tx = carouselTranslateX.value;
+    return { opacity: tx < 0 ? Math.min(-tx / slotWidth, 1) : 0 };
+  });
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {hasPrev && (
+        <Animated.View style={[StyleSheet.absoluteFill, prevStyle]}>
+          <BackdropLayer sport={prevSport} sportTheme={prevTheme!} />
+        </Animated.View>
+      )}
+      {hasNext && (
+        <Animated.View style={[StyleSheet.absoluteFill, nextStyle]}>
+          <BackdropLayer sport={nextSport} sportTheme={nextTheme!} />
+        </Animated.View>
+      )}
+      <Animated.View style={[StyleSheet.absoluteFill, currentStyle]}>
+        <BackdropLayer sport={sport} sportTheme={sportTheme} />
+      </Animated.View>
+      <LinearGradient
+        colors={[
+          "rgba(0,0,0,0.55)",
+          "rgba(0,0,0,0.35)",
+          "rgba(0,0,0,0.75)",
+        ]}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------
+// Snackbar — in-screen undo bar (not a toast library)
+// ------------------------------------------------------------------
+function Snackbar({
+  visible,
+  message,
+  canUndo,
+  onUndo,
+  onHide,
+  bottomOffset,
+  reducedMotion,
+}: {
+  visible: boolean;
+  message: string;
+  canUndo: boolean;
+  onUndo: () => void;
+  onHide: () => void;
+  bottomOffset: number;
+  reducedMotion: boolean;
+}) {
+  useEffect(() => {
+    if (!visible) return;
+    const t = setTimeout(onHide, 4000);
+    return () => clearTimeout(t);
+  }, [visible, onHide]);
+
+  if (!visible) return null;
+  return (
+    <Animated.View
+      entering={reducedMotion ? FadeIn.duration(150) : SlideInDown.duration(220)}
+      exiting={reducedMotion ? FadeOut.duration(150) : SlideOutDown.duration(180)}
+      style={[styles.snackbar, { bottom: bottomOffset }]}
+      accessibilityLiveRegion="polite"
+    >
+      <Text style={styles.snackbarText} numberOfLines={1}>
+        {message}
+      </Text>
+      {canUndo && (
+        <Pressable
+          onPress={onUndo}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Undo last swipe"
+        >
+          <Text style={styles.snackbarUndo}>UNDO</Text>
+        </Pressable>
+      )}
     </Animated.View>
   );
 }
@@ -269,6 +526,7 @@ export default function DiscoverScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [swipeLock, setSwipeLock] = useState(false);
   const [cardAreaHeight, setCardAreaHeight] = useState(0);
+  const [pendingAction, setPendingAction] = useState<SwipeTrigger>(null);
   const [matchOverlay, setMatchOverlay] = useState<{
     visible: boolean;
     name: string;
@@ -278,6 +536,23 @@ export default function DiscoverScreen() {
   });
   const [apiCards, setApiCards] = useState<any[] | null>(null);
   const [swipesRemaining, setSwipesRemaining] = useState<number | null>(null);
+  const [lastSwipe, setLastSwipe] = useState<LastSwipe>(null);
+  const [snackbar, setSnackbar] = useState<SnackbarState>({
+    visible: false,
+    message: "",
+    canUndo: false,
+  });
+  const reducedMotion = useReducedMotion();
+  const carouselTranslateX = useSharedValue(0);
+  const focusedIndexSV = useSharedValue(0);
+  const bounceY = useSharedValue(0);
+
+  // Preload every bundled sport image once on mount so swiping never waits on
+  // Metro to serve an asset on first view (dev). After this, each card + its
+  // background is warm in cache and swaps in the same frame the card commits.
+  useEffect(() => {
+    Asset.loadAsync(SPORT_IMAGES).catch(() => {});
+  }, []);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -287,9 +562,10 @@ export default function DiscoverScreen() {
     Poppins_800ExtraBold,
   });
 
-  // Fetch discover feed from API (falls back to mock data)
+  // Fetch the real discover feed from the backend (no mock fallback).
   useEffect(() => {
     if (isParent) return;
+    setApiCards(null); // null = loading
     discoverService
       .getFeed({
         sport: preferences.sport !== "all" ? preferences.sport : undefined,
@@ -313,122 +589,47 @@ export default function DiscoverScreen() {
       .then((res) => {
         setApiCards(res.cards);
         setSwipesRemaining(res.swipesRemaining);
+        // Prefetch every card's image up front so browsing to neighbor cards is
+        // instant (no per-card network wait). Only ~5-9 small images.
+        const urls = (res.cards || [])
+          .map((c: any) => c.imageUrl || c.photos?.[0])
+          .filter((u: any) => typeof u === "string");
+        if (urls.length) ExpoImage.prefetch(urls);
       })
       .catch(() => {
-        // Fallback to mock data
-        setApiCards(null);
+        // No mock fallback — show the empty state when the backend is unreachable.
+        setApiCards([]);
+        setSwipesRemaining(null);
       });
   }, [isParent, preferences]);
 
   const displayName = user?.name?.split(" ")[0] || "Player";
-  const parentProfile = isParent
-    ? mockParentProfiles.find((parent) => parent.email === user?.email)
-    : null;
-  const managedAthlete = parentProfile
-    ? mockAthletes.find(
-        (athlete) => athlete.email === parentProfile.childAthleteEmail,
-      )
-    : null;
-  const managedAthleteName = managedAthlete?.name ?? null;
-  const discoverTitle =
-    isParent && managedAthleteName
-      ? `Opportunities for ${managedAthleteName.split(" ")[0]}`
-      : "Let's Start Scouting";
+  // Parents redirect to /matches before render, so this screen only shows for
+  // athletes / recruiters. No parent-facing copy needed here anymore.
+  const discoverTitle = "Let's Start Scouting";
 
+  // Real backend feed only — no static/mock fallback. Server already filters by
+  // role/sport/country/etc.; here we just apply the local search query.
   const discoverItems = useMemo(() => {
-    // Use API data if available
-    if (apiCards && apiCards.length > 0) {
-      const query = searchQuery.trim().toLowerCase();
-      if (query.length === 0) return apiCards;
-      return apiCards.filter((card: any) =>
-        [card.name, card.sport, card.organization, card.location, card.position]
-          .filter(Boolean)
-          .some((field: string) => field.toLowerCase().includes(query)),
-      );
-    }
-
-    // Fallback to mock data
+    if (!apiCards || apiCards.length === 0) return [] as any[];
     const query = searchQuery.trim().toLowerCase();
-    const shouldFilterByCountry = !preferences.includeInternational;
-
-    if (isRecruiter) {
-      return mockAthletes.filter((athlete) => {
-        const matchesSearch =
-          query.length === 0 ||
-          [
-            athlete.name,
-            athlete.sport,
-            athlete.position,
-            athlete.level,
-            athlete.location,
-          ].some((field) => field.toLowerCase().includes(query));
-
-        if (!matchesSearch) return false;
-        if (preferences.sport !== "all" && athlete.sport !== preferences.sport)
-          return false;
-        if (
-          preferences.distanceKm !== null &&
-          athlete.distanceKm > preferences.distanceKm
-        ) {
-          return false;
-        }
-        if (shouldFilterByCountry && athlete.country !== preferences.country)
-          return false;
-        if (
-          preferences.athletePosition !== "all" &&
-          athlete.position !== preferences.athletePosition
-        ) {
-          return false;
-        }
-        if (
-          preferences.athleteLevel !== "all" &&
-          athlete.level !== preferences.athleteLevel
-        ) {
-          return false;
-        }
-        return true;
-      });
-    }
-
-    return mockRecruiters.filter((recruiter) => {
-      const matchesSearch =
-        query.length === 0 ||
-        [
-          recruiter.name,
-          recruiter.organization,
-          recruiter.sport,
-          recruiter.location,
-          recruiter.role,
-        ].some((field) => field.toLowerCase().includes(query));
-
-      if (!matchesSearch) return false;
-      if (preferences.sport !== "all" && recruiter.sport !== preferences.sport)
-        return false;
-      if (
-        preferences.distanceKm !== null &&
-        recruiter.distanceKm > preferences.distanceKm
-      ) {
-        return false;
-      }
-      if (shouldFilterByCountry && recruiter.country !== preferences.country)
-        return false;
-      if (
-        preferences.recruiterType !== "all" &&
-        recruiter.role !== preferences.recruiterType
-      ) {
-        return false;
-      }
-      if (preferences.verifiedRecruitersOnly && !recruiter.verified)
-        return false;
-
-      return true;
-    });
-  }, [isRecruiter, preferences, searchQuery]);
+    if (query.length === 0) return apiCards;
+    return apiCards.filter((card: any) =>
+      [card.name, card.sport, card.organization, card.location, card.position]
+        .filter(Boolean)
+        .some((field: string) => field.toLowerCase().includes(query)),
+    );
+  }, [apiCards, searchQuery]);
 
   useEffect(() => {
     setCurrentIndex(0);
     setSwipeLock(false);
+    setPendingAction(null);
   }, [isRecruiter, preferences, searchQuery]);
+
+  useEffect(() => {
+    setPendingAction(null);
+  }, [currentIndex]);
 
   useEffect(() => {
     if (isParent) {
@@ -442,21 +643,28 @@ export default function DiscoverScreen() {
   }, []);
 
   const cardWidth = useMemo(() => {
-    const horizontalPadding = 16;
+    // Narrower than screen so neighbor cards can peek at both edges.
     const maxWidth = 460;
-    return Math.min(screenWidth - horizontalPadding * 2, maxWidth);
+    return Math.min(screenWidth - 80, maxWidth);
   }, [screenWidth]);
 
+  const slotWidth = useMemo(() => {
+    // Distance between adjacent card centers. Less than cardWidth so the
+    // peeking neighbors visibly overlap the focused card edges.
+    return Math.round(cardWidth - 32);
+  }, [cardWidth]);
+
   const cardHeight = useMemo(() => {
-    const byRatio = Math.round(cardWidth * (4 / 3));
-    const fallback = Math.round(screenHeight * 0.58);
+    const fallback = Math.round(screenHeight * 0.72);
     const available =
-      cardAreaHeight > 0 ? Math.max(0, cardAreaHeight - 12) : fallback;
-    return Math.min(byRatio, available);
-  }, [cardAreaHeight, cardWidth, screenHeight]);
+      cardAreaHeight > 0 ? Math.max(0, cardAreaHeight - 8) : fallback;
+    return available;
+  }, [cardAreaHeight, screenHeight]);
 
   const circleSize = useMemo(() => {
-    return Math.min(64, Math.max(52, Math.round(screenWidth * 0.16)));
+    // Smaller than the previous design — buttons are the a11y path, not the
+    // visual hero. The peeking deck and chevron hints carry the affordance.
+    return Math.min(48, Math.max(40, Math.round(screenWidth * 0.12)));
   }, [screenWidth]);
 
   const messageHeight = useMemo(
@@ -468,16 +676,31 @@ export default function DiscoverScreen() {
     [circleSize],
   );
 
-  const handleSwipeLeft = () => {
+  const handleSwipeLeft = useCallback(() => {
     setSwipeLock(true);
     const current = discoverItems[currentIndex];
+    const name =
+      (current as RecruiterCard)?.name ??
+      (current as AthleteProfile)?.name ??
+      "";
     const targetId = current?.id;
     if (targetId) {
       discoverService.swipe(targetId, "pass").catch(() => {});
     }
-    setCurrentIndex((i) => Math.min(i + 1, discoverItems.length));
+    setLastSwipe({ index: currentIndex, action: "pass", name });
+    setSnackbar({
+      visible: true,
+      message: name ? `Passed on ${name}` : "Passed",
+      canUndo: true,
+    });
+    const next = Math.min(currentIndex + 1, discoverItems.length);
+    // Update both atomically so the worklet sees the new focused index and
+    // a reset translateX in the same UI frame (no 1-frame flicker).
+    focusedIndexSV.value = next;
+    carouselTranslateX.value = 0;
+    setCurrentIndex(next);
     setTimeout(() => setSwipeLock(false), 400);
-  };
+  }, [discoverItems, currentIndex, focusedIndexSV, carouselTranslateX]);
 
   const handleSwipeRight = useCallback(() => {
     setSwipeLock(true);
@@ -487,54 +710,195 @@ export default function DiscoverScreen() {
       (current as AthleteProfile)?.name ??
       "";
     const targetId = current?.id;
+    setLastSwipe({ index: currentIndex, action: "draft", name });
 
     if (targetId) {
       discoverService
         .swipe(targetId, "draft")
         .then((res) => {
+          setSwipesRemaining(res.swipesRemaining);
           if (res.matched) {
             setMatchOverlay({ visible: true, name });
+            successNotify();
+          } else {
+            setSnackbar({
+              visible: true,
+              message: name ? `Drafted ${name}` : "Drafted",
+              canUndo: true,
+            });
           }
-          setSwipesRemaining(res.swipesRemaining);
         })
         .catch(() => {
-          // Show match overlay as fallback for demo
-          if (!isRecruiter && name) {
-            setMatchOverlay({ visible: true, name });
-          }
+          // Honest copy on network error — no fake "Game On!"
+          setSnackbar({
+            visible: true,
+            message: name ? `Drafted ${name}` : "Drafted",
+            canUndo: true,
+          });
         });
-    } else if (!isRecruiter && name) {
-      setMatchOverlay({ visible: true, name });
+    } else {
+      setSnackbar({
+        visible: true,
+        message: name ? `Drafted ${name}` : "Drafted",
+        canUndo: true,
+      });
     }
 
-    setCurrentIndex((i) => Math.min(i + 1, discoverItems.length));
+    const next = Math.min(currentIndex + 1, discoverItems.length);
+    focusedIndexSV.value = next;
+    carouselTranslateX.value = 0;
+    setCurrentIndex(next);
     setTimeout(() => setSwipeLock(false), 400);
-  }, [discoverItems, currentIndex, isRecruiter]);
+  }, [discoverItems, currentIndex, focusedIndexSV, carouselTranslateX]);
 
   const handleMatchDismiss = useCallback(() => {
     setMatchOverlay({ visible: false, name: "" });
   }, []);
 
   const handleSendMessage = useCallback(() => {
-    // Navigate to matches where the user can start a conversation
+    // Dismiss any open match overlay so the screen is clean when user returns
+    setMatchOverlay({ visible: false, name: "" });
     router.push("/(tabs)/matches");
   }, [router]);
+
+  const triggerPass = useCallback(() => {
+    if (swipeLock || pendingAction) return;
+    setPendingAction("pass");
+  }, [swipeLock, pendingAction]);
+
+  const triggerDraft = useCallback(() => {
+    if (swipeLock || pendingAction) return;
+    setPendingAction("draft");
+  }, [swipeLock, pendingAction]);
+
+  const handleTriggerHandled = useCallback(() => {
+    setPendingAction(null);
+  }, []);
+
+  const goNext = useCallback(() => {
+    const next = Math.min(currentIndex + 1, Math.max(0, discoverItems.length - 1));
+    focusedIndexSV.value = next;
+    carouselTranslateX.value = 0;
+    setCurrentIndex(next);
+  }, [currentIndex, discoverItems.length, focusedIndexSV, carouselTranslateX]);
+
+  const goPrev = useCallback(() => {
+    const prev = Math.max(currentIndex - 1, 0);
+    focusedIndexSV.value = prev;
+    carouselTranslateX.value = 0;
+    setCurrentIndex(prev);
+  }, [currentIndex, focusedIndexSV, carouselTranslateX]);
+
+  // Keep focusedIndexSV in sync if currentIndex changes via other paths
+  // (initial mount, search/preference reset, undo).
+  useEffect(() => {
+    focusedIndexSV.value = currentIndex;
+    carouselTranslateX.value = 0;
+  }, [currentIndex, focusedIndexSV, carouselTranslateX]);
+
+  // Bouncing chevron affordance (Draft up / Pass down).
+  useEffect(() => {
+    if (reducedMotion) {
+      bounceY.value = 0;
+      return;
+    }
+    bounceY.value = withRepeat(
+      withTiming(-4, {
+        duration: 700,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true,
+    );
+  }, [reducedMotion, bounceY]);
+
+  const draftBounceStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: bounceY.value }],
+  }));
+  const passBounceStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -bounceY.value }],
+  }));
+
+  const handleUndo = useCallback(() => {
+    if (!lastSwipe) return;
+    // TODO: backend unswipe not wired — client-side restore only.
+    focusedIndexSV.value = lastSwipe.index;
+    carouselTranslateX.value = 0;
+    setCurrentIndex(lastSwipe.index);
+    setMatchOverlay({ visible: false, name: "" });
+    setLastSwipe(null);
+    setSnackbar({ visible: false, message: "", canUndo: false });
+  }, [lastSwipe, focusedIndexSV, carouselTranslateX]);
+
+  const hideSnackbar = useCallback(() => {
+    setSnackbar((s) => ({ ...s, visible: false }));
+  }, []);
+
+  const goToSubscription = useCallback(() => {
+    router.push("/subscription");
+  }, [router]);
+
+  useEffect(() => {
+    if (!matchOverlay.visible) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleMatchDismiss();
+      return true;
+    });
+    return () => sub.remove();
+  }, [matchOverlay.visible, handleMatchDismiss]);
+
+  // 3-card window around the focused index (prev / focused / next). At edges
+  // the window collapses to 2 cards (no prev at start, no next at end).
+  // Must live above any early-return so the hook order stays stable.
+  const visibleCards = useMemo(() => {
+    if (currentIndex >= discoverItems.length) {
+      return [] as { item: any; absoluteIndex: number }[];
+    }
+    const arr: { item: any; absoluteIndex: number }[] = [];
+    for (let i = currentIndex - 1; i <= currentIndex + 1; i++) {
+      if (i >= 0 && i < discoverItems.length) {
+        arr.push({ item: discoverItems[i], absoluteIndex: i });
+      }
+    }
+    return arr;
+  }, [discoverItems, currentIndex]);
 
   if (!fontsLoaded) return null;
   if (isParent) return null;
 
   const hasMoreCards = currentIndex < discoverItems.length;
   const remaining = discoverItems.length - currentIndex;
-  const stackItems = hasMoreCards
-    ? discoverItems.slice(currentIndex, currentIndex + 2).reverse()
-    : [];
-  const topStackIndex = stackItems.length - 1;
-  const parentDiscoverItems = isParent
-    ? (discoverItems as RecruiterCard[])
-    : [];
+  const canGoNext = currentIndex < discoverItems.length - 1;
+  const canGoPrev = currentIndex > 0;
+  // Backdrop is keyed by the focused card's sport — so browsing left/right
+  // re-themes the full Discover page background, not only decisions.
+  // prev/next themes feed the drag-tracked crossfade in DiscoverBackground.
+  const topCard = hasMoreCards ? discoverItems[currentIndex] : null;
+  const sportTheme = getSportTheme(topCard?.sport);
+  const prevCard = currentIndex > 0 ? discoverItems[currentIndex - 1] : null;
+  const nextCard =
+    hasMoreCards && currentIndex + 1 < discoverItems.length
+      ? discoverItems[currentIndex + 1]
+      : null;
+  const prevTheme = prevCard ? getSportTheme(prevCard.sport) : undefined;
+  const nextTheme = nextCard ? getSportTheme(nextCard.sport) : undefined;
+  const outOfSwipes =
+    typeof swipesRemaining === "number" && swipesRemaining <= 0;
+  const topCardName = (topCard as any)?.name ?? "this profile";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <DiscoverBackground
+        sport={topCard?.sport}
+        sportTheme={sportTheme}
+        prevSport={prevCard?.sport}
+        prevTheme={prevTheme}
+        nextSport={nextCard?.sport}
+        nextTheme={nextTheme}
+        carouselTranslateX={carouselTranslateX}
+        slotWidth={slotWidth}
+        reducedMotion={reducedMotion}
+      />
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Hello, {displayName} 👋</Text>
@@ -561,9 +925,7 @@ export default function DiscoverScreen() {
           <Ionicons name="search" size={20} color={theme.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder={
-              isRecruiter ? "Find athletes..." : "Find coaches, agents..."
-            }
+            placeholder="Find people..."
             placeholderTextColor={theme.inputPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -582,169 +944,96 @@ export default function DiscoverScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.tabs}>
-        <View style={[styles.tab, styles.tabActive]}>
-          <Text style={styles.tabTextActive}>Discover</Text>
-        </View>
-        <Pressable
-          style={styles.tab}
-          onPress={() => router.push("/(tabs)/matches")}
-        >
-          <Text style={styles.tabText}>
-            {isParent ? "Inbox" : "Draft Board"}
-          </Text>
-        </Pressable>
-        {hasMoreCards && !isRecruiter && (
+      {hasMoreCards && !isRecruiter && (
+        <View style={styles.tabs}>
           <View style={styles.cardCounter}>
             <Text style={styles.cardCounterText}>{remaining} left</Text>
           </View>
-        )}
-      </View>
+        </View>
+      )}
 
-      {isParent ? (
-        <ScrollView
-          style={styles.parentDiscoverScroll}
-          contentContainerStyle={[
-            styles.parentDiscoverContent,
-            { paddingBottom: insets.bottom + 24 },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          {managedAthlete ? (
-            <View style={styles.parentSummaryCard}>
-              <Text style={styles.parentSummaryTitle}>
-                Managing {managedAthlete.name}
-              </Text>
-              <Text style={styles.parentSummarySubtitle}>
-                {managedAthlete.sport} • {managedAthlete.position} •{" "}
-                {managedAthlete.level}
-              </Text>
-            </View>
-          ) : null}
-
-          <Text style={styles.parentSectionTitle}>Discover Recruiters</Text>
-
-          {parentDiscoverItems.length > 0 ? (
-            parentDiscoverItems.map((recruiter) => (
-              <View key={recruiter.id} style={styles.parentRecruiterCard}>
-                <View style={styles.parentRecruiterTopRow}>
-                  <Text style={styles.parentRecruiterName}>
-                    {recruiter.name} •{" "}
-                    {recruiter.role === "agent" ? "Agent" : "Coach"}
-                  </Text>
-                  {recruiter.verified && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={16}
-                      color={semantic.success}
-                    />
-                  )}
-                </View>
-                <Text style={styles.parentRecruiterOrg}>
-                  {recruiter.organization}
-                </Text>
-                <View style={styles.parentRecruiterMetaRow}>
-                  <Ionicons
-                    name="location-outline"
-                    size={14}
-                    color={theme.textMuted}
-                  />
-                  <Text style={styles.parentRecruiterMetaText}>
-                    {recruiter.location}
-                  </Text>
-                </View>
-                <View style={styles.parentRecruiterTagRow}>
-                  {recruiter.tags.slice(0, 2).map((tag) => (
-                    <View
-                      key={`${recruiter.id}-${tag}`}
-                      style={styles.parentTag}
-                    >
-                      <Text style={styles.parentTagText}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.parentEmptyState}>
-              <Ionicons
-                name="compass-outline"
-                size={46}
-                color={theme.textMuted}
-              />
-              <Text style={styles.parentEmptyTitle}>No recruiters found</Text>
-              <Text style={styles.parentEmptySubtitle}>
-                Try updating Preferences to widen your distance or country.
-              </Text>
-              <Pressable
-                style={styles.parentAdjustButton}
-                onPress={() => router.push("/preferences")}
-              >
-                <Text style={styles.parentAdjustButtonText}>
-                  Adjust Preferences
-                </Text>
-              </Pressable>
-            </View>
-          )}
-        </ScrollView>
-      ) : (
-        <View style={styles.cardsContainer} onLayout={handleCardAreaLayout}>
+      <View style={styles.cardsContainer} onLayout={handleCardAreaLayout}>
+          <View
+            style={[
+              styles.sportGlow,
+              { backgroundColor: sportTheme.accent + "22" },
+            ]}
+            pointerEvents="none"
+          />
           {hasMoreCards ? (
-            stackItems.map((item, i) => {
-              const isTopCard = i === topStackIndex;
-              const canSwipe = isTopCard && !swipeLock;
-              const isBackCard = !isTopCard;
-              return (
-                <View
-                  key={`${isTopCard ? "top" : "next"}-${item.id}`}
-                  style={[
-                    styles.cardWrapper,
-                    {
-                      zIndex: isTopCard ? 2 : 1,
-                      opacity: isTopCard ? 1 : 0.92,
-                      transform: isBackCard
-                        ? [{ scale: 0.96 }, { translateY: 12 }]
-                        : [],
-                    },
-                  ]}
-                  pointerEvents={isTopCard ? "auto" : "none"}
-                >
-                  {isRecruiter ? (
-                    <AthleteCard
-                      athlete={item as AthleteProfile}
-                      onSwipeLeft={handleSwipeLeft}
-                      onSwipeRight={handleSwipeRight}
-                      isTop={canSwipe}
-                      isActive={isTopCard}
-                      cardWidth={cardWidth}
-                      cardHeight={cardHeight}
-                      screenWidth={screenWidth}
-                    />
-                  ) : (
-                    <DiscoverCard
-                      recruiter={item as RecruiterCard}
-                      onSwipeLeft={handleSwipeLeft}
-                      onSwipeRight={handleSwipeRight}
-                      isTop={canSwipe}
-                      cardWidth={cardWidth}
-                      cardHeight={cardHeight}
-                      screenWidth={screenWidth}
-                    />
-                  )}
-                </View>
-              );
-            })
+            <View
+              style={[
+                styles.deck,
+                { width: cardWidth, height: cardHeight },
+              ]}
+            >
+              {visibleCards.map(({ item, absoluteIndex }) => {
+                const isFocused = absoluteIndex === currentIndex;
+                const cardCanGesture =
+                  isFocused && !swipeLock && !outOfSwipes;
+                return (item as any).cardType === "athlete" ? (
+                  <AthleteCard
+                    key={item.id}
+                    athlete={item as AthleteProfile}
+                    absoluteIndex={absoluteIndex}
+                    isFocused={isFocused}
+                    isActive={isFocused}
+                    cardWidth={cardWidth}
+                    cardHeight={cardHeight}
+                    slotWidth={slotWidth}
+                    screenHeight={screenHeight}
+                    focusedIndexSV={focusedIndexSV}
+                    carouselTranslateX={carouselTranslateX}
+                    onSwipeLeft={handleSwipeLeft}
+                    onSwipeRight={handleSwipeRight}
+                    goNext={goNext}
+                    goPrev={goPrev}
+                    canGoNext={canGoNext}
+                    canGoPrev={canGoPrev}
+                    canGesture={cardCanGesture}
+                    trigger={isFocused ? pendingAction : null}
+                    onTriggerHandled={handleTriggerHandled}
+                  />
+                ) : (
+                  <DiscoverCard
+                    key={item.id}
+                    recruiter={item as RecruiterCard}
+                    absoluteIndex={absoluteIndex}
+                    isFocused={isFocused}
+                    canGesture={cardCanGesture}
+                    cardWidth={cardWidth}
+                    cardHeight={cardHeight}
+                    slotWidth={slotWidth}
+                    screenHeight={screenHeight}
+                    focusedIndexSV={focusedIndexSV}
+                    carouselTranslateX={carouselTranslateX}
+                    onSwipeLeft={handleSwipeLeft}
+                    onSwipeRight={handleSwipeRight}
+                    goNext={goNext}
+                    goPrev={goPrev}
+                    canGoNext={canGoNext}
+                    canGoPrev={canGoPrev}
+                    trigger={isFocused ? pendingAction : null}
+                    onTriggerHandled={handleTriggerHandled}
+                  />
+                );
+              })}
+            </View>
+          ) : apiCards === null ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={sportTheme.accent} />
+              <Text style={styles.emptySubtitle}>Loading profiles…</Text>
+            </View>
           ) : (
             <View style={styles.emptyState}>
               <Ionicons
-                name="people-outline"
+                name={sportTheme.icon}
                 size={64}
-                color={theme.textMuted}
+                color={sportTheme.accent}
               />
               <Text style={styles.emptyTitle}>You've seen everyone!</Text>
               <Text style={styles.emptySubtitle}>
-                Check back later for new{" "}
-                {isRecruiter ? "athletes" : "recruiters"}, or widen your search.
+                Check back later for new people, or widen your search.
               </Text>
               <Pressable
                 style={styles.emptyAdjustButton}
@@ -762,62 +1051,160 @@ export default function DiscoverScreen() {
             </View>
           )}
         </View>
-      )}
 
-      {!isParent && hasMoreCards && (
-        <View style={[styles.actions, { paddingBottom: insets.bottom + 20 }]}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.circleButton,
-              styles.passButton,
-              {
-                width: circleSize,
-                height: circleSize,
-                borderRadius: circleSize / 2,
-              },
-              pressed && styles.pressed,
-            ]}
-            onPress={handleSwipeLeft}
-          >
-            <Ionicons name="close" size={actionIconSize} color={brand.white} />
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.messageButton,
-              { height: messageHeight, borderRadius: messageHeight / 2 },
-              pressed && styles.pressed,
-            ]}
-            onPress={handleSendMessage}
-          >
-            <Ionicons name="chatbubble-outline" size={20} color={theme.text} />
-            <Text style={styles.messageButtonText}>Messages</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.circleButton,
-              styles.draftButton,
-              {
-                width: circleSize,
-                height: circleSize,
-                borderRadius: circleSize / 2,
-              },
-              pressed && styles.pressed,
-            ]}
-            onPress={handleSwipeRight}
-          >
-            <Ionicons
-              name="checkmark"
-              size={actionIconSize}
-              color={brand.white}
-            />
-          </Pressable>
+      {hasMoreCards && (
+        <View
+          style={[styles.actionsWrap, { paddingBottom: insets.bottom + 14 }]}
+        >
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.6)"]}
+            style={styles.actionsScrim}
+            pointerEvents="none"
+          />
+          {outOfSwipes ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.lockedCta,
+                pressed && styles.pressed,
+              ]}
+              onPress={goToSubscription}
+              accessibilityRole="button"
+              accessibilityLabel="Out of swipes. Upgrade to keep scouting."
+            >
+              <Ionicons name="lock-closed" size={18} color={brand.white} />
+              <Text style={styles.lockedCtaText}>
+                Out of swipes — Upgrade to keep scouting
+              </Text>
+            </Pressable>
+          ) : (
+            <>
+              <View style={styles.hintRow}>
+                <View style={styles.hintSide}>
+                  <Animated.View style={draftBounceStyle}>
+                    <Ionicons
+                      name="chevron-up"
+                      size={14}
+                      color={semantic.success}
+                    />
+                  </Animated.View>
+                  <Text
+                    style={[
+                      styles.hintLabel,
+                      { color: semantic.success },
+                    ]}
+                  >
+                    Draft
+                  </Text>
+                </View>
+                <View style={styles.hintCenter}>
+                  <Ionicons
+                    name="chevron-back"
+                    size={11}
+                    color={theme.textSecondary}
+                  />
+                  <Text style={styles.hintBrowse}>swipe to browse</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={11}
+                    color={theme.textSecondary}
+                  />
+                </View>
+                <View style={styles.hintSide}>
+                  <Text
+                    style={[styles.hintLabel, { color: semantic.error }]}
+                  >
+                    Pass
+                  </Text>
+                  <Animated.View style={passBounceStyle}>
+                    <Ionicons
+                      name="chevron-down"
+                      size={14}
+                      color={semantic.error}
+                    />
+                  </Animated.View>
+                </View>
+              </View>
+              <View style={styles.actions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.circleButton,
+                    styles.passButton,
+                    {
+                      width: circleSize,
+                      height: circleSize,
+                      borderRadius: circleSize / 2,
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={triggerPass}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pass on ${topCardName}`}
+                >
+                  <Ionicons
+                    name="arrow-down"
+                    size={actionIconSize}
+                    color={brand.white}
+                  />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.messageButton,
+                    { height: messageHeight, borderRadius: messageHeight / 2 },
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={handleSendMessage}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open messages"
+                >
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={20}
+                    color={theme.text}
+                  />
+                  <Text style={styles.messageButtonText}>Messages</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.circleButton,
+                    styles.draftButton,
+                    {
+                      width: circleSize,
+                      height: circleSize,
+                      borderRadius: circleSize / 2,
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={triggerDraft}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Draft ${topCardName}`}
+                >
+                  <Ionicons
+                    name="arrow-up"
+                    size={actionIconSize}
+                    color={brand.white}
+                  />
+                </Pressable>
+              </View>
+            </>
+          )}
         </View>
       )}
+
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        canUndo={snackbar.canUndo && !!lastSwipe}
+        onUndo={handleUndo}
+        onHide={hideSnackbar}
+        bottomOffset={insets.bottom + 96}
+        reducedMotion={reducedMotion}
+      />
 
       {matchOverlay.visible && (
         <MatchOverlay
           recruiterName={matchOverlay.name}
           onDismiss={handleMatchDismiss}
+          onMessage={handleSendMessage}
         />
       )}
     </View>
@@ -827,7 +1214,7 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.bg,
+    backgroundColor: "transparent",
   },
   header: {
     flexDirection: "row",
@@ -836,7 +1223,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: theme.headerBg,
+    backgroundColor: "transparent",
   },
   greeting: {
     fontSize: 14,
@@ -859,7 +1246,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.surface,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   searchRow: {
     flexDirection: "row",
@@ -867,13 +1256,15 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: theme.headerBg,
+    backgroundColor: "transparent",
   },
   searchBar: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.inputBg,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
     borderRadius: 12,
     paddingHorizontal: 14,
     height: 44,
@@ -891,7 +1282,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.surface,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   tabs: {
     flexDirection: "row",
@@ -899,11 +1292,13 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
     paddingBottom: 12,
-    backgroundColor: theme.headerBg,
+    backgroundColor: "transparent",
   },
   cardCounter: {
     marginLeft: "auto",
-    backgroundColor: theme.surface,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1054,23 +1449,43 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
+    overflow: "hidden",
+  },
+  deck: {
+    position: "relative",
+  },
+  cardAbs: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+  },
+  sportGlow: {
+    position: "absolute",
+    top: -120,
+    right: -80,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    opacity: 0.7,
   },
   cardWrapper: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   card: {
     backgroundColor: theme.cardBg,
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 30,
+    elevation: 14,
   },
   cardImage: {
     flex: 1,
@@ -1088,15 +1503,17 @@ const styles = StyleSheet.create({
   },
   cardTag: {
     position: "absolute",
-    top: 16,
-    left: 16,
+    top: 18,
+    left: 18,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   cardTagText: {
     fontSize: 12,
@@ -1108,7 +1525,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,
-    borderRadius: 24,
+    borderRadius: 28,
   },
   likeOverlay: {
     borderColor: semantic.success,
@@ -1126,19 +1543,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    paddingTop: 40,
+    padding: 22,
+    paddingTop: 56,
   },
   overlayLocation: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   overlayLocationText: {
     fontSize: 13,
     fontFamily: "Poppins_500Medium",
     color: "rgba(255,255,255,0.95)",
+  },
+  sportPill: {
+    marginLeft: "auto",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  sportPillText: {
+    fontSize: 11,
+    fontFamily: "Poppins_600SemiBold",
+    letterSpacing: 0.3,
   },
   overlayNameRow: {
     flexDirection: "row",
@@ -1146,14 +1575,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   overlayName: {
-    fontSize: 22,
-    fontFamily: "Poppins_700Bold",
+    flex: 1,
+    fontSize: 26,
+    fontFamily: "Poppins_800ExtraBold",
     color: brand.white,
+    letterSpacing: -0.4,
   },
   overlayOrg: {
     fontSize: 14,
-    fontFamily: "Poppins_400Regular",
-    color: "rgba(255,255,255,0.9)",
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.85)",
     marginTop: 4,
   },
   tagRow: {
@@ -1208,12 +1639,100 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
   },
+  actionsWrap: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    backgroundColor: "transparent",
+  },
+  actionsScrim: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  lockedCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    backgroundColor: theme.surfaceElevated,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  lockedCtaText: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: brand.white,
+  },
+  snackbar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: theme.surfaceElevated,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 12,
+    zIndex: 50,
+  },
+  snackbarText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Poppins_500Medium",
+    color: theme.text,
+  },
+  snackbarUndo: {
+    fontSize: 12,
+    fontFamily: "Poppins_700Bold",
+    color: semantic.success,
+    letterSpacing: 1,
+  },
+  hintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+    paddingHorizontal: 4,
+  },
+  hintSide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  hintCenter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    opacity: 0.7,
+  },
+  hintLabel: {
+    fontSize: 11,
+    fontFamily: "Poppins_700Bold",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  hintBrowse: {
+    fontSize: 10,
+    fontFamily: "Poppins_500Medium",
+    color: theme.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "lowercase",
+  },
   actions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 4,
   },
   circleButton: {
     alignItems: "center",

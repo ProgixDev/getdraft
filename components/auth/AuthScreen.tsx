@@ -46,6 +46,7 @@ import {
   clearError,
 } from "@/store/slices/authSlice";
 import { usersService } from "@/services/users";
+import type { AuthResponse } from "@/services/auth";
 import { EmailVerificationScreen } from "./EmailVerificationScreen";
 import { PlanSelectionScreen } from "./PlanSelectionScreen";
 import { LocationSelectionScreen } from "./LocationSelectionScreen";
@@ -156,8 +157,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     setSignupStep("role");
   };
 
-  const handleEmailVerified = () => {
-    setSignupStep("plan");
+  const handleEmailVerified = (result: AuthResponse) => {
+    dispatch(
+      login({
+        user: result.user,
+        isOnboarded: result.isOnboarded,
+      }),
+    );
+    setSignupStep(result.isOnboarded ? "role" : "plan");
+    if (result.isOnboarded) onLogin?.();
   };
 
   const handlePlanSelected = (planId: string) => {
@@ -227,23 +235,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
     if (mode === "signup") {
       try {
-        const result = await dispatch(
+        await dispatch(
           signupAsync({ email, password, role, name: email.split("@")[0] }),
         ).unwrap();
         setIsLoading(false);
-
-        // If accessToken is null, Supabase requires email confirmation
-        if (!result.accessToken) {
-          Alert.alert(
-            "Verify Your Email",
-            `We sent a confirmation link to ${email}. Please click it, then sign in to continue.`,
-            [{ text: "OK", onPress: () => setMode("login") }],
-          );
-          return;
-        }
-
-        // Account created and authenticated — skip OTP, go straight to plan selection
-        setSignupStep("plan");
+        // Supabase has emailed a 6-digit OTP. Continue to the verify step.
+        setSignupStep("verify");
       } catch (err: any) {
         setIsLoading(false);
         Alert.alert(

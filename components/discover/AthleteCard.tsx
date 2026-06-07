@@ -1,44 +1,69 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Text, Image, ActivityIndicator } from "react-native";
+import { View, StyleSheet, Text, ActivityIndicator } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  runOnJS,
-} from "react-native-reanimated";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, { useReducedMotion } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { AthleteProfile } from "@/constants/discoverData";
+import { getSportTheme } from "@/constants/sportThemes";
+import {
+  useCarouselGesture,
+  type SwipeTrigger,
+} from "@/hooks/useCarouselGesture";
 
 type MediaPhase = "video" | "image";
 
 interface AthleteCardProps {
   athlete: AthleteProfile;
-  onSwipeLeft: () => void;
-  onSwipeRight: () => void;
-  isTop: boolean;
+  absoluteIndex: number;
+  isFocused: boolean;
+  canGesture: boolean;
   isActive?: boolean;
   cardWidth: number;
   cardHeight: number;
-  screenWidth: number;
+  slotWidth: number;
+  screenHeight: number;
+  focusedIndexSV: SharedValue<number>;
+  carouselTranslateX: SharedValue<number>;
+  onSwipeLeft: () => void;
+  onSwipeRight: () => void;
+  goNext: () => void;
+  goPrev: () => void;
+  canGoNext: boolean;
+  canGoPrev: boolean;
+  trigger?: SwipeTrigger;
+  onTriggerHandled?: () => void;
 }
 
 export function AthleteCard({
   athlete,
-  onSwipeLeft,
-  onSwipeRight,
-  isTop,
+  absoluteIndex,
+  isFocused,
+  canGesture,
   isActive,
   cardWidth,
   cardHeight,
-  screenWidth,
+  slotWidth,
+  screenHeight,
+  focusedIndexSV,
+  carouselTranslateX,
+  onSwipeLeft,
+  onSwipeRight,
+  goNext,
+  goPrev,
+  canGoNext,
+  canGoPrev,
+  trigger,
+  onTriggerHandled,
 }: AthleteCardProps) {
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const active = isActive ?? isTop;
+  const reducedMotion = useReducedMotion();
+  const active = isActive ?? isFocused;
+  const sportAccent = getSportTheme(athlete.sport).accent;
+  const accessibilityLabel = `${athlete.name}, ${athlete.position}, ${athlete.sport}, ${athlete.location}`;
 
   const hasVideo = athlete.videos.length > 0;
   const hasPhoto = athlete.photos.length > 0;
@@ -81,66 +106,26 @@ export function AthleteCard({
     };
   }, [player, hasPhoto]);
 
-  const swipeThreshold = Math.min(140, Math.max(90, cardWidth * 0.28));
-  const overlayDivisor = Math.max(80, cardWidth * 0.25);
-
-  const panGesture = Gesture.Pan()
-    .enabled(isTop)
-    .activeOffsetX(20)
-    .failOffsetY([-15, 15])
-    .onUpdate((e) => {
-      translateX.value = e.translationX;
-      translateY.value = e.translationY * 0.2;
-    })
-    .onEnd((e) => {
-      const shouldSwipeLeft =
-        e.translationX < -swipeThreshold || e.velocityX < -400;
-      const shouldSwipeRight =
-        e.translationX > swipeThreshold || e.velocityX > 400;
-
-      if (shouldSwipeLeft) {
-        translateX.value = withSpring(
-          -screenWidth * 1.2,
-          { damping: 15 },
-          () => {
-            runOnJS(onSwipeLeft)();
-          },
-        );
-      } else if (shouldSwipeRight) {
-        translateX.value = withSpring(
-          screenWidth * 1.2,
-          { damping: 15 },
-          () => {
-            runOnJS(onSwipeRight)();
-          },
-        );
-      } else {
-        translateX.value = withSpring(0, { damping: 15 });
-        translateY.value = withSpring(0, { damping: 15 });
-      }
+  const { gesture, cardAnimStyle, draftOverlayStyle, passOverlayStyle } =
+    useCarouselGesture({
+      absoluteIndex,
+      isFocused,
+      canGesture,
+      cardHeight,
+      slotWidth,
+      screenHeight,
+      focusedIndexSV,
+      carouselTranslateX,
+      onSwipeLeft,
+      onSwipeRight,
+      goNext,
+      goPrev,
+      canGoNext,
+      canGoPrev,
+      reducedMotion: !!reducedMotion,
+      trigger: trigger ?? null,
+      onTriggerHandled,
     });
-
-  const animatedStyle = useAnimatedStyle(() => {
-    const rotate = (translateX.value / screenWidth) * 12;
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { rotate: `${rotate}deg` },
-      ],
-    };
-  });
-
-  const likeOverlayStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(translateX.value / overlayDivisor, 1) * 0.9,
-  }));
-
-  const nopeOverlayStyle = useAnimatedStyle(() => ({
-    opacity: Math.min(-translateX.value / overlayDivisor, 1) * 0.9,
-  }));
-
-  const getImageSource = () =>
-    typeof firstPhoto === "string" ? { uri: firstPhoto } : firstPhoto;
 
   const renderMedia = () => {
     if (active && phase === "video" && hasVideo && player) {
@@ -156,10 +141,15 @@ export function AthleteCard({
 
     if (hasPhoto) {
       return (
-        <Image
-          source={getImageSource()}
+        <ExpoImage
+          source={firstPhoto}
+          placeholder={getSportTheme(athlete.sport).image}
+          placeholderContentFit="cover"
           style={styles.media}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={120}
+          recyclingKey={String(athlete.id)}
         />
       );
     }
@@ -172,12 +162,37 @@ export function AthleteCard({
   };
 
   return (
-    <GestureDetector gesture={panGesture}>
+    <GestureDetector gesture={gesture}>
       <Animated.View
+        accessible={isFocused}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityActions={[
+          { name: "activate", label: `Draft ${athlete.name}` },
+          { name: "magicTap", label: `Pass on ${athlete.name}` },
+          { name: "increment", label: "Next profile" },
+          { name: "decrement", label: "Previous profile" },
+        ]}
+        onAccessibilityAction={(e) => {
+          switch (e.nativeEvent.actionName) {
+            case "activate":
+              onSwipeRight();
+              break;
+            case "magicTap":
+              onSwipeLeft();
+              break;
+            case "increment":
+              if (canGoNext) goNext();
+              break;
+            case "decrement":
+              if (canGoPrev) goPrev();
+              break;
+          }
+        }}
+        pointerEvents={isFocused ? "auto" : "none"}
         style={[
           styles.card,
           { width: cardWidth, height: cardHeight },
-          animatedStyle,
+          cardAnimStyle,
         ]}
       >
         <View style={styles.cardImage}>
@@ -188,20 +203,22 @@ export function AthleteCard({
             </View>
           )}
 
-          <View style={styles.cardTag}>
+          <View
+            style={[styles.cardTag, { borderColor: sportAccent + "55" }]}
+          >
             <Ionicons name="diamond" size={12} color={brand.white} />
             <Text style={styles.cardTagText}>Available for Recruitment</Text>
           </View>
 
           <Animated.View
-            style={[styles.overlay, styles.likeOverlay, likeOverlayStyle]}
+            style={[styles.overlay, styles.likeOverlay, draftOverlayStyle]}
           >
             <Text style={[styles.overlayText, { color: semantic.success }]}>
               DRAFT
             </Text>
           </Animated.View>
           <Animated.View
-            style={[styles.overlay, styles.nopeOverlay, nopeOverlayStyle]}
+            style={[styles.overlay, styles.nopeOverlay, passOverlayStyle]}
           >
             <Text style={[styles.overlayText, { color: semantic.error }]}>
               PASS
@@ -209,15 +226,30 @@ export function AthleteCard({
           </Animated.View>
 
           <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.9)"]}
+            colors={[
+              "transparent",
+              "rgba(0,0,0,0.55)",
+              "rgba(0,0,0,0.92)",
+            ]}
             style={styles.cardOverlay}
+            locations={[0, 0.55, 1]}
           >
             <View style={styles.overlayLocation}>
               <Ionicons name="location" size={14} color={brand.white} />
               <Text style={styles.overlayLocationText}>{athlete.location}</Text>
+              <View
+                style={[
+                  styles.sportPill,
+                  { backgroundColor: sportAccent + "33", borderColor: sportAccent },
+                ]}
+              >
+                <Text style={[styles.sportPillText, { color: sportAccent }]}>
+                  {athlete.sport}
+                </Text>
+              </View>
             </View>
             <View style={styles.overlayNameRow}>
-              <Text style={styles.overlayName}>
+              <Text style={styles.overlayName} numberOfLines={1}>
                 {athlete.name}, {athlete.position}
               </Text>
               <Ionicons
@@ -243,14 +275,17 @@ export function AthleteCard({
 
 const styles = StyleSheet.create({
   card: {
+    position: "absolute",
+    top: 0,
+    left: 0,
     backgroundColor: theme.cardBg,
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 30,
+    elevation: 14,
   },
   cardImage: {
     flex: 1,
@@ -274,15 +309,17 @@ const styles = StyleSheet.create({
   },
   cardTag: {
     position: "absolute",
-    top: 16,
-    left: 16,
+    top: 18,
+    left: 18,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   cardTagText: {
     fontSize: 12,
@@ -294,7 +331,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,
-    borderRadius: 24,
+    borderRadius: 28,
   },
   likeOverlay: {
     borderColor: semantic.success,
@@ -312,19 +349,31 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    paddingTop: 40,
+    padding: 22,
+    paddingTop: 56,
   },
   overlayLocation: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   overlayLocationText: {
     fontSize: 13,
     fontFamily: "Poppins_500Medium",
     color: "rgba(255,255,255,0.95)",
+  },
+  sportPill: {
+    marginLeft: "auto",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  sportPillText: {
+    fontSize: 11,
+    fontFamily: "Poppins_600SemiBold",
+    letterSpacing: 0.3,
   },
   overlayNameRow: {
     flexDirection: "row",
@@ -332,14 +381,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   overlayName: {
-    fontSize: 22,
-    fontFamily: "Poppins_700Bold",
+    flex: 1,
+    fontSize: 26,
+    fontFamily: "Poppins_800ExtraBold",
     color: brand.white,
+    letterSpacing: -0.4,
   },
   overlayOrg: {
     fontSize: 14,
-    fontFamily: "Poppins_400Regular",
-    color: "rgba(255,255,255,0.9)",
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.85)",
     marginTop: 4,
   },
   overlayBio: {

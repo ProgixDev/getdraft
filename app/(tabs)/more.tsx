@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, StyleSheet, Text, Pressable, Alert, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,7 +13,8 @@ import {
 import { brand, semantic, theme } from "@/config/colors";
 import { logout } from "@/store/slices/authSlice";
 import { RootState } from "@/store";
-import { mockAthletes, MediaSource } from "@/constants/discoverData";
+import { usersService } from "@/services/users";
+import { profilesService } from "@/services/profiles";
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
@@ -26,11 +27,39 @@ export default function MoreScreen() {
     Poppins_600SemiBold,
   });
 
-  const athleteProfile =
-    user?.role === "athlete"
-      ? mockAthletes.find((a) => a.email === user?.email)
-      : null;
-  const avatarPhoto: MediaSource | null = athleteProfile?.photos?.[0] ?? null;
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [athleteRoleLine, setAthleteRoleLine] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    usersService
+      .getMe()
+      .then((me) => {
+        if (cancelled) return;
+        setAvatarUrl(me?.avatar_url ?? null);
+      })
+      .catch(() => {});
+
+    if (user.role === "athlete") {
+      profilesService
+        .getAthleteProfile()
+        .then((p) => {
+          if (cancelled || !p) return;
+          if (p.position && p.level) {
+            setAthleteRoleLine(`${p.position} · ${p.level}`);
+          }
+          if (!avatarUrl && Array.isArray(p.photos) && p.photos[0]) {
+            setAvatarUrl(p.photos[0]);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role]);
 
   const handleLogout = () => {
     Alert.alert("Log out", "Are you sure you want to log out?", [
@@ -50,13 +79,18 @@ export default function MoreScreen() {
       ? "Agent / Recruiter"
       : user?.role === "coach"
         ? "Coach"
-        : user?.role === "athlete" && athleteProfile
-          ? `${athleteProfile.position} · ${athleteProfile.level}`
+        : user?.role === "athlete"
+          ? (athleteRoleLine ?? "Athlete")
           : user?.role === "parent"
             ? "Parent"
             : "User";
 
   const menuItems = [
+    {
+      icon: "person-outline",
+      label: "My Profile",
+      onPress: () => router.push("/(tabs)/profile"),
+    },
     {
       icon: "settings-outline",
       label: "Settings",
@@ -91,15 +125,17 @@ export default function MoreScreen() {
       </View>
 
       {user && (
-        <View style={styles.userCard}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.userCard,
+            pressed && styles.menuItemPressed,
+          ]}
+          onPress={() => router.push("/(tabs)/profile")}
+        >
           <View style={styles.userAvatar}>
-            {avatarPhoto ? (
+            {avatarUrl ? (
               <Image
-                source={
-                  typeof avatarPhoto === "string"
-                    ? { uri: avatarPhoto }
-                    : avatarPhoto
-                }
+                source={{ uri: avatarUrl }}
                 style={styles.userAvatarImage}
                 resizeMode="cover"
               />
@@ -115,7 +151,7 @@ export default function MoreScreen() {
             </View>
           </View>
           <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
-        </View>
+        </Pressable>
       )}
 
       <View style={styles.menuCard}>

@@ -29,15 +29,30 @@ export const chatService = {
 
   // --- WebSocket ---
 
-  async connectSocket(userId: string): Promise<Socket> {
+  async connectSocket(): Promise<Socket> {
     if (socket?.connected) return socket;
-
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+    const tokens = await loadTokens();
     socket = io(`${API_ORIGIN}/chat`, {
-      query: { userId },
+      auth: { token: tokens?.accessToken },
       transports: ["websocket"],
     });
-
     return socket;
+  },
+
+  joinConversation(conversationId: string) {
+    socket?.emit("join_conversation", { conversationId });
+  },
+
+  leaveConversation(conversationId: string) {
+    socket?.emit("leave_conversation", { conversationId });
+  },
+
+  sendDm(conversationId: string, text: string) {
+    socket?.emit("send_dm", { conversationId, text });
   },
 
   getSocket(): Socket | null {

@@ -147,11 +147,15 @@ function RootLayoutContent() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="preferences" options={{ headerShown: false }} />
+        <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="post-create" options={{ headerShown: false }} />
         <Stack.Screen
           name="preferences-country"
           options={{ headerShown: false }}
         />
         <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />
+        <Stack.Screen name="dm/[conversationId]" options={{ headerShown: false }} />
+        <Stack.Screen name="new-message" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
         <Stack.Screen name="help-center" options={{ headerShown: false }} />

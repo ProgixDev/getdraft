@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -8,9 +8,11 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -22,15 +24,10 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
-import {
-  mockAthletes,
-  mockAgentProfile,
-  MediaSource,
-  mockAthleteMatches,
-} from "@/constants/discoverData";
-import { mockParentProfiles } from "@/constants/parentData";
+import type { MediaSource } from "@/constants/discoverData";
 import { profilesService } from "@/services/profiles";
-import { statsService } from "@/services/stats";
+import { usersService } from "@/services/users";
+import { matchesService } from "@/services/matches";
 
 const { width } = Dimensions.get("window");
 const PHOTO_SIZE = (width - 48) / 3 - 8;
@@ -41,18 +38,42 @@ function comingSoon(feature: string) {
   Alert.alert(feature, "This feature is coming soon!", [{ text: "OK" }]);
 }
 
-// Compute profile completeness for athletes
-function getCompleteness(profile: {
-  bio?: string;
-  photos: MediaSource[];
-  videos: MediaSource[];
+type NormalizedAthleteProfile = {
+  sport?: string;
   position?: string;
   level?: string;
+  bio?: string;
+  classYear?: string;
   gpa?: number;
   height?: string;
   weight?: string;
-  classYear?: string;
-}) {
+  fortyYardDash?: string;
+  awards: string[];
+  photos: MediaSource[];
+  videos: MediaSource[];
+  profileViews: number;
+  likesReceived: number;
+};
+
+type NormalizedRecruiterProfile = {
+  organization?: string;
+  sport?: string;
+  roleType?: "agent" | "coach";
+  bio?: string;
+  photos: MediaSource[];
+  videos: MediaSource[];
+  verified?: boolean;
+  tags: string[];
+};
+
+type NormalizedParentProfile = {
+  relationship?: string;
+  childAthleteId?: string;
+  childClassYear?: string;
+  bio?: string;
+};
+
+function getCompleteness(profile: NormalizedAthleteProfile) {
   const checks = [
     { label: "Bio", done: !!profile.bio, weight: 15 },
     { label: "Photos", done: profile.photos.length > 0, weight: 20 },
@@ -77,6 +98,7 @@ function getCompleteness(profile: {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
 
   const [fontsLoaded] = useFonts({
@@ -87,44 +109,125 @@ export default function ProfileScreen() {
   });
 
   const isAthlete = user?.role === "athlete";
-  const isRecruiter = user?.role === "recruiter";
+  const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
   const isParent = user?.role === "parent";
 
-  const athleteProfile = isAthlete
-    ? mockAthletes.find((a) => a.email === user?.email)
-    : null;
-  const agentProfile =
-    isRecruiter && user?.email === mockAgentProfile.email
-      ? mockAgentProfile
-      : null;
-  const parentProfile = isParent
-    ? mockParentProfiles.find((parent) => parent.email === user?.email)
-    : null;
-  const childAthleteProfile = parentProfile
-    ? mockAthletes.find(
-        (athlete) => athlete.email === parentProfile.childAthleteEmail,
-      )
-    : null;
+  const [me, setMe] = useState<any | null>(null);
+  const [profileRaw, setProfileRaw] = useState<any | null>(null);
+  const [childRaw, setChildRaw] = useState<any | null>(null);
+  const [matchesCount, setMatchesCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
 
-  const profileData = athleteProfile ?? agentProfile ?? childAthleteProfile;
-  const photos: MediaSource[] = profileData?.photos ?? [];
-  const videos: MediaSource[] = profileData?.videos ?? [];
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
+      const profileFetch = isAthlete
+        ? profilesService.getAthleteProfile()
+        : isRecruiter
+          ? profilesService.getRecruiterProfile()
+          : isParent
+            ? profilesService.getParentProfile()
+            : Promise.resolve(null);
 
-  // Athlete-specific stats
-  const athleteMatches =
-    isAthlete && user?.email
-      ? (mockAthleteMatches[user.email] ?? []).length
-      : 0;
-  const profileViews = athleteProfile?.profileViews ?? 0;
-  const likesReceived = athleteProfile?.likesReceived ?? 0;
+      Promise.all([
+        usersService.getMe().catch(() => null),
+        profileFetch.catch(() => null),
+      ]).then(([meRow, p]) => {
+        if (cancelled) return;
+        setMe(meRow);
+        setProfileRaw(p);
+        if (isParent && p?.child_athlete_id) {
+          usersService
+            .getPublicUser(p.child_athlete_id)
+            .then((c) => {
+              if (!cancelled) setChildRaw(c);
+            })
+            .catch(() => {});
+        }
+        setLoading(false);
+      });
 
-  // Completeness
+      if (isAthlete || isRecruiter) {
+        matchesService
+          .getMatches()
+          .then((m) => {
+            if (!cancelled) setMatchesCount(Array.isArray(m) ? m.length : 0);
+          })
+          .catch(() => {});
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }, [isAthlete, isRecruiter, isParent]),
+  );
+
+  const athleteProfile = useMemo<NormalizedAthleteProfile | null>(() => {
+    if (!isAthlete || !profileRaw) return null;
+    return {
+      sport: profileRaw.sport,
+      position: profileRaw.position,
+      level: profileRaw.level,
+      bio: profileRaw.bio,
+      classYear: profileRaw.class_year,
+      gpa: profileRaw.gpa != null ? Number(profileRaw.gpa) : undefined,
+      height: profileRaw.height,
+      weight: profileRaw.weight,
+      fortyYardDash: profileRaw.forty_yard_dash,
+      awards: profileRaw.awards ?? [],
+      photos: (profileRaw.photos ?? []) as MediaSource[],
+      videos: (profileRaw.videos ?? []) as MediaSource[],
+      profileViews: profileRaw.profile_views ?? 0,
+      likesReceived: profileRaw.likes_received ?? 0,
+    };
+  }, [isAthlete, profileRaw]);
+
+  const recruiterProfile = useMemo<NormalizedRecruiterProfile | null>(() => {
+    if (!isRecruiter || !profileRaw) return null;
+    return {
+      organization: profileRaw.organization,
+      sport: profileRaw.sport,
+      roleType: profileRaw.role_type as "agent" | "coach" | undefined,
+      bio: profileRaw.bio,
+      photos: (profileRaw.photos ?? []) as MediaSource[],
+      videos: (profileRaw.videos ?? []) as MediaSource[],
+      verified: profileRaw.verified,
+      tags: profileRaw.tags ?? [],
+    };
+  }, [isRecruiter, profileRaw]);
+
+  const parentProfile = useMemo<NormalizedParentProfile | null>(() => {
+    if (!isParent || !profileRaw) return null;
+    return {
+      relationship: profileRaw.relationship,
+      childAthleteId: profileRaw.child_athlete_id,
+      childClassYear: profileRaw.child_class_year,
+      bio: profileRaw.bio,
+    };
+  }, [isParent, profileRaw]);
+
+  const photos: MediaSource[] =
+    athleteProfile?.photos ?? recruiterProfile?.photos ?? [];
+  const videos: MediaSource[] =
+    athleteProfile?.videos ?? recruiterProfile?.videos ?? [];
+
+  const avatarSource: MediaSource | null = useMemo(() => {
+    if (me?.avatar_url) return me.avatar_url as MediaSource;
+    if (photos[0]) return photos[0];
+    return null;
+  }, [me?.avatar_url, photos]);
+
   const completeness =
-    isAthlete && athleteProfile ? getCompleteness(athleteProfile) : null;
+    athleteProfile && athleteProfile.bio !== undefined
+      ? getCompleteness(athleteProfile)
+      : null;
 
   if (!fontsLoaded) return null;
 
-  const displayName = user?.name ?? "User";
+  const displayName = me?.name ?? user?.name ?? "User";
+  const location: string | null = me?.location ?? null;
+
   const roleLabel =
     user?.role === "recruiter"
       ? "Agent / Recruiter"
@@ -137,9 +240,24 @@ export default function ProfileScreen() {
             : "User";
 
   const richRoleLabel =
-    isAthlete && athleteProfile
+    isAthlete && athleteProfile?.position && athleteProfile.level
       ? `${athleteProfile.position} · ${athleteProfile.level}`
       : roleLabel;
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Profile</Text>
+        </View>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={theme.text} />
+        </View>
+      </View>
+    );
+  }
+
+  const hasAnyProfile = !!(athleteProfile || recruiterProfile || parentProfile);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -147,7 +265,7 @@ export default function ProfileScreen() {
         <Text style={styles.title}>Profile</Text>
         <Pressable
           style={styles.editButton}
-          onPress={() => comingSoon("Edit Profile")}
+          onPress={() => router.push("/edit-profile")}
         >
           <Ionicons name="pencil-outline" size={22} color={theme.text} />
         </Pressable>
@@ -169,12 +287,12 @@ export default function ProfileScreen() {
           />
           <View style={styles.avatarWrapper}>
             <View style={styles.avatarPlaceholder}>
-              {photos.length > 0 ? (
+              {avatarSource ? (
                 <Image
                   source={
-                    typeof photos[0] === "string"
-                      ? { uri: photos[0] }
-                      : photos[0]
+                    typeof avatarSource === "string"
+                      ? { uri: avatarSource }
+                      : avatarSource
                   }
                   style={styles.avatarImage}
                   resizeMode="cover"
@@ -182,7 +300,7 @@ export default function ProfileScreen() {
               ) : (
                 <Ionicons
                   name={
-                    user?.role === "recruiter"
+                    user?.role === "recruiter" || user?.role === "coach"
                       ? "briefcase"
                       : user?.role === "parent"
                         ? "people"
@@ -193,14 +311,12 @@ export default function ProfileScreen() {
                 />
               )}
             </View>
-            {isAthlete && (
-              <Pressable
-                style={styles.avatarEditBadge}
-                onPress={() => comingSoon("Change Photo")}
-              >
-                <Ionicons name="camera" size={14} color={brand.white} />
-              </Pressable>
-            )}
+            <Pressable
+              style={styles.avatarEditBadge}
+              onPress={() => router.push("/edit-profile")}
+            >
+              <Ionicons name="camera" size={14} color={brand.white} />
+            </Pressable>
           </View>
           <Text style={styles.name}>{displayName}</Text>
           <View style={styles.roleBadge}>
@@ -227,20 +343,20 @@ export default function ProfileScreen() {
         </View>
 
         {/* Athlete Stats Bar */}
-        {isAthlete && (
+        {isAthlete && athleteProfile && (
           <View style={styles.statsBar}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{profileViews}</Text>
+              <Text style={styles.statValue}>{athleteProfile.profileViews}</Text>
               <Text style={styles.statLabel}>Profile Views</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{likesReceived}</Text>
+              <Text style={styles.statValue}>{athleteProfile.likesReceived}</Text>
               <Text style={styles.statLabel}>Likes</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{athleteMatches}</Text>
+              <Text style={styles.statValue}>{matchesCount}</Text>
               <Text style={styles.statLabel}>Matches</Text>
             </View>
           </View>
@@ -284,21 +400,25 @@ export default function ProfileScreen() {
         )}
 
         {/* About Section */}
-        {(athleteProfile || agentProfile || parentProfile) && (
+        {hasAnyProfile && (
           <View style={styles.infoSection}>
             <Text style={styles.sectionTitle}>About</Text>
             {athleteProfile && (
               <>
-                <View style={styles.infoRow}>
-                  <Ionicons name="football" size={18} color={theme.textMuted} />
-                  <Text style={styles.infoText}>
-                    {athleteProfile.sport} · {athleteProfile.position}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="school" size={18} color={theme.textMuted} />
-                  <Text style={styles.infoText}>{athleteProfile.level}</Text>
-                </View>
+                {athleteProfile.sport && athleteProfile.position && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="football" size={18} color={theme.textMuted} />
+                    <Text style={styles.infoText}>
+                      {athleteProfile.sport} · {athleteProfile.position}
+                    </Text>
+                  </View>
+                )}
+                {athleteProfile.level && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="school" size={18} color={theme.textMuted} />
+                    <Text style={styles.infoText}>{athleteProfile.level}</Text>
+                  </View>
+                )}
                 {athleteProfile.height && athleteProfile.weight && (
                   <View style={styles.infoRow}>
                     <Ionicons name="body" size={18} color={theme.textMuted} />
@@ -325,74 +445,78 @@ export default function ProfileScreen() {
                 )}
               </>
             )}
-            {agentProfile && (
+            {recruiterProfile && (
               <>
-                <View style={styles.infoRow}>
-                  <Ionicons
-                    name="briefcase"
-                    size={18}
-                    color={theme.textMuted}
-                  />
-                  <Text style={styles.infoText}>
-                    {agentProfile.organization}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="football" size={18} color={theme.textMuted} />
-                  <Text style={styles.infoText}>{agentProfile.sport}</Text>
-                </View>
+                {recruiterProfile.organization && (
+                  <View style={styles.infoRow}>
+                    <Ionicons
+                      name="briefcase"
+                      size={18}
+                      color={theme.textMuted}
+                    />
+                    <Text style={styles.infoText}>
+                      {recruiterProfile.organization}
+                    </Text>
+                  </View>
+                )}
+                {recruiterProfile.sport && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="football" size={18} color={theme.textMuted} />
+                    <Text style={styles.infoText}>{recruiterProfile.sport}</Text>
+                  </View>
+                )}
               </>
             )}
-            {parentProfile && childAthleteProfile && (
+            {parentProfile && childRaw && (
               <>
-                <View style={styles.infoRow}>
-                  <Ionicons name="people" size={18} color={theme.textMuted} />
-                  <Text style={styles.infoText}>
-                    {parentProfile.relationship} of {childAthleteProfile.name}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="football" size={18} color={theme.textMuted} />
-                  <Text style={styles.infoText}>
-                    {childAthleteProfile.sport} · {childAthleteProfile.position}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="school" size={18} color={theme.textMuted} />
-                  <Text style={styles.infoText}>
-                    {childAthleteProfile.level} · {parentProfile.childClassYear}
-                  </Text>
-                </View>
+                {parentProfile.relationship && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="people" size={18} color={theme.textMuted} />
+                    <Text style={styles.infoText}>
+                      {parentProfile.relationship} of {childRaw.name}
+                    </Text>
+                  </View>
+                )}
+                {parentProfile.childClassYear && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="school" size={18} color={theme.textMuted} />
+                    <Text style={styles.infoText}>
+                      Class of {parentProfile.childClassYear}
+                    </Text>
+                  </View>
+                )}
               </>
             )}
-            <View style={styles.infoRow}>
-              <Ionicons name="location" size={18} color={theme.textMuted} />
-              <Text style={styles.infoText}>
-                {parentProfile?.location ?? profileData?.location}
-              </Text>
-            </View>
-            {(parentProfile?.bio || profileData?.bio) && (
+            {location && (
+              <View style={styles.infoRow}>
+                <Ionicons name="location" size={18} color={theme.textMuted} />
+                <Text style={styles.infoText}>{location}</Text>
+              </View>
+            )}
+            {(athleteProfile?.bio ||
+              recruiterProfile?.bio ||
+              parentProfile?.bio) && (
               <Text style={styles.bio}>
-                {parentProfile?.bio ?? profileData?.bio}
+                {athleteProfile?.bio ??
+                  recruiterProfile?.bio ??
+                  parentProfile?.bio}
               </Text>
             )}
           </View>
         )}
 
         {/* Awards & Achievements (athletes only) */}
-        {isAthlete &&
-          athleteProfile?.awards &&
-          athleteProfile.awards.length > 0 && (
-            <View style={styles.infoSection}>
-              <Text style={styles.sectionTitle}>Awards & Achievements</Text>
-              {athleteProfile.awards.map((award) => (
-                <View key={award} style={styles.awardRow}>
-                  <Ionicons name="trophy" size={16} color="#F5A623" />
-                  <Text style={styles.awardText}>{award}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+        {isAthlete && athleteProfile && athleteProfile.awards.length > 0 && (
+          <View style={styles.infoSection}>
+            <Text style={styles.sectionTitle}>Awards & Achievements</Text>
+            {athleteProfile.awards.map((award) => (
+              <View key={award} style={styles.awardRow}>
+                <Ionicons name="trophy" size={16} color="#F5A623" />
+                <Text style={styles.awardText}>{award}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Photos */}
         <View style={styles.section}>
@@ -452,7 +576,7 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.videoSection}>
             {videos.length > 0 ? (
-              videos.map((uri, i) => (
+              videos.map((_, i) => (
                 <Pressable
                   key={i}
                   style={styles.videoItem}
@@ -521,6 +645,11 @@ const styles = StyleSheet.create({
   },
   editButton: {
     padding: 8,
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   scroll: {
     flex: 1,
@@ -605,7 +734,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.textMuted,
   },
-  // Stats bar
   statsBar: {
     backgroundColor: theme.cardBg,
     borderRadius: 16,
@@ -633,7 +761,6 @@ const styles = StyleSheet.create({
     height: 36,
     backgroundColor: theme.border,
   },
-  // Completeness card
   completenessCard: {
     backgroundColor: theme.cardBg,
     borderRadius: 16,
@@ -686,7 +813,6 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
     color: theme.textSecondary,
   },
-  // Info section
   infoSection: {
     backgroundColor: theme.cardBg,
     borderRadius: 16,
@@ -710,7 +836,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     lineHeight: 22,
   },
-  // Awards
   awardRow: {
     flexDirection: "row",
     alignItems: "center",

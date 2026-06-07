@@ -125,6 +125,29 @@ export class UsersService {
     return data || [];
   }
 
+  async searchUsers(meId: string, q: string, limit: number) {
+    const supabase = this.supabaseService.getAdminClient();
+    const term = (q ?? '').trim();
+    let query = supabase
+      .from('users')
+      .select('id, name, avatar_url, role')
+      .neq('id', meId)
+      .eq('is_banned', false)
+      .order('name', { ascending: true })
+      .limit(limit);
+    if (term.length > 0) {
+      const escaped = term.replace(/[%_\\]/g, (m) => `\\${m}`);
+      query = query.ilike('name', `%${escaped}%`);
+    }
+    const { data } = await query;
+    return (data ?? []).map((u: any) => ({
+      id: u.id as string,
+      name: (u.name as string) ?? '',
+      avatarUrl: (u.avatar_url as string) ?? null,
+      role: (u.role as string) ?? null,
+    }));
+  }
+
   async blockUser(blockerId: string, blockedId: string, dto: BlockUserDto) {
     if (blockerId === blockedId) {
       throw new BadRequestException('Cannot block yourself');

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Report — Achraf Benamrane — 6 June 2026</title>
+<style>
+  :root {
+    --navy: #1F4E7A;
+    --navy-deep: #14304D;
+    --navy-soft: #E8EFF6;
+    --saffron: #E8A53D;
+    --saffron-soft: #FBEDD3;
+    --cream: #F4F6F9;
+    --cream-warm: #E3E9F1;
+    --deep: #0F1A26;
+    --text: #2A323D;
+    --text-muted: #6B7480;
+    --border: #C9D2DC;
+    --border-soft: #DDE3EB;
+    --green: #1E7A4D;
+    --green-soft: #E5F2EC;
+  }
+  @page { size: A4; margin: 8mm 11mm 8mm 11mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: #fff; color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Inter", Roboto, sans-serif;
+    font-size: 8.5pt; line-height: 1.3;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 178mm; margin: 0 auto; }
+
+  .report-banner {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 5px; margin-bottom: 8px;
+    border-bottom: 1.5px solid var(--navy);
+  }
+  .report-title { font-size: 18pt; font-weight: 800; color: var(--navy); letter-spacing: -0.3px; line-height: 1; }
+  .report-author { text-align: right; line-height: 1.35; }
+  .report-author .name { font-size: 10.5pt; font-weight: 700; color: var(--navy); }
+  .report-author .date { font-size: 9pt; color: #5A6B7E; margin-top: 2px; }
+
+  .brand-strip {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+    color: #fff; border-radius: 6px; padding: 7px 16px; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .brand-strip .left { font-size: 9pt; letter-spacing: 0.16em; text-transform: uppercase; color: var(--saffron); font-weight: 700; }
+  .brand-strip .left::before { content: "▲"; margin-right: 6px; font-size: 10pt; vertical-align: -1px; }
+  .brand-strip .right { font-size: 9pt; color: rgba(255,255,255,0.78); }
+  .brand-strip .right strong { color: #fff; font-weight: 600; }
+
+  .summary {
+    background: var(--green-soft); border-left: 4px solid var(--green);
+    border-radius: 4px; padding: 7px 14px; margin-bottom: 8px;
+  }
+  .summary-label { font-size: 8pt; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin-bottom: 3px; }
+  .summary p { margin: 0; font-size: 9pt; color: var(--deep); }
+
+  .effort-note {
+    background: var(--saffron-soft); border-left: 4px solid var(--saffron);
+    border-radius: 4px; padding: 6px 14px; margin-bottom: 8px;
+    font-size: 8.5pt; color: var(--deep);
+  }
+  .effort-note strong { color: var(--navy-deep); }
+
+  h2 {
+    font-size: 10.5pt; font-weight: 700; color: var(--navy-deep);
+    margin: 8px 0 4px 0; padding-bottom: 2px;
+    border-bottom: 1.5px solid var(--border-soft);
+    letter-spacing: -0.2px;
+  }
+  h2 .num { color: var(--saffron); font-weight: 800; margin-right: 6px; }
+
+  strong { font-weight: 700; color: var(--deep); }
+
+  .stats { display: flex; gap: 8px; margin: 2px 0 8px 0; }
+  .stat {
+    flex: 1; background: #fff; border: 1px solid var(--border-soft);
+    border-radius: 6px; padding: 5px 10px; text-align: left;
+  }
+  .stat .label { font-size: 7pt; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .stat .value { font-size: 11pt; font-weight: 700; color: var(--navy-deep); margin-top: 1px; }
+  .stat .sub { font-size: 7.5pt; color: var(--text-muted); margin-top: 0; }
+
+  .task-list {
+    list-style: none; padding: 0; margin: 5px 0 9px 0; counter-reset: tcnt;
+  }
+  .task-list > li {
+    position: relative; background: #fff; border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--green); border-radius: 4px;
+    padding: 4px 12px 4px 34px; margin-bottom: 3px;
+    counter-increment: tcnt;
+  }
+  .task-list > li::before {
+    content: counter(tcnt, decimal-leading-zero);
+    position: absolute; left: 10px; top: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt; font-weight: 700; color: var(--saffron);
+  }
+  .task-list > li .title { font-weight: 600; color: var(--deep); font-size: 8.5pt; }
+  .task-list > li .body { color: var(--text-muted); font-size: 8pt; margin-top: 1px; line-height: 1.4; }
+
+  .doc-footer {
+    border-top: 1px solid var(--border); margin-top: 9px; padding-top: 6px;
+    text-align: center; color: var(--text-muted); font-size: 7.5pt; letter-spacing: 0.04em;
+  }
+  .doc-footer .knot { color: var(--saffron); font-weight: 700; margin: 0 6px; }
+
+  @media print {
+    body { background: #fff; }
+    .brand-strip, .summary, .effort-note, .task-list > li, .stat {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="report-banner">
+    <div class="report-title">Daily Report</div>
+    <div class="report-author">
+      <div class="name">Achraf Benamrane</div>
+      <div class="date">Date: June 6, 2026</div>
+    </div>
+  </div>
+
+  <div class="brand-strip">
+    <div class="left">GetDraft · Recrutement Sportif</div>
+    <div class="right">Focus: <strong>profil &amp; localisation · vérification OTP · couche sociale Posts/Reels · messagerie privée temps réel</strong></div>
+  </div>
+
+  <div class="summary">
+    <div class="summary-label">Summary</div>
+    <p>Journée en <strong>double shift</strong> sur l'application GetDraft. En première partie de journée, le <strong>profil utilisateur a été rendu entièrement modifiable</strong> (nom, localisation, description, sport et photo), avec un <strong>nouveau sélecteur de localisation cartographique</strong> (position GPS en un bouton, ou recherche par pays puis ville/wilaya avec autocomplétion et aperçu carte) et la <strong>vérification du compte par code à 6 chiffres</strong> envoyé par email à l'inscription. En <strong>seconde partie de journée</strong>, lancement de deux briques majeures : une <strong>couche sociale complète</strong> (publication de photos « Posts » et de vidéos « Reels » avec légende, fil d'actualité, j'aime, commentaires et réponses façon Instagram) et une <strong>messagerie privée en temps réel</strong> permettant à n'importe quels utilisateurs de discuter en moins de 2 secondes, sans rafraîchir. Plusieurs corrections de stabilité importantes ont également été livrées. L'ensemble s'inscrit dans la continuité des priorités définies lors d'une <strong>réunion précédente avec Ashref Arabi</strong>.</p>
+  </div>
+
+  <div class="effort-note">
+    <strong>Note :</strong> Double shift aujourd'hui. Travail testé de bout en bout sur appareil réel — édition de profil, localisation, vérification par code OTP, publication de Posts/Reels et messagerie privée temps réel fonctionnels.
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Major features shipped</div>
+      <div class="value" style="color:#1E7A4D;">6</div>
+      <div class="sub">profil · localisation · OTP · Posts/Reels · commentaires · DM temps réel</div>
+    </div>
+    <div class="stat">
+      <div class="label">Shift</div>
+      <div class="value" style="color:#14304D;">Double</div>
+      <div class="sub">2 shifts — première et seconde partie</div>
+    </div>
+    <div class="stat">
+      <div class="label">Status</div>
+      <div class="value" style="color:#1E7A4D;">Green</div>
+      <div class="sub">on track</div>
+    </div>
+  </div>
+
+  <h2><span class="num">01</span>What I worked on — Shift 1</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Profil utilisateur entièrement modifiable</div>
+      <div class="body">L'utilisateur peut désormais éditer l'intégralité de son profil depuis l'application : <strong>nom complet, localisation, description (bio), sport via un sélecteur</strong>, et <strong>photo de profil</strong> téléversée depuis la galerie vers le stockage du backend. Les modifications sont enregistrées et apparaissent immédiatement sur l'écran Profil. Pour les athlètes, le poste, le niveau, la taille et le poids sont également éditables.</div>
+    </li>
+    <li>
+      <div class="title">Sélecteur de localisation cartographique</div>
+      <div class="body">Nouveau sélecteur de localisation flexible : un bouton <strong>« Ma position actuelle »</strong> qui récupère la position GPS, ou une <strong>recherche par pays puis ville/wilaya</strong> avec autocomplétion et un aperçu de carte. La localisation choisie est enregistrée avec ses coordonnées (latitude/longitude), ce qui ouvre la voie à un filtrage par distance.</div>
+    </li>
+    <li>
+      <div class="title">Vérification du compte par code à l'inscription</div>
+      <div class="body">À l'inscription, l'utilisateur reçoit désormais un <strong>code à 6 chiffres par email</strong> (et non plus un lien) qu'il saisit dans l'application pour activer son compte. L'écran de saisie gère les erreurs (code invalide/expiré) et propose un <strong>renvoi de code</strong>. L'envoi des emails passe par un service de messagerie configuré côté serveur.</div>
+    </li>
+    <li>
+      <div class="title">Informations du profil athlète réellement enregistrées</div>
+      <div class="body">Les champs collectés à l'inscription mais qui n'étaient pas sauvegardés — <strong>date de naissance, genre, années d'expérience, numéro de maillot</strong> — sont désormais persistés correctement côté backend et disponibles sur le profil.</div>
+    </li>
+    <li>
+      <div class="title">Corrections de stabilité</div>
+      <div class="body">Correction du <strong>sélecteur de date de naissance</strong> qui faisait planter l'application sur Android au moment de valider/annuler. Correction d'un <strong>bug de localisation</strong> où le pays choisi (ex. Canada) était enregistré comme « USA » — la recherche utilise maintenant une base géographique fiable avec les <strong>noms de pays complets</strong>, cohérents dans toute l'app.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">02</span>What I worked on — Shift 2</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Couche sociale — Posts &amp; Reels</div>
+      <div class="body">Mise en place d'un <strong>nouvel onglet central</strong> dédié au contenu social. L'utilisateur peut <strong>publier des photos (« Posts ») et des vidéos (« Reels ») avec une légende</strong>. Un <strong>fil d'actualité global</strong> présente les publications de tous les utilisateurs, avec un sélecteur Posts / Reels ; les Reels se lisent en <strong>plein écran avec défilement vertical</strong> et lecture automatique de la vidéo visible uniquement.</div>
+    </li>
+    <li>
+      <div class="title">J'aime, double-tap et compteurs</div>
+      <div class="body">Ajout des <strong>j'aime</strong> sur les publications avec <strong>double-tap façon Instagram</strong> (animation cœur), ainsi que des compteurs de j'aime et de commentaires mis à jour en direct sur chaque publication.</div>
+    </li>
+    <li>
+      <div class="title">Commentaires façon Instagram</div>
+      <div class="body">Refonte complète des commentaires : <strong>avatar + nom + texte</strong>, <strong>j'aime par commentaire</strong>, <strong>réponses repliables</strong> (« voir les réponses »), barre de <strong>réactions emoji</strong> et zone de saisie soignée. L'utilisateur peut commenter, répondre à un commentaire et supprimer les siens.</div>
+    </li>
+    <li>
+      <div class="title">Messagerie privée en temps réel</div>
+      <div class="body">Mise en place d'une <strong>messagerie privée</strong> : n'importe quel utilisateur peut démarrer une conversation 1-à-1 avec un autre. Les messages arrivent sur l'appareil du destinataire en <strong>moins de 2 secondes, sans rafraîchir</strong>. Une <strong>boîte de réception</strong> liste les conversations (dernier message, non-lus) avec une <strong>recherche d'utilisateurs</strong> pour démarrer une nouvelle discussion, et la pastille de messages non-lus est mise à jour en direct.</div>
+    </li>
+  </ol>
+
+  <div class="doc-footer">
+    GetDraft <span class="knot">·</span> Recrutement Sportif <span class="knot">·</span> Daily report <span class="knot">·</span> 6 June 2026
+  </div>
+
+</div>
+</body>
+</html>

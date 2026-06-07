@@ -31,4 +31,12 @@ export const usersService = {
   async unblockUser(userId: string): Promise<void> {
     await api.delete(`/users/${userId}/block`);
   },
+
+  async searchUsers(
+    q: string,
+    limit = 20,
+  ): Promise<{ id: string; name: string; avatarUrl: string | null; role: string | null }[]> {
+    const { data } = await api.get("/users/search", { params: { q, limit } });
+    return data.data;
+  },
 };

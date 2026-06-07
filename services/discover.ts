@@ -29,7 +29,10 @@ export interface SwipeResponse {
 export const discoverService = {
   async getFeed(query: DiscoverQuery = {}): Promise<FeedResponse> {
     const { data } = await api.get("/discover/feed", { params: query });
-    return data.data;
+    // The backend TransformInterceptor returns feed responses UNWRAPPED (it skips
+    // payloads containing `.cards`), while other endpoints are wrapped in { data }.
+    // Handle both shapes so the real feed flows through instead of being dropped.
+    return (data?.data ?? data) as FeedResponse;
   },
 
   async swipe(

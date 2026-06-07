@@ -1,0 +1,1329 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>GetDraft — Project Work Plan</title>
+    <style>
+      :root {
+        --black: #121212;
+        --ink: #1e1e1e;
+        --paper: #ffffff;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --soft: #f7f7f8;
+        --draft: #1faa59;
+        --pass: #e5484d;
+        --accent: #111;
+        --chipbg: #f1f1f2;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        font-size: 11px;
+        line-height: 1.5;
+        background: var(--paper);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      @page {
+        size: A4;
+        margin: 16mm 14mm;
+      }
+      @page:first {
+        margin: 0;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        color: var(--black);
+        line-height: 1.2;
+        margin: 0;
+      }
+      h2 {
+        font-size: 18px;
+        letter-spacing: -0.2px;
+        margin: 0 0 4px;
+      }
+      h3 {
+        font-size: 13px;
+        margin: 18px 0 6px;
+      }
+      h4 {
+        font-size: 11.5px;
+        margin: 12px 0 4px;
+      }
+      p {
+        margin: 0 0 8px;
+      }
+      a {
+        color: #0a58ca;
+        text-decoration: none;
+      }
+      small {
+        color: var(--muted);
+      }
+
+      .section {
+        page-break-inside: auto;
+      }
+      .break {
+        page-break-before: always;
+      }
+      .nobreak {
+        page-break-inside: avoid;
+      }
+
+      /* ---------- COVER ---------- */
+      .cover {
+        height: 297mm;
+        width: 100%;
+        background: var(--black);
+        color: #fff;
+        padding: 34mm 24mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        page-break-after: always;
+      }
+      .brandmark {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .brandmark .logo {
+        font-weight: 800;
+        font-size: 22px;
+        letter-spacing: -0.5px;
+        color: #fff;
+      }
+      .brandmark .logo .g {
+        color: #fff;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--draft);
+        display: inline-block;
+      }
+      .cover .kicker {
+        color: #9aa0a6;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        font-size: 11px;
+      }
+      .cover h1 {
+        color: #fff;
+        font-size: 46px;
+        letter-spacing: -1px;
+        margin: 6px 0 10px;
+        line-height: 1.05;
+      }
+      .cover .sub {
+        color: #cfd2d6;
+        font-size: 15px;
+        max-width: 130mm;
+        line-height: 1.5;
+      }
+      .cover .tagline {
+        color: var(--draft);
+        font-weight: 600;
+        font-size: 13px;
+        margin-top: 18px;
+      }
+      .cover .meta {
+        border-top: 1px solid #2a2a2a;
+        padding-top: 16px;
+        display: flex;
+        gap: 42px;
+        flex-wrap: wrap;
+      }
+      .cover .meta div span {
+        display: block;
+        color: #8a8f94;
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+      }
+      .cover .meta div b {
+        color: #fff;
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+
+      /* ---------- chips ---------- */
+      .chip {
+        display: inline-block;
+        padding: 1.5px 8px;
+        border-radius: 20px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        background: var(--chipbg);
+        color: #333;
+      }
+      .chip.high {
+        background: #fdecec;
+        color: #c0292e;
+      }
+      .chip.med {
+        background: #fff4e0;
+        color: #b8770a;
+      }
+      .chip.low {
+        background: #eef2f7;
+        color: #516175;
+      }
+      .chip.done {
+        background: #e7f6ee;
+        color: #177a45;
+      }
+      .chip.prog {
+        background: #fff4e0;
+        color: #b8770a;
+      }
+      .chip.todo {
+        background: #fdecec;
+        color: #c0292e;
+      }
+      .chip.draft {
+        background: #e7f6ee;
+        color: var(--draft);
+      }
+      .chip.pass {
+        background: #fdecec;
+        color: var(--pass);
+      }
+
+      /* ---------- tables ---------- */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0 14px;
+        font-size: 10px;
+      }
+      th {
+        text-align: left;
+        background: var(--black);
+        color: #fff;
+        font-weight: 600;
+        padding: 6px 8px;
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tr:nth-child(even) td {
+        background: var(--soft);
+      }
+      td.c,
+      th.c {
+        text-align: center;
+        white-space: nowrap;
+      }
+      table.tight td {
+        padding: 5px 8px;
+      }
+
+      /* ---------- callouts / cards ---------- */
+      .grid2 {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .card {
+        flex: 1 1 0;
+        min-width: 200px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+      .card .n {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--black);
+      }
+      .card .l {
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--muted);
+      }
+      .note {
+        border-left: 3px solid var(--black);
+        background: var(--soft);
+        padding: 9px 12px;
+        border-radius: 0 6px 6px 0;
+        margin: 10px 0;
+      }
+      .note.warn {
+        border-left-color: var(--pass);
+        background: #fdf0f0;
+      }
+      .note.ok {
+        border-left-color: var(--draft);
+        background: #eef8f2;
+      }
+
+      ul.clean {
+        margin: 4px 0 10px;
+        padding-left: 18px;
+      }
+      ul.clean li {
+        margin: 3px 0;
+      }
+
+      /* ---------- timeline ---------- */
+      .tl {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9.5px;
+        margin-top: 8px;
+      }
+      .tl th {
+        background: #f1f1f2;
+        color: #333;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .tl td {
+        border: 1px solid var(--line);
+        text-align: center;
+        padding: 4px 2px;
+        height: 22px;
+      }
+      .tl td.lab {
+        text-align: left;
+        font-weight: 600;
+        background: #fff;
+        color: var(--black);
+        white-space: nowrap;
+      }
+      .bar {
+        background: var(--black);
+        color: #fff;
+        border-radius: 3px;
+        font-size: 8px;
+        padding: 1px 0;
+      }
+      .bar.a {
+        background: #2563eb;
+      }
+      .bar.b {
+        background: #7c3aed;
+      }
+      .bar.c {
+        background: var(--draft);
+      }
+      .bar.d {
+        background: #b8770a;
+      }
+
+      .footer {
+        position: fixed;
+        bottom: 6mm;
+        left: 14mm;
+        right: 14mm;
+        display: flex;
+        justify-content: space-between;
+        color: #9aa0a6;
+        font-size: 8px;
+        border-top: 1px solid var(--line);
+        padding-top: 3px;
+      }
+
+      .toc li {
+        margin: 4px 0;
+      }
+      .toc .num {
+        display: inline-block;
+        width: 22px;
+        color: var(--draft);
+        font-weight: 700;
+      }
+      .legend {
+        font-size: 9px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .phaseband {
+        background: var(--black);
+        color: #fff;
+        padding: 7px 12px;
+        border-radius: 6px;
+        font-weight: 700;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 16px 0 4px;
+      }
+      .phaseband small {
+        color: #b8bcc0;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ===================== COVER ===================== -->
+    <div class="cover">
+      <div>
+        <div class="brandmark">
+          <span class="dot"></span>
+          <span class="logo"
+            >Get<span style="color: var(--draft)">Draft</span></span
+          >
+        </div>
+      </div>
+      <div>
+        <div class="kicker">Project Work Plan</div>
+        <h1>From "Feature-Complete"<br />to Shipped.</h1>
+        <div class="sub">
+          A grounded execution plan covering frontend verification, live backend
+          deployment &amp; integration, real-device QA, and launch readiness for
+          the GetDraft sports-recruiting platform.
+        </div>
+        <div class="tagline">Where Talent Has No Borders.</div>
+      </div>
+      <div class="meta">
+        <div><span>Prepared</span><b>June 5, 2026</b></div>
+        <div><span>Repository</span><b>moblie app · master</b></div>
+        <div><span>Stack</span><b>Expo SDK 54 · NestJS · Supabase</b></div>
+        <div><span>Horizon</span><b>~5–6 weeks to demo-ready</b></div>
+      </div>
+    </div>
+
+    <!-- ===================== TOC + SUMMARY ===================== -->
+    <div class="section">
+      <h2>Executive Summary</h2>
+      <p>
+        GetDraft's frontend and backend are both <b>built</b>: all eight client
+        change requests (CRs) are checked off in the sprint plan, the React
+        Native app ships every screen with a graceful mock-data fallback, and
+        the NestJS backend has all 12 modules, 8 SQL migrations, and a test
+        suite in place. The remaining work is <b>not "build features"</b> — it
+        is <b>verify, connect, harden, and ship</b>.
+      </p>
+
+      <p>
+        This plan is grounded in a direct scan of the repository rather than the
+        sprint checkboxes, which surfaced three things worth acting on
+        immediately:
+      </p>
+      <ul class="clean">
+        <li>
+          <b>The backend is closer to live than the docs say.</b> The
+          <code>.env</code> already holds real Supabase, Stripe, SMTP, Twilio
+          (phone verification) and Didit (identity verification) credentials.
+          Only <code>SUPABASE_JWT_SECRET</code> and
+          <code>EXPO_ACCESS_TOKEN</code> are empty.
+        </li>
+        <li>
+          <b>Scope has grown beyond the original Notion plan</b> — phone
+          verification (Twilio) and KYC/identity verification (Didit) now exist
+          and a migration <code>008</code> was added. These need their own
+          verification and aren't reflected in the sprint doc.
+        </li>
+        <li>
+          <b>The genuine gaps are integration and QA</b>: nobody has run the app
+          against the live backend end-to-end, and device testing was done on
+          the iOS simulator only — physical iOS and Android testing is
+          outstanding.
+        </li>
+      </ul>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="n">8/8</div>
+          <div class="l">Client CRs checked off</div>
+        </div>
+        <div class="card">
+          <div class="n">12</div>
+          <div class="l">Backend modules built</div>
+        </div>
+        <div class="card">
+          <div class="n">8</div>
+          <div class="l">DB migrations (un-run)</div>
+        </div>
+        <div class="card">
+          <div class="n">0</div>
+          <div class="l">Live E2E flows verified</div>
+        </div>
+      </div>
+
+      <h3>How this plan is organized</h3>
+      <ul class="toc clean" style="list-style: none; padding-left: 0">
+        <li>
+          <span class="num">1</span> Current State Assessment — what's real vs.
+          assumed
+        </li>
+        <li>
+          <span class="num">2</span> Gap Analysis — the work that actually
+          remains
+        </li>
+        <li>
+          <span class="num">3</span> Work Plan — four phases, task-by-task
+        </li>
+        <li><span class="num">4</span> Timeline &amp; Critical Path</li>
+        <li><span class="num">5</span> Risk Register</li>
+        <li><span class="num">6</span> Definition of Done</li>
+        <li><span class="num">7</span> Immediate Next Steps (this week)</li>
+        <li><span class="num">8</span> Open Questions</li>
+      </ul>
+    </div>
+
+    <!-- ===================== 1. CURRENT STATE ===================== -->
+    <div class="section break">
+      <h2>1 · Current State Assessment</h2>
+      <p>
+        Status is based on a repository scan on June 5, 2026. "Confidence"
+        reflects how strongly the code confirms the claim — high means verified
+        by inspection, low means the checkbox says done but the code wasn't
+        audited.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 26%">Workstream</th>
+            <th class="c" style="width: 14%">Status</th>
+            <th>Evidence in repo</th>
+            <th class="c" style="width: 12%">Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Frontend — rebrand &amp; copy (CR-4/5/6/8)</td>
+            <td class="c"><span class="chip done">Built</span></td>
+            <td>
+              Tabs incl. <code>matches.tsx</code> (Draft Board), brand copy in
+              constants
+            </td>
+            <td class="c">Medium</td>
+          </tr>
+          <tr>
+            <td>Frontend — dark theme (CR-7)</td>
+            <td class="c"><span class="chip done">Built</span></td>
+            <td>
+              <code>config/colors.ts</code> black palette; splash on #121212
+            </td>
+            <td class="c">Medium</td>
+          </tr>
+          <tr>
+            <td>Frontend — 3D globe + welcome (CR-1/3)</td>
+            <td class="c"><span class="chip done">Built</span></td>
+            <td>
+              <code>app/(tabs)/globe.tsx</code>, WebView+Three.js,
+              <code>assets/globe.html</code>
+            </td>
+            <td class="c">Medium</td>
+          </tr>
+          <tr>
+            <td>Frontend — stats animation (CR-2)</td>
+            <td class="c"><span class="chip prog">Verify</span></td>
+            <td>
+              <code>components/welcome/</code> has only WelcomeScreen + dots —
+              <b>StatsAnimationScreen not where doc says</b>
+            </td>
+            <td class="c">Low</td>
+          </tr>
+          <tr>
+            <td>Frontend — API service layer</td>
+            <td class="c"><span class="chip done">Built</span></td>
+            <td>
+              13 files in <code>services/</code> w/ JWT refresh + mock fallback
+            </td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Backend — 12 modules</td>
+            <td class="c"><span class="chip done">Built</span></td>
+            <td><code>backend/src/modules/</code> all present (auth…admin)</td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Backend — DB schema</td>
+            <td class="c"><span class="chip prog">Un-run</span></td>
+            <td>
+              Migrations <code>001–008</code> exist; not yet applied to a
+              project
+            </td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Backend — credentials</td>
+            <td class="c"><span class="chip prog">Partial</span></td>
+            <td>
+              Supabase/Stripe/SMTP/Twilio/Didit set; JWT secret + Expo token
+              empty
+            </td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Backend — automated tests</td>
+            <td class="c"><span class="chip done">Present</span></td>
+            <td>5 unit spec suites + 1 e2e suite; e2e auto-skips w/o creds</td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Deployment (Railway)</td>
+            <td class="c"><span class="chip todo">Not started</span></td>
+            <td>No deploy config / live URL verified</td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Live FE↔BE integration</td>
+            <td class="c"><span class="chip todo">Not started</span></td>
+            <td>App still runs on mock fallback; no live run logged</td>
+            <td class="c">High</td>
+          </tr>
+          <tr>
+            <td>Real-device QA (iOS/Android)</td>
+            <td class="c"><span class="chip todo">Not started</span></td>
+            <td>Sprint note: "tested on iOS simulator only"</td>
+            <td class="c">High</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note warn">
+        <b>Doc drift to fix:</b> the sprint plan's Sprint 6 &amp; 7 are labelled
+        "IN PROGRESS" while every box under them is ticked; the CR callout says
+        "7 change requests" but lists 8; and Twilio/Didit integrations aren't
+        documented at all. The plan below treats the code as ground truth, not
+        the checkboxes.
+      </div>
+    </div>
+
+    <!-- ===================== 2. GAP ANALYSIS ===================== -->
+    <div class="section break">
+      <h2>2 · Gap Analysis — What Actually Remains</h2>
+      <p>
+        Five buckets of work stand between the current state and a
+        client-demoable, launch-track build.
+      </p>
+
+      <h3>G1 — Frontend verification &amp; hardening</h3>
+      <p>
+        Trust the code, not the checkboxes. Audit each of the 8 CRs against its
+        acceptance criteria, confirm the stats screen exists and is wired into
+        the welcome flow, and confirm the globe holds its 60fps / &lt;100MB
+        budget on real hardware (covered in QA).
+      </p>
+
+      <h3>G2 — Backend go-live</h3>
+      <p>
+        Apply the 8 migrations to the Supabase project, fill the two empty
+        secrets, verify all 12 modules boot, run the e2e suite against live
+        creds (it currently auto-skips), and deploy to Railway with a stable
+        public URL.
+      </p>
+
+      <h3>G3 — Live integration (remove the mock crutch)</h3>
+      <p>
+        Point the app at the deployed API, walk every role's flow against real
+        data, and confirm the graceful fallbacks stay as a safety net but are no
+        longer doing the heavy lifting. Validate the business rules (parent →
+        403 on discover, 11th basic swipe → 429, auto-downgrade on cancel).
+      </p>
+
+      <h3>G4 — Newly-discovered scope: Twilio + Didit</h3>
+      <p>
+        Phone verification and identity/KYC verification exist in the backend
+        but aren't in the sprint plan. They need their own test pass, frontend
+        wiring confirmation, and a documented decision on whether they're
+        in-scope for the client demo.
+      </p>
+
+      <h3>G5 — Cross-platform QA &amp; launch prep</h3>
+      <p>
+        Physical iOS + Android testing, performance budgets, EAS demo build, and
+        store-readiness items (icons, privacy policy, listings) — plus
+        reconciling the project docs with reality.
+      </p>
+    </div>
+
+    <!-- ===================== 3. WORK PLAN ===================== -->
+    <div class="section break">
+      <h2>3 · Work Plan</h2>
+      <p>
+        Four phases. Phases A and B run largely in parallel (different
+        surfaces), then converge at C. Estimates are working-hours for one
+        engineer; priority drives ordering within a phase.
+      </p>
+      <p class="legend">
+        Priority: <span class="chip high">High</span>
+        <span class="chip med">Medium</span>
+        <span class="chip low">Low</span> &nbsp;·&nbsp; "Done when" is the
+        acceptance bar for each task.
+      </p>
+
+      <!-- PHASE A -->
+      <div class="phaseband nobreak">
+        <span>Phase A · Frontend Verification &amp; Hardening</span
+        ><small>~16h · Week 1</small>
+      </div>
+      <table class="tight">
+        <thead>
+          <tr>
+            <th class="c" style="width: 7%">ID</th>
+            <th>Task</th>
+            <th class="c" style="width: 11%">Priority</th>
+            <th class="c" style="width: 8%">Est</th>
+            <th style="width: 32%">Done when</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="c">A1</td>
+            <td>
+              Audit CR-1/2/3 (globe, stats, globe tab) against acceptance
+              criteria; locate/confirm StatsAnimationScreen and welcome-flow
+              wiring
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">4h</td>
+            <td>
+              Welcome → globe → stats → auth flow runs; each criterion ticked
+              against real code
+            </td>
+          </tr>
+          <tr>
+            <td class="c">A2</td>
+            <td>
+              Audit CR-4/5/6/8 (Draft Board, Draft/Pass, Game On!, CEGEP) for
+              stray "Like/Match/Nope" copy &amp; CEGEP ordering in all 15 sports
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c">3h</td>
+            <td>
+              Grep finds zero legacy terms; CEGEP sits before U SPORTS
+              everywhere
+            </td>
+          </tr>
+          <tr>
+            <td class="c">A3</td>
+            <td>
+              Audit CR-7 dark theme — sweep every screen for "bright white"
+              leaks; confirm dark forced as default
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">3h</td>
+            <td>No #FFFFFF backgrounds; cards #1E1E1E; screenshots logged</td>
+          </tr>
+          <tr>
+            <td class="c">A4</td>
+            <td>
+              TypeScript + lint clean; fix any red squiggles introduced during
+              rebrand
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c">2h</td>
+            <td><code>tsc --noEmit</code> &amp; eslint pass with 0 errors</td>
+          </tr>
+          <tr>
+            <td class="c">A5</td>
+            <td>
+              Confirm service layer reads API origin from config (not hardcoded
+              localhost) for device builds
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">2h</td>
+            <td>API base resolves from env/app config; works off-localhost</td>
+          </tr>
+          <tr>
+            <td class="c">A6</td>
+            <td>
+              Fix doc drift: TODO.md / sprint labels / CR count reconciled to
+              reality
+            </td>
+            <td class="c"><span class="chip low">Low</span></td>
+            <td class="c">2h</td>
+            <td>Docs match code; Twilio/Didit documented</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- PHASE B -->
+      <div class="phaseband nobreak">
+        <span>Phase B · Backend Go-Live</span><small>~20h · Weeks 1–2</small>
+      </div>
+      <table class="tight">
+        <thead>
+          <tr>
+            <th class="c" style="width: 7%">ID</th>
+            <th>Task</th>
+            <th class="c" style="width: 11%">Priority</th>
+            <th class="c" style="width: 8%">Est</th>
+            <th style="width: 32%">Done when</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="c">B1</td>
+            <td>
+              Stand up Supabase project; run migrations 001–008; verify schema
+              (14 tables, enums, RLS)
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">4h</td>
+            <td>
+              All migrations apply clean; RLS policies active; tables match plan
+            </td>
+          </tr>
+          <tr>
+            <td class="c">B2</td>
+            <td>
+              Fill the two empty secrets — <code>SUPABASE_JWT_SECRET</code>,
+              <code>EXPO_ACCESS_TOKEN</code>; confirm all set keys are valid
+              (test mode where applicable)
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">2h</td>
+            <td>Backend boots with no missing-config errors; keys validated</td>
+          </tr>
+          <tr>
+            <td class="c">B3</td>
+            <td>
+              Local boot of all 12 modules; smoke each module's primary endpoint
+              via the executable API tests
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">3h</td>
+            <td>App starts; health + auth + discover endpoints return 200</td>
+          </tr>
+          <tr>
+            <td class="c">B4</td>
+            <td>
+              Run e2e suite against live Supabase (it auto-skips without creds
+              today)
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">3h</td>
+            <td>E2E suite executes (not skipped) and passes</td>
+          </tr>
+          <tr>
+            <td class="c">B5</td>
+            <td>
+              Configure Stripe products/prices (basic $0, starter $3, pro $7,
+              premium $15); wire price IDs; test checkout + webhook
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">4h</td>
+            <td>
+              Test-mode checkout completes; webhook updates subscription;
+              downgrade-on-cancel works
+            </td>
+          </tr>
+          <tr>
+            <td class="c">B6</td>
+            <td>
+              Deploy to Railway from <code>backend/</code>; set env; obtain
+              stable public URL; enable CORS for app
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">4h</td>
+            <td>Public URL responds; CORS allows app origin; logs clean</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section break">
+      <!-- PHASE C -->
+      <div class="phaseband nobreak">
+        <span>Phase C · Live Integration &amp; Cross-Platform QA</span
+        ><small>~24h · Weeks 2–4</small>
+      </div>
+      <table class="tight">
+        <thead>
+          <tr>
+            <th class="c" style="width: 7%">ID</th>
+            <th>Task</th>
+            <th class="c" style="width: 11%">Priority</th>
+            <th class="c" style="width: 8%">Est</th>
+            <th style="width: 32%">Done when</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="c">C1</td>
+            <td>
+              Point app at deployed API; run full flow per role (athlete,
+              parent, coach, recruiter) against live data
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">5h</td>
+            <td>
+              Each role completes signup → core action → chat on real data, no
+              mock fallback hit
+            </td>
+          </tr>
+          <tr>
+            <td class="c">C2</td>
+            <td>
+              Validate business rules: parent → 403 on discover; 11th basic
+              swipe → 429; auto-downgrade on cancel
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">3h</td>
+            <td>All three rules observed live with correct status codes/UX</td>
+          </tr>
+          <tr>
+            <td class="c">C3</td>
+            <td>
+              Verify Twilio phone verification &amp; Didit identity verification
+              end-to-end (newly-found scope)
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c">4h</td>
+            <td>
+              Real phone OTP + ID check pass on device; failure UX is sane
+            </td>
+          </tr>
+          <tr>
+            <td class="c">C4</td>
+            <td>
+              Real-time chat over Socket.IO against live backend (incl.
+              on-device, backgrounded app)
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">3h</td>
+            <td>Messages deliver &lt;2s both directions; reconnect works</td>
+          </tr>
+          <tr>
+            <td class="c">C5</td>
+            <td>
+              Physical-device QA: iPhone 12+ &amp; Pixel 6+ — globe 60fps /
+              &lt;100MB, cold-start &lt;8s, push notifications
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">5h</td>
+            <td>Budgets met on both platforms; push received on device</td>
+          </tr>
+          <tr>
+            <td class="c">C6</td>
+            <td>Bug-fix buffer from C1–C5 findings</td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">4h</td>
+            <td>P0/P1 bugs closed; P2 triaged with owners</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- PHASE D -->
+      <div class="phaseband nobreak">
+        <span>Phase D · Demo &amp; Launch Readiness</span
+        ><small>~14h · Weeks 4–5</small>
+      </div>
+      <table class="tight">
+        <thead>
+          <tr>
+            <th class="c" style="width: 7%">ID</th>
+            <th>Task</th>
+            <th class="c" style="width: 11%">Priority</th>
+            <th class="c" style="width: 8%">Est</th>
+            <th style="width: 32%">Done when</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="c">D1</td>
+            <td>
+              EAS demo build (internal distribution) for iOS + Android against
+              live backend
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">4h</td>
+            <td>Installable builds shared; launch clean on test devices</td>
+          </tr>
+          <tr>
+            <td class="c">D2</td>
+            <td>Client demo dry-run with a scripted happy-path per role</td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c">2h</td>
+            <td>Full demo runs without falling back to mock data</td>
+          </tr>
+          <tr>
+            <td class="c">D3</td>
+            <td>
+              Store-readiness checklist: app icons, splash, privacy policy,
+              listing copy, screenshots
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c">4h</td>
+            <td>iOS + Play listings drafted; assets exported</td>
+          </tr>
+          <tr>
+            <td class="c">D4</td>
+            <td>
+              Observability: backend logging/alerting + crash reporting (Sentry)
+              on the app
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c">3h</td>
+            <td>Errors visible in a dashboard; crash reports flow</td>
+          </tr>
+          <tr>
+            <td class="c">D5</td>
+            <td>
+              Handoff doc: runbook (deploy, rotate keys, restore), known issues,
+              backlog
+            </td>
+            <td class="c"><span class="chip low">Low</span></td>
+            <td class="c">1h</td>
+            <td>A new dev can deploy + operate from the doc alone</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note ok">
+        <b>Total: ~74 working-hours</b> across four phases. With one engineer at
+        a realistic pace that's ~5–6 calendar weeks; with frontend (A) and
+        backend (B) split across two people, the critical path compresses to ~4
+        weeks.
+      </div>
+    </div>
+
+    <!-- ===================== 4. TIMELINE ===================== -->
+    <div class="section break">
+      <h2>4 · Timeline &amp; Critical Path</h2>
+      <p>
+        Indicative 5-week schedule (single-engineer sequencing; A and B
+        interleave). Bars show the active phase each week.
+      </p>
+      <table class="tl">
+        <thead>
+          <tr>
+            <th style="width: 34%">Phase</th>
+            <th>Wk 1</th>
+            <th>Wk 2</th>
+            <th>Wk 3</th>
+            <th>Wk 4</th>
+            <th>Wk 5</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="lab">A · FE verification &amp; hardening</td>
+            <td><div class="bar a">A1–A6</div></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="lab">B · Backend go-live</td>
+            <td><div class="bar b">B1–B3</div></td>
+            <td><div class="bar b">B4–B6</div></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="lab">C · Live integration &amp; QA</td>
+            <td></td>
+            <td><div class="bar c">C1–C2</div></td>
+            <td><div class="bar c">C3–C4</div></td>
+            <td><div class="bar c">C5–C6</div></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="lab">D · Demo &amp; launch readiness</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td><div class="bar d">D1–D2</div></td>
+            <td><div class="bar d">D3–D5</div></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="legend">
+        Bars colored by phase. The hard dependency is
+        <b>B6 (deploy) → C1 (live integration)</b>; everything in C is blocked
+        until the backend has a public URL.
+      </div>
+
+      <h3>Critical path</h3>
+      <p style="font-size: 11px">
+        <b>B1</b> Supabase up → <b>B2</b> secrets → <b>B3</b> modules boot →
+        <b>B6</b> Railway deploy → <b>C1</b> live integration → <b>C5</b> device
+        QA → <b>C6</b> bug-fix → <b>D1</b> demo build → <b>D2</b> client demo.
+      </p>
+      <div class="note">
+        <b>Parallelizable:</b> all of Phase A and the Stripe/Twilio/Didit
+        verification (B5, C3) can proceed alongside the critical path. If two
+        people are available, put one on A+frontend integration and one on
+        B+infra.
+      </div>
+    </div>
+
+    <!-- ===================== 5. RISK REGISTER ===================== -->
+    <div class="section">
+      <h2>5 · Risk Register</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 30%">Risk</th>
+            <th class="c" style="width: 11%">Likelihood</th>
+            <th class="c" style="width: 11%">Impact</th>
+            <th>Mitigation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              Globe (WebView+Three.js) misses 60fps / &lt;100MB on mid-range
+              Android
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td>
+              Test early on Pixel 6+ (C5); have a static-globe fallback ready;
+              cap continent light count
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Requires native dev build — Three.js WebView crashes in Expo Go
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c"><span class="chip med">Med</span></td>
+            <td>
+              Standardize on <code>expo run:</code> dev/EAS builds; document;
+              never demo via Expo Go
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Live data exposes RLS / business-rule gaps the mock layer hid
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td>
+              C1–C2 explicitly test each role + rule against live creds; e2e
+              suite (B4) gates deploy
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Stripe webhooks fail silently in production (downgrade not firing)
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td>
+              Verify webhook signature + endpoint post-deploy (B5/B6); log every
+              subscription event (D4)
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Twilio/Didit are real paid integrations with quotas &amp; sandbox
+              quirks
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c"><span class="chip med">Med</span></td>
+            <td>
+              Use test phones/sandbox first (C3); confirm scope with client
+              before live KYC
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Secrets currently live in <code>.env</code> in the repo tree
+            </td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td class="c"><span class="chip high">High</span></td>
+            <td>
+              Confirm <code>.env</code> is git-ignored; rotate any committed
+              keys; move prod secrets to Railway vars
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Mock-fallback masks integration failures (looks like it works,
+              isn't)
+            </td>
+            <td class="c"><span class="chip med">Medium</span></td>
+            <td class="c"><span class="chip med">Med</span></td>
+            <td>
+              Add a dev flag to disable fallback during C1–C4 so failures
+              surface loudly
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note warn">
+        <b>Act on the secrets risk first.</b> Before anything else, confirm
+        <code>.env</code> is not tracked by git and rotate keys if it ever was.
+        (The repo's recent commits added a <code>.gitignore</code> entry for
+        <code>.env</code> — verify it took effect and no keys are in history.)
+      </div>
+    </div>
+
+    <!-- ===================== 6. DOD ===================== -->
+    <div class="section break">
+      <h2>6 · Definition of Done</h2>
+      <p>
+        The project is "demo-ready" when all of the following hold
+        simultaneously:
+      </p>
+      <ul class="clean">
+        <li>
+          All 8 CRs verified against acceptance criteria <b>in code</b>, not
+          just checked off — with screenshots.
+        </li>
+        <li>
+          Backend deployed to a stable public URL; all 12 modules boot; e2e
+          suite passes against live Supabase.
+        </li>
+        <li>
+          App runs end-to-end on the live API for all four roles with the mock
+          fallback <b>disabled</b>.
+        </li>
+        <li>
+          The three business rules (parent 403, basic-swipe 429, auto-downgrade)
+          observed live.
+        </li>
+        <li>Stripe test-mode checkout + webhook + downgrade verified.</li>
+        <li>
+          Globe meets 60fps / &lt;100MB / &lt;8s cold-start on a physical iPhone
+          12+ <b>and</b> Pixel 6+.
+        </li>
+        <li>
+          Push notifications received on a physical device for both platforms.
+        </li>
+        <li>
+          EAS demo builds installable on iOS + Android; scripted demo runs
+          without fallback.
+        </li>
+        <li>
+          Secrets out of the repo and into Railway vars;
+          <code>.env</code> git-ignored; keys rotated if exposed.
+        </li>
+        <li>
+          Docs (TODO/sprint/handoff) reconciled with the shipped reality, incl.
+          Twilio/Didit.
+        </li>
+      </ul>
+    </div>
+
+    <!-- ===================== 7. NEXT STEPS ===================== -->
+    <div class="section">
+      <h2>7 · Immediate Next Steps — This Week</h2>
+      <p>
+        Concrete, ordered, and small enough to start today. We can take these
+        together one at a time.
+      </p>
+      <table class="tight">
+        <thead>
+          <tr>
+            <th class="c" style="width: 6%">#</th>
+            <th>Action</th>
+            <th class="c" style="width: 14%">Maps to</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="c">1</td>
+            <td>
+              Confirm <code>.env</code> is git-ignored &amp; scan history for
+              leaked keys; rotate if needed
+            </td>
+            <td class="c">Risk / B2</td>
+          </tr>
+          <tr>
+            <td class="c">2</td>
+            <td>
+              Run <code>tsc --noEmit</code> + eslint on the app and backend;
+              capture the baseline error list
+            </td>
+            <td class="c">A4</td>
+          </tr>
+          <tr>
+            <td class="c">3</td>
+            <td>
+              Locate the stats-animation screen and trace the welcome → globe →
+              stats → auth flow
+            </td>
+            <td class="c">A1</td>
+          </tr>
+          <tr>
+            <td class="c">4</td>
+            <td>Stand up the Supabase project and run migrations 001–008</td>
+            <td class="c">B1</td>
+          </tr>
+          <tr>
+            <td class="c">5</td>
+            <td>
+              Fill <code>SUPABASE_JWT_SECRET</code> +
+              <code>EXPO_ACCESS_TOKEN</code>; boot the backend locally
+            </td>
+            <td class="c">B2/B3</td>
+          </tr>
+          <tr>
+            <td class="c">6</td>
+            <td>
+              Run the backend e2e suite against live creds and read the results
+              together
+            </td>
+            <td class="c">B4</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note ok">
+        <b>Suggested first move:</b> steps 1–3 are pure frontend/safety and need
+        no cloud setup — we can knock them out immediately while the Supabase
+        project (step 4) spins up.
+      </div>
+    </div>
+
+    <!-- ===================== 8. OPEN QUESTIONS ===================== -->
+    <div class="section">
+      <h2>8 · Open Questions</h2>
+      <ul class="clean">
+        <li>
+          <b>Demo scope:</b> are Twilio phone-verification and Didit ID/KYC
+          in-scope for the client demo, or deferred? (They exist in the backend
+          but not the sprint plan.)
+        </li>
+        <li>
+          <b>Hosting:</b> stay with Railway as planned, or has the target moved
+          (Render/Fly/Supabase Edge)?
+        </li>
+        <li>
+          <b>Pricing source of truth:</b> the sprint plan lists $0/$3/$7/$15
+          monthly; an older TODO lists annual $550/$250 figures. Which is
+          current for Stripe products?
+        </li>
+        <li>
+          <b>Coach role:</b> swipes on athletes per the plan, but no coach test
+          credentials exist — is coach in-scope for this milestone?
+        </li>
+        <li>
+          <b>Timeline:</b> is there a fixed client-demo date we're working back
+          from?
+        </li>
+      </ul>
+      <div class="footer">
+        <span>GetDraft · Project Work Plan</span
+        ><span>Confidential · June 5, 2026</span>
+      </div>
+    </div>
+  </body>
+</html>

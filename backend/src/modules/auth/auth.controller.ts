@@ -5,6 +5,7 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import {
   VerifyEmailDto,
+  ResendOtpDto,
   RefreshTokenDto,
   ForgotPasswordDto,
 } from './dto/verify-email.dto';
@@ -32,9 +33,16 @@ export class AuthController {
 
   @Public()
   @Post('verify-email')
-  @ApiOperation({ summary: 'Verify email with OTP token' })
+  @ApiOperation({ summary: 'Verify email with 6-digit OTP, returns session' })
   verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto.token);
+    return this.authService.verifyEmail(dto.email, dto.token);
+  }
+
+  @Public()
+  @Post('resend-otp')
+  @ApiOperation({ summary: 'Resend the signup OTP email' })
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.authService.resendOtp(dto.email);
   }
 
   @Public()

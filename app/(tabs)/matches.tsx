@@ -1,9 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { View, StyleSheet, Text, ScrollView, Pressable } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  View,
+  StyleSheet,
+  Text,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import { useSelector } from "react-redux";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import type { Socket } from "socket.io-client";
 import {
   useFonts,
   Poppins_500Medium,
@@ -11,12 +21,49 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
-import { brand, neutral, semantic, theme } from "@/config/colors";
+import { brand, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
-import { mockParentRecruiterOutreach } from "@/constants/parentData";
-import { mockAthleteMatches, AthleteMatch } from "@/constants/discoverData";
+import type { RecruiterParentOutreach } from "@/constants/parentData";
+import type { AthleteMatch } from "@/constants/discoverData";
 import { matchesService } from "@/services/matches";
 import { outreachService } from "@/services/outreach";
+import {
+  conversationsService,
+  type ConversationItem,
+} from "@/services/conversations";
+import { chatService } from "@/services/chat";
+
+type DraftBoardView = "matches" | "messages";
+
+function formatMessageTime(iso?: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const diffMs = Date.now() - date.getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "now";
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d`;
+  return date.toLocaleDateString();
+}
+
+function formatTimeAgo(iso?: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const diffMs = Date.now() - date.getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "Just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return date.toLocaleDateString();
+}
 
 export default function MatchesScreen() {
   const insets = useSafeAreaInsets();
@@ -32,48 +79,117 @@ export default function MatchesScreen() {
   const isParent = user?.role === "parent";
   const isAthlete = user?.role === "athlete";
 
-  const [apiMatches, setApiMatches] = useState<any[] | null>(null);
-  const [apiOutreach, setApiOutreach] = useState<any[] | null>(null);
+  const [view, setView] = useState<DraftBoardView>("matches");
+  const [athleteMatches, setAthleteMatches] = useState<AthleteMatch[]>([]);
+  const [parentMessages, setParentMessages] = useState<RecruiterParentOutreach[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [inbox, setInbox] = useState<ConversationItem[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxRefreshing, setInboxRefreshing] = useState(false);
+  const [inboxError, setInboxError] = useState(false);
+  const inboxLoadedOnce = useRef(false);
 
-  // Fetch matches/outreach from API
   useEffect(() => {
-    if (isParent) {
-      outreachService
-        .getOutreachList()
-        .then(setApiOutreach)
-        .catch(() => setApiOutreach(null));
-    } else {
-      matchesService
-        .getMatches()
-        .then(setApiMatches)
-        .catch(() => setApiMatches(null));
-    }
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    const fetcher = isParent
+      ? outreachService.getOutreachList()
+      : matchesService.getMatches();
+    fetcher
+      .then((rows) => {
+        if (cancelled) return;
+        if (isParent) setParentMessages((rows ?? []) as RecruiterParentOutreach[]);
+        else setAthleteMatches((rows ?? []) as AthleteMatch[]);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isParent]);
 
-  const parentMessages = useMemo(
-    () =>
-      apiOutreach ??
-      (isParent && user?.email
-        ? (mockParentRecruiterOutreach[user.email] ?? [])
-        : []),
-    [isParent, user?.email, apiOutreach],
-  );
-
-  const athleteMatches = useMemo(
-    () =>
-      apiMatches ??
-      (isAthlete && user?.email ? (mockAthleteMatches[user.email] ?? []) : []),
-    [isAthlete, user?.email, apiMatches],
-  );
-
   const totalUnread = useMemo(
-    () =>
-      athleteMatches.reduce(
-        (sum: number, m: any) => sum + (m.unreadCount || 0),
-        0,
-      ),
+    () => athleteMatches.reduce((sum, m) => sum + (m.unreadCount || 0), 0),
     [athleteMatches],
   );
+
+  const totalInboxUnread = useMemo(
+    () => inbox.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+    [inbox],
+  );
+
+  const loadInbox = useCallback(
+    async (mode: "initial" | "refresh" | "silent") => {
+      try {
+        if (mode === "initial") setInboxLoading(true);
+        if (mode === "refresh") setInboxRefreshing(true);
+        setInboxError(false);
+        const rows = await conversationsService.getInbox();
+        setInbox(rows ?? []);
+        inboxLoadedOnce.current = true;
+      } catch {
+        setInboxError(true);
+      } finally {
+        setInboxLoading(false);
+        setInboxRefreshing(false);
+      }
+    },
+    [],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (view !== "messages") return;
+      loadInbox(inboxLoadedOnce.current ? "silent" : "initial");
+    }, [view, loadInbox]),
+  );
+
+  // Live: bump the relevant row when a DM arrives.
+  useEffect(() => {
+    if (view !== "messages") return;
+    let cancelled = false;
+    let activeSocket: Socket | null = null;
+    const onNewDm = (msg: any) => {
+      if (cancelled || !msg?.conversationId) return;
+      const incomingFromMe = msg.senderId === user?.id;
+      setInbox((prev) => {
+        const idx = prev.findIndex((c) => c.id === msg.conversationId);
+        if (idx === -1) {
+          // New conversation we don't know about yet — refetch the inbox.
+          loadInbox("silent");
+          return prev;
+        }
+        const target = prev[idx];
+        const updated: ConversationItem = {
+          ...target,
+          lastMessage: msg.text ?? target.lastMessage,
+          lastMessageAt: msg.createdAt ?? target.lastMessageAt,
+          unreadCount:
+            incomingFromMe
+              ? target.unreadCount
+              : (target.unreadCount || 0) + 1,
+        };
+        const next = [updated, ...prev.filter((_, i) => i !== idx)];
+        return next;
+      });
+    };
+    chatService.connectSocket().then((s) => {
+      if (cancelled) return;
+      activeSocket = s;
+      s.off("new_dm", onNewDm);
+      s.on("new_dm", onNewDm);
+    });
+    return () => {
+      cancelled = true;
+      activeSocket?.off("new_dm", onNewDm);
+    };
+  }, [view, user?.id, loadInbox]);
 
   if (!fontsLoaded) return null;
 
@@ -83,14 +199,113 @@ export default function MatchesScreen() {
         <Text style={styles.title}>
           {isParent ? "Recruiter Outreach" : "Draft Board"}
         </Text>
-        {isAthlete && totalUnread > 0 && (
+        {view === "matches" && isAthlete && totalUnread > 0 && (
           <View style={styles.headerBadge}>
             <Text style={styles.headerBadgeText}>{totalUnread} new</Text>
           </View>
         )}
+        {view === "messages" && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.composeBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+            onPress={() => router.push("/new-message")}
+            accessibilityLabel="New message"
+          >
+            <Ionicons name="create-outline" size={18} color={brand.white} />
+          </Pressable>
+        )}
       </View>
 
-      {isParent ? (
+      <View style={styles.toggleWrap}>
+        <Pressable
+          onPress={() => setView("matches")}
+          style={({ pressed }) => [
+            styles.toggleBtn,
+            view === "matches" && styles.toggleBtnActive,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Ionicons
+            name="trophy"
+            size={14}
+            color={view === "matches" ? theme.accentText : theme.text}
+          />
+          <Text
+            style={[
+              styles.toggleText,
+              view === "matches" && styles.toggleTextActive,
+            ]}
+          >
+            Matches
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setView("messages")}
+          style={({ pressed }) => [
+            styles.toggleBtn,
+            view === "messages" && styles.toggleBtnActive,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Ionicons
+            name="chatbubbles"
+            size={14}
+            color={view === "messages" ? theme.accentText : theme.text}
+          />
+          <Text
+            style={[
+              styles.toggleText,
+              view === "messages" && styles.toggleTextActive,
+            ]}
+          >
+            Messages
+          </Text>
+          {totalInboxUnread > 0 && (
+            <View style={styles.toggleBadge}>
+              <Text style={styles.toggleBadgeText}>
+                {totalInboxUnread > 9 ? "9+" : totalInboxUnread}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
+
+      {view === "messages" ? (
+        <MessagesInbox
+          inbox={inbox}
+          loading={inboxLoading}
+          refreshing={inboxRefreshing}
+          error={inboxError}
+          insetsBottom={insets.bottom}
+          onRefresh={() => loadInbox("refresh")}
+          onCompose={() => router.push("/new-message")}
+          onOpen={(c) =>
+            router.push({
+              pathname: "/dm/[conversationId]",
+              params: {
+                conversationId: c.id,
+                otherName: c.otherUser.name,
+                otherAvatarUrl: c.otherUser.avatarUrl ?? "",
+                otherRole: c.otherUser.role ?? "",
+              },
+            })
+          }
+        />
+      ) : loading ? (
+        <View style={styles.content}>
+          <ActivityIndicator size="large" color={theme.text} />
+        </View>
+      ) : error ? (
+        <View style={styles.content}>
+          <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
+          <Text style={styles.emptySubtitle}>
+            Check your connection and try again.
+          </Text>
+        </View>
+      ) : isParent ? (
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
@@ -148,7 +363,7 @@ export default function MatchesScreen() {
                         />
                       )}
                     </View>
-                    <Text style={styles.sentAt}>{message.sentAt}</Text>
+                    <Text style={styles.sentAt}>{formatTimeAgo(message.sentAt)}</Text>
                   </View>
 
                   <Text style={styles.organization}>
@@ -205,7 +420,7 @@ export default function MatchesScreen() {
               />
               <Text style={styles.emptyTitle}>No drafts yet</Text>
               <Text style={styles.emptySubtitle}>
-                Start discovering to build your draft board
+                Keep scouting to build your draft board
               </Text>
               <Pressable
                 style={styles.discoverButton}
@@ -259,7 +474,7 @@ export default function MatchesScreen() {
                           />
                         )}
                       </View>
-                      <Text style={styles.sentAt}>{match.matchedAt}</Text>
+                      <Text style={styles.sentAt}>{formatTimeAgo(match.matchedAt)}</Text>
                     </View>
 
                     <Text style={styles.matchRoleRow}>
@@ -332,6 +547,126 @@ export default function MatchesScreen() {
   );
 }
 
+function MessagesInbox({
+  inbox,
+  loading,
+  refreshing,
+  error,
+  insetsBottom,
+  onRefresh,
+  onCompose,
+  onOpen,
+}: {
+  inbox: ConversationItem[];
+  loading: boolean;
+  refreshing: boolean;
+  error: boolean;
+  insetsBottom: number;
+  onRefresh: () => void;
+  onCompose: () => void;
+  onOpen: (c: ConversationItem) => void;
+}) {
+  if (loading) {
+    return (
+      <View style={styles.content}>
+        <ActivityIndicator size="large" color={theme.text} />
+      </View>
+    );
+  }
+  if (error) {
+    return (
+      <View style={styles.content}>
+        <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
+        <Text style={styles.emptyTitle}>Couldn&apos;t load messages</Text>
+      </View>
+    );
+  }
+  if (inbox.length === 0) {
+    return (
+      <View style={styles.content}>
+        <Ionicons name="mail-outline" size={64} color={theme.textMuted} />
+        <Text style={styles.emptyTitle}>No messages yet</Text>
+        <Text style={styles.emptySubtitle}>Start a conversation.</Text>
+        <Pressable style={styles.discoverButton} onPress={onCompose}>
+          <Ionicons name="create-outline" size={18} color={theme.accentText} />
+          <Text style={styles.discoverButtonText}>New message</Text>
+        </Pressable>
+      </View>
+    );
+  }
+  return (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={[
+        styles.inboxContent,
+        { paddingBottom: insetsBottom + 24 },
+      ]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={theme.text}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      {inbox.map((c) => (
+        <Pressable
+          key={c.id}
+          onPress={() => onOpen(c)}
+          style={({ pressed }) => [
+            styles.inboxRow,
+            pressed && styles.cardPressed,
+          ]}
+        >
+          {c.otherUser.avatarUrl ? (
+            <ExpoImage
+              source={{ uri: c.otherUser.avatarUrl }}
+              style={styles.inboxAvatar}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.inboxAvatar, styles.inboxAvatarFallback]}>
+              <Ionicons name="person" size={18} color={theme.textMuted} />
+            </View>
+          )}
+          <View style={styles.inboxText}>
+            <View style={styles.inboxTopRow}>
+              <Text style={styles.inboxName} numberOfLines={1}>
+                {c.otherUser.name || "Unnamed"}
+              </Text>
+              <Text style={styles.inboxTime}>
+                {formatMessageTime(c.lastMessageAt)}
+              </Text>
+            </View>
+            <View style={styles.inboxBottomRow}>
+              <Text
+                style={[
+                  styles.inboxPreview,
+                  c.unreadCount > 0 && styles.inboxPreviewUnread,
+                ]}
+                numberOfLines={1}
+              >
+                {c.lastMessage || "Tap to start the conversation"}
+              </Text>
+              {c.unreadCount > 0 && (
+                <View style={styles.inboxUnreadBadge}>
+                  <Text style={styles.inboxUnreadText}>
+                    {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {c.otherUser.role ? (
+              <Text style={styles.inboxRole}>{c.otherUser.role}</Text>
+            ) : null}
+          </View>
+        </Pressable>
+      ))}
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -346,6 +681,145 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  composeBtn: {
+    marginLeft: "auto",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  toggleWrap: {
+    flexDirection: "row",
+    gap: 6,
+    backgroundColor: theme.surface,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  toggleBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.accent,
+  },
+  toggleText: {
+    fontSize: 12,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  toggleTextActive: {
+    color: theme.accentText,
+  },
+  toggleBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    backgroundColor: semantic.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toggleBadgeText: {
+    color: brand.white,
+    fontSize: 10,
+    fontFamily: "Poppins_700Bold",
+  },
+  inboxContent: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    gap: 6,
+  },
+  inboxRow: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: theme.cardBg,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+  },
+  inboxAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: theme.surface,
+  },
+  inboxAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  inboxText: {
+    flex: 1,
+  },
+  inboxTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  inboxName: {
+    fontSize: 14,
+    fontFamily: "Poppins_700Bold",
+    color: theme.text,
+    flexShrink: 1,
+  },
+  inboxTime: {
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: theme.textMuted,
+  },
+  inboxBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  inboxPreview: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
+  },
+  inboxPreviewUnread: {
+    color: theme.text,
+    fontFamily: "Poppins_600SemiBold",
+  },
+  inboxUnreadBadge: {
+    minWidth: 22,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    backgroundColor: semantic.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inboxUnreadText: {
+    color: brand.white,
+    fontSize: 11,
+    fontFamily: "Poppins_700Bold",
+  },
+  inboxRole: {
+    marginTop: 2,
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: theme.textMuted,
+    textTransform: "capitalize",
   },
   title: {
     fontSize: 24,

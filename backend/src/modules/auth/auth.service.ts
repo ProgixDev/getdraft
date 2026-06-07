@@ -76,19 +76,53 @@ export class AuthService {
     };
   }
 
-  async verifyEmail(token: string) {
+  async verifyEmail(email: string, token: string) {
     const supabase = this.supabaseService.getClient();
 
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash: token,
-      type: 'email',
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'signup',
+    });
+
+    if (error || !data?.session || !data?.user) {
+      throw new BadRequestException(error?.message ?? 'Invalid or expired code');
+    }
+
+    // Pull the user row (created by the auth trigger on signUp) for role/name/onboarding state.
+    const adminClient = this.supabaseService.getAdminClient();
+    const { data: userData } = await adminClient
+      .from('users')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email!,
+        role: (userData?.role as UserRole) || UserRole.ATHLETE,
+        name: userData?.name || data.user.user_metadata?.name || '',
+      },
+      isOnboarded: userData?.is_onboarded || false,
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+    };
+  }
+
+  async resendOtp(email: string) {
+    const supabase = this.supabaseService.getClient();
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
     });
 
     if (error) {
       throw new BadRequestException(error.message);
     }
 
-    return { message: 'Email verified successfully' };
+    return { message: 'Verification code sent' };
   }
 
   async refreshToken(refreshToken: string) {

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,19 +23,42 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
-import {
-  mockParentChatThreads,
-  ParentChatMessage,
-} from "@/constants/parentData";
 import { chatService } from "@/services/chat";
+import type { Socket } from "socket.io-client";
 
-export default function ParentChatScreen() {
+type ChatMessage = {
+  id: string;
+  mine: boolean;
+  text: string;
+  sentAt: string;
+};
+
+type ChatHeader = {
+  recruiterName: string;
+  recruiterRole: string;
+  organization: string;
+  verified: boolean;
+};
+
+function formatTime(iso?: string): string {
+  if (!iso) return "Now";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Now";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
   const { threadId } = useLocalSearchParams<{ threadId?: string }>();
+  const matchId = threadId ? String(threadId) : null;
+
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<ParentChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [header, setHeader] = useState<ChatHeader | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -43,96 +67,132 @@ export default function ParentChatScreen() {
     Poppins_700Bold,
   });
 
-  const thread = useMemo(
-    () => (threadId ? mockParentChatThreads[String(threadId)] : undefined),
-    [threadId],
-  );
-
-  // Load messages from API, fallback to mock
   useEffect(() => {
-    if (!threadId) return;
-    chatService
-      .getMessages(String(threadId))
-      .then((res) => {
-        const apiMessages = (res.messages || res || []).map((m: any) => ({
-          id: m.id,
-          sender: m.sender_id === user?.id ? "parent" : "recruiter",
-          text: m.text,
-          sentAt: m.created_at || "Now",
-        }));
-        if (apiMessages.length > 0) {
-          setMessages(apiMessages);
-        } else {
-          setMessages(thread?.messages ?? []);
+    if (!matchId || !user?.id) return;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(false);
+
+    Promise.all([
+      chatService
+        .getThreads()
+        .then((rows) =>
+          (rows ?? []).find((r: any) => r.id === matchId) ?? null,
+        )
+        .catch(() => null),
+      chatService.getMessages(matchId),
+    ])
+      .then(([h, msgs]) => {
+        if (cancelled) return;
+        if (h) {
+          setHeader({
+            recruiterName: h.recruiterName ?? "",
+            recruiterRole: h.recruiterRole ?? "",
+            organization: h.organization ?? "",
+            verified: !!h.verified,
+          });
         }
+        const list = Array.isArray(msgs) ? msgs : (msgs?.messages ?? []);
+        setMessages(
+          (list ?? []).map((m: any) => ({
+            id: String(m.id),
+            mine: m.sender_id === user.id,
+            text: m.text ?? "",
+            sentAt: formatTime(m.created_at),
+          })),
+        );
+        setLoading(false);
       })
       .catch(() => {
-        setMessages(thread?.messages ?? []);
+        if (cancelled) return;
+        setLoadError(true);
+        setLoading(false);
       });
 
-    // Connect WebSocket
-    if (user?.id) {
-      chatService.connectSocket(user.id).then(() => {
-        chatService.joinThread(String(threadId));
-        const socket = chatService.getSocket();
-        socket?.on("new_message", (msg: any) => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: msg.id,
-              sender: msg.senderId === user?.id ? "parent" : "recruiter",
-              text: msg.text,
-              sentAt: msg.createdAt || "Now",
-            },
-          ]);
-        });
+    chatService.markRead(matchId).catch(() => {});
+
+    let activeSocket: Socket | null = null;
+    const onNewMessage = (msg: any) => {
+      if (cancelled) return;
+      const realId = String(msg.id ?? `live-${Date.now()}`);
+      const mine = msg.senderId === user.id || msg.sender_id === user.id;
+      const incoming: ChatMessage = {
+        id: realId,
+        mine,
+        text: msg.text ?? "",
+        sentAt: formatTime(msg.createdAt ?? msg.created_at),
+      };
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === realId)) return prev;
+        if (mine) {
+          const i = prev.findIndex(
+            (m) => m.id.startsWith("local-") || m.id.startsWith("call-"),
+          );
+          if (i !== -1) {
+            const copy = [...prev];
+            copy[i] = incoming;
+            return copy;
+          }
+        }
+        return [...prev, incoming];
       });
-    }
+    };
+
+    chatService.connectSocket().then((s) => {
+      if (cancelled) return;
+      activeSocket = s;
+      s.off("new_message", onNewMessage);
+      s.on("new_message", onNewMessage);
+      const joinNow = () => chatService.joinThread(matchId);
+      if (s.connected) joinNow();
+      s.on("connect", joinNow);
+    });
 
     return () => {
-      if (threadId) chatService.leaveThread(String(threadId));
+      cancelled = true;
+      chatService.leaveThread(matchId);
+      activeSocket?.off("new_message", onNewMessage);
     };
-  }, [threadId, user?.id]);
+  }, [matchId, user?.id]);
 
   const handleSend = () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || !matchId) return;
 
-    // Send via WebSocket (real-time) or REST fallback
-    const socket = chatService.getSocket();
-    if (socket?.connected && threadId) {
-      chatService.sendSocketMessage(String(threadId), text);
-    } else if (threadId) {
-      chatService.sendMessage(String(threadId), text).catch(() => {});
-    }
-
+    const optimisticId = `local-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
-      {
-        id: `local-${Date.now()}`,
-        sender: "parent",
-        text,
-        sentAt: "Now",
-      },
+      { id: optimisticId, mine: true, text, sentAt: "Now" },
     ]);
     setDraft("");
+
+    const socket = chatService.getSocket();
+    if (socket?.connected) {
+      chatService.sendSocketMessage(matchId, text);
+    } else {
+      chatService.sendMessage(matchId, text).catch(() => {});
+    }
   };
 
   const handleAskForCall = () => {
+    if (!matchId) return;
+    const text =
+      "Would you be available for a quick call this week to discuss next steps?";
     setMessages((prev) => [
       ...prev,
-      {
-        id: `call-${Date.now()}`,
-        sender: "parent",
-        text: "Would you be available for a quick call this week to discuss next steps?",
-        sentAt: "Now",
-      },
+      { id: `call-${Date.now()}`, mine: true, text, sentAt: "Now" },
     ]);
+    const socket = chatService.getSocket();
+    if (socket?.connected) {
+      chatService.sendSocketMessage(matchId, text);
+    } else {
+      chatService.sendMessage(matchId, text).catch(() => {});
+    }
   };
 
   if (!fontsLoaded) return null;
 
-  if (!thread || user?.role !== "parent") {
+  if (!matchId) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: insets.top + 20 }]}>
         <Ionicons
@@ -148,6 +208,12 @@ export default function ParentChatScreen() {
     );
   }
 
+  const headerTitle = header?.recruiterName || "Conversation";
+  const headerSubtitle =
+    header && (header.recruiterRole || header.organization)
+      ? [header.recruiterRole, header.organization].filter(Boolean).join(" • ")
+      : "";
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
@@ -162,8 +228,8 @@ export default function ParentChatScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>{thread.recruiterName}</Text>
-            {thread.verified && (
+            <Text style={styles.headerTitle}>{headerTitle}</Text>
+            {header?.verified && (
               <Ionicons
                 name="checkmark-circle"
                 size={16}
@@ -171,10 +237,9 @@ export default function ParentChatScreen() {
               />
             )}
           </View>
-          <Text style={styles.headerSubtitle}>
-            {thread.recruiterRole} • {thread.organization}
-          </Text>
-          <Text style={styles.headerChild}>Regarding {thread.childName}</Text>
+          {headerSubtitle ? (
+            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
+          ) : null}
         </View>
         <View style={styles.headerIconButton} />
       </View>
@@ -186,38 +251,58 @@ export default function ParentChatScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
-        style={styles.messagesScroll}
-        contentContainerStyle={[
-          styles.messagesContent,
-          { paddingBottom: insets.bottom + 18 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {messages.map((message) => {
-          const isParentMessage = message.sender === "parent";
-          return (
+      {loading ? (
+        <View style={styles.centerWrap}>
+          <ActivityIndicator size="large" color={theme.text} />
+        </View>
+      ) : loadError ? (
+        <View style={styles.centerWrap}>
+          <Ionicons
+            name="warning-outline"
+            size={48}
+            color={theme.textMuted}
+          />
+          <Text style={styles.emptyMsgTitle}>Couldn&apos;t load messages</Text>
+        </View>
+      ) : messages.length === 0 ? (
+        <View style={styles.centerWrap}>
+          <Ionicons
+            name="chatbubbles-outline"
+            size={56}
+            color={theme.textMuted}
+          />
+          <Text style={styles.emptyMsgTitle}>No messages yet</Text>
+          <Text style={styles.emptyMsgSubtitle}>
+            Say hello to get the conversation started.
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.messagesScroll}
+          contentContainerStyle={[
+            styles.messagesContent,
+            { paddingBottom: insets.bottom + 18 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {messages.map((message) => (
             <View
               key={message.id}
               style={[
                 styles.bubbleRow,
-                isParentMessage ? styles.bubbleRowRight : styles.bubbleRowLeft,
+                message.mine ? styles.bubbleRowRight : styles.bubbleRowLeft,
               ]}
             >
               <View
                 style={[
                   styles.bubble,
-                  isParentMessage
-                    ? styles.parentBubble
-                    : styles.recruiterBubble,
+                  message.mine ? styles.mineBubble : styles.theirBubble,
                 ]}
               >
                 <Text
                   style={[
                     styles.bubbleText,
-                    isParentMessage
-                      ? styles.parentBubbleText
-                      : styles.recruiterBubbleText,
+                    message.mine ? styles.mineBubbleText : styles.theirBubbleText,
                   ]}
                 >
                   {message.text}
@@ -225,18 +310,16 @@ export default function ParentChatScreen() {
                 <Text
                   style={[
                     styles.timeText,
-                    isParentMessage
-                      ? styles.parentTimeText
-                      : styles.recruiterTimeText,
+                    message.mine ? styles.mineTimeText : styles.theirTimeText,
                   ]}
                 >
                   {message.sentAt}
                 </Text>
               </View>
             </View>
-          );
-        })}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
 
       <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
         <View style={styles.inputWrap}>
@@ -296,11 +379,6 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_500Medium",
     color: theme.textSecondary,
   },
-  headerChild: {
-    fontSize: 11,
-    fontFamily: "Poppins_400Regular",
-    color: theme.textMuted,
-  },
   actionsBar: {
     backgroundColor: theme.headerBg,
     borderBottomWidth: 1,
@@ -326,6 +404,25 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
   },
+  centerWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 24,
+  },
+  emptyMsgTitle: {
+    marginTop: 4,
+    fontSize: 17,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  emptyMsgSubtitle: {
+    fontSize: 13,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
+    textAlign: "center",
+  },
   messagesScroll: {
     flex: 1,
   },
@@ -349,12 +446,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
-  recruiterBubble: {
+  theirBubble: {
     backgroundColor: theme.surface,
     borderWidth: 1,
     borderColor: theme.cardBorder,
   },
-  parentBubble: {
+  mineBubble: {
     backgroundColor: brand.primary,
   },
   bubbleText: {
@@ -362,10 +459,10 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontFamily: "Poppins_400Regular",
   },
-  recruiterBubbleText: {
+  theirBubbleText: {
     color: theme.text,
   },
-  parentBubbleText: {
+  mineBubbleText: {
     color: brand.white,
   },
   timeText: {
@@ -373,10 +470,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Poppins_500Medium",
   },
-  recruiterTimeText: {
+  theirTimeText: {
     color: theme.textMuted,
   },
-  parentTimeText: {
+  mineTimeText: {
     color: "rgba(255,255,255,0.85)",
   },
   composer: {

@@ -23,7 +23,6 @@ import { brand, neutral, theme } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { getCitiesForCountry } from "@/constants/citiesData";
 import { findCountryByName } from "@/constants/countryData";
-import { mockAthletes } from "@/constants/discoverData";
 import { RootState } from "@/store";
 import {
   DiscoverPreferences,
@@ -209,14 +208,9 @@ export default function PreferencesScreen() {
       return [{ label: "Any Position", value: "all" }];
     }
 
-    const positions = new Set<string>(selectedSport.positions);
-    mockAthletes
-      .filter((athlete) => athlete.sport === preferences.sport)
-      .forEach((athlete) => positions.add(athlete.position));
-
     return [
       { label: "Any Position", value: "all" },
-      ...Array.from(positions).map((position) => ({
+      ...selectedSport.positions.map((position) => ({
         label: position,
         value: position,
       })),
@@ -228,14 +222,9 @@ export default function PreferencesScreen() {
       return [{ label: "Any Athletic Level", value: "all" }];
     }
 
-    const levels = new Set<string>(selectedSport.levels);
-    mockAthletes
-      .filter((athlete) => athlete.sport === preferences.sport)
-      .forEach((athlete) => levels.add(athlete.level));
-
     return [
       { label: "Any Athletic Level", value: "all" },
-      ...Array.from(levels).map((level) => ({ label: level, value: level })),
+      ...selectedSport.levels.map((level) => ({ label: level, value: level })),
     ];
   }, [preferences.sport, selectedSport]);
 

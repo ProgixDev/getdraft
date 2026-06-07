@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsNumber,
   IsArray,
+  IsDateString,
   Min,
   Max,
 } from 'class-validator';
@@ -72,4 +73,24 @@ export class UpsertAthleteProfileDto {
   @IsArray()
   @IsString({ each: true })
   videos?: string[];
+
+  @ApiPropertyOptional({ example: '2008-03-14', description: 'ISO YYYY-MM-DD' })
+  @IsOptional()
+  @IsDateString()
+  date_of_birth?: string;
+
+  @ApiPropertyOptional({ example: 'Man' })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiPropertyOptional({ example: '5' })
+  @IsOptional()
+  @IsString()
+  experience?: string;
+
+  @ApiPropertyOptional({ example: '10' })
+  @IsOptional()
+  @IsString()
+  jersey_number?: string;
 }

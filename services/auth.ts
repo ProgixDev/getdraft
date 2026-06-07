@@ -44,8 +44,18 @@ export const authService = {
     return result;
   },
 
-  async verifyEmail(token: string): Promise<void> {
-    await api.post("/auth/verify-email", { token });
+  async verifyEmail(email: string, token: string): Promise<AuthResponse> {
+    const { data } = await api.post("/auth/verify-email", { email, token });
+    const result: AuthResponse = data.data;
+    await saveTokens({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
+    return result;
+  },
+
+  async resendOtp(email: string): Promise<void> {
+    await api.post("/auth/resend-otp", { email });
   },
 
   async forgotPassword(email: string): Promise<void> {

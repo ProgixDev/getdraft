@@ -150,21 +150,39 @@ describe('AuthService', () => {
   });
 
   describe('verifyEmail', () => {
-    it('should verify email token successfully', async () => {
-      mockClient.auth.verifyOtp.mockResolvedValue({ error: null });
+    it('should verify OTP and return a session', async () => {
+      mockClient.auth.verifyOtp.mockResolvedValue({
+        data: {
+          user: { id: 'user-1', email: 'test@example.com', user_metadata: {} },
+          session: {
+            access_token: 'access-token',
+            refresh_token: 'refresh-token',
+          },
+        },
+        error: null,
+      });
+      mockAdminClient.from.mockReturnValue(
+        createChain({
+          data: { role: 'athlete', name: 'Test User', is_onboarded: false },
+        }),
+      );
 
-      const result = await service.verifyEmail('valid-token');
-      expect(result.message).toBe('Email verified successfully');
+      const result = await service.verifyEmail('test@example.com', '123456');
+      expect(result.user.id).toBe('user-1');
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.isOnboarded).toBe(false);
     });
 
-    it('should throw on invalid token', async () => {
+    it('should throw on invalid OTP', async () => {
       mockClient.auth.verifyOtp.mockResolvedValue({
+        data: { user: null, session: null },
         error: { message: 'Invalid token' },
       });
 
-      await expect(service.verifyEmail('invalid')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.verifyEmail('test@example.com', 'invalid'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
