@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -13,7 +14,6 @@ import {
   CurrentUserPayload,
   UserRole,
   SwipeDirection,
-  PlanId,
 } from '../../common/types';
 
 @Injectable()
@@ -265,9 +265,36 @@ export class DiscoverService {
           matched = true;
           matchId = match.id;
         } catch (e) {
-          this.logger.warn(
-            `Match creation failed for ${user1}/${user2}: ${(e as Error).message}`,
-          );
+          // Unique violation = an active match already exists for this pair
+          // (backfill, race between both sides swiping, or a previous successful
+          // insert). Fetch the existing row and treat the swipe as matched.
+          if (
+            e instanceof Prisma.PrismaClientKnownRequestError &&
+            e.code === 'P2002'
+          ) {
+            const existing = await this.prisma.matches.findFirst({
+              where: { user_1_id: user1, user_2_id: user2 },
+              select: { id: true, is_active: true },
+            });
+            if (existing) {
+              if (!existing.is_active) {
+                await this.prisma.matches.update({
+                  where: { id: existing.id },
+                  data: { is_active: true },
+                });
+              }
+              matched = true;
+              matchId = existing.id;
+            }
+          } else {
+            // Any other failure (check constraint, FK, RLS, connection) is a
+            // genuine bug. Surface it loudly so it can't silently regress.
+            this.logger.error(
+              `matches.create failed for ${user1}/${user2}`,
+              (e as Error).stack,
+            );
+            throw e;
+          }
         }
       }
     }
@@ -276,21 +303,112 @@ export class DiscoverService {
     return { matched, matchId, swipesRemaining };
   }
 
-  async whoDraftedMe(userId: string) {
-    const sub = await this.prisma.subscriptions.findUnique({
-      where: { user_id: userId },
-      select: { plan_id: true },
-    });
-
-    const planId = (sub?.plan_id as PlanId) || PlanId.BASIC;
-    if (planId !== PlanId.PRO && planId !== PlanId.PREMIUM) {
-      throw new ForbiddenException(
-        'Upgrade to Pro or Premium to see who drafted you',
-      );
+  async myDrafts(user: CurrentUserPayload) {
+    if (user.role === UserRole.PARENT) {
+      throw new ForbiddenException('Parents do not have a draft list');
     }
 
+    const userId = user.id;
+
+    const [outgoing, activeMatches] = await Promise.all([
+      this.prisma.swipes.findMany({
+        where: {
+          swiper_id: userId,
+          direction: SwipeDirection.DRAFT,
+        },
+        select: {
+          swiped_id: true,
+          created_at: true,
+          users_swipes_swiped_idTousers: {
+            select: {
+              id: true,
+              name: true,
+              avatar_url: true,
+              role: true,
+              location: true,
+            },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 50,
+      }),
+      this.prisma.matches.findMany({
+        where: {
+          is_active: true,
+          OR: [{ user_1_id: userId }, { user_2_id: userId }],
+        },
+        select: { user_1_id: true, user_2_id: true },
+      }),
+    ]);
+
+    const matchedSet = new Set<string>(
+      activeMatches.map((m) =>
+        m.user_1_id === userId ? m.user_2_id : m.user_1_id,
+      ),
+    );
+
+    return outgoing.map((r) => ({
+      swiped_id: r.swiped_id,
+      created_at: r.created_at,
+      swiped: r.users_swipes_swiped_idTousers,
+      matched: matchedSet.has(r.swiped_id),
+    }));
+  }
+
+  async withdrawDraft(userId: string, targetUserId: string) {
+    const [u1, u2] =
+      userId < targetUserId ? [userId, targetUserId] : [targetUserId, userId];
+
+    const activeMatch = await this.prisma.matches.findFirst({
+      where: { user_1_id: u1, user_2_id: u2, is_active: true },
+      select: { id: true },
+    });
+    if (activeMatch) {
+      throw new ConflictException('Already matched — cannot withdraw');
+    }
+
+    const { count } = await this.prisma.swipes.deleteMany({
+      where: {
+        swiper_id: userId,
+        swiped_id: targetUserId,
+        direction: SwipeDirection.DRAFT,
+      },
+    });
+    if (count === 0) {
+      throw new NotFoundException('No pending draft to withdraw');
+    }
+
+    return { withdrawn: true };
+  }
+
+  async whoDraftedMe(userId: string) {
+    const [mySwiped, blocked, blockedBy] = await Promise.all([
+      this.prisma.swipes.findMany({
+        where: { swiper_id: userId },
+        select: { swiped_id: true },
+      }),
+      this.prisma.blocks.findMany({
+        where: { blocker_id: userId },
+        select: { blocked_id: true },
+      }),
+      this.prisma.blocks.findMany({
+        where: { blocked_id: userId },
+        select: { blocker_id: true },
+      }),
+    ]);
+
+    const excludeSwiperIds = [
+      ...mySwiped.map((s) => s.swiped_id),
+      ...blocked.map((b) => b.blocked_id),
+      ...blockedBy.map((b) => b.blocker_id),
+    ];
+
     const rows = await this.prisma.swipes.findMany({
-      where: { swiped_id: userId, direction: SwipeDirection.DRAFT },
+      where: {
+        swiped_id: userId,
+        direction: SwipeDirection.DRAFT,
+        swiper_id: { notIn: excludeSwiperIds },
+      },
       select: {
         swiped_id: true,
         created_at: true,

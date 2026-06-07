@@ -39,7 +39,7 @@ interface AthleteCardProps {
   onTriggerHandled?: () => void;
 }
 
-export function AthleteCard({
+function AthleteCardImpl({
   athlete,
   absoluteIndex,
   isFocused,
@@ -148,7 +148,8 @@ export function AthleteCard({
           style={styles.media}
           contentFit="cover"
           cachePolicy="memory-disk"
-          transition={120}
+          transition={0}
+          priority="high"
           recyclingKey={String(athlete.id)}
         />
       );
@@ -272,6 +273,10 @@ export function AthleteCard({
     </GestureDetector>
   );
 }
+
+// Memoized so changing currentIndex doesn't re-render every visible card —
+// only the focus-flipping ones whose props actually changed.
+export const AthleteCard = React.memo(AthleteCardImpl);
 
 const styles = StyleSheet.create({
   card: {

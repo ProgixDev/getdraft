@@ -50,4 +50,14 @@ export const discoverService = {
     const { data } = await api.get("/discover/who-drafted-me");
     return data.data;
   },
+
+  async myDrafts(): Promise<any[]> {
+    const { data } = await api.get("/discover/my-drafts");
+    return data.data;
+  },
+
+  async withdrawDraft(targetUserId: string): Promise<{ withdrawn: boolean }> {
+    const { data } = await api.delete(`/discover/drafts/${targetUserId}`);
+    return data.data;
+  },
 };

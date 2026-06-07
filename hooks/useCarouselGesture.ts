@@ -156,41 +156,28 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
 
       if (shouldDraft) {
         runOnJS(lightImpact)();
+        // Advance the index NOW — the new card becomes focused/interactive
+        // on the JS thread immediately, while the old card's translateY
+        // continues animating off-screen on the UI thread.
+        runOnJS(onSwipeRight)();
         if (reducedMotion) {
-          translateY.value = withTiming(
-            -screenHeight * 0.3,
-            { duration: 180 },
-            (f) => {
-              if (f) runOnJS(onSwipeRight)();
-            },
-          );
+          translateY.value = withTiming(-screenHeight * 0.3, { duration: 180 });
         } else {
-          translateY.value = withSpring(
-            -screenHeight * 1.2,
-            { damping: 15 },
-            () => {
-              runOnJS(onSwipeRight)();
-            },
-          );
+          translateY.value = withSpring(-screenHeight * 1.2, {
+            damping: 22,
+            stiffness: 200,
+          });
         }
       } else if (shouldPass) {
         runOnJS(lightImpact)();
+        runOnJS(onSwipeLeft)();
         if (reducedMotion) {
-          translateY.value = withTiming(
-            screenHeight * 0.3,
-            { duration: 180 },
-            (f) => {
-              if (f) runOnJS(onSwipeLeft)();
-            },
-          );
+          translateY.value = withTiming(screenHeight * 0.3, { duration: 180 });
         } else {
-          translateY.value = withSpring(
-            screenHeight * 1.2,
-            { damping: 15 },
-            () => {
-              runOnJS(onSwipeLeft)();
-            },
-          );
+          translateY.value = withSpring(screenHeight * 1.2, {
+            damping: 22,
+            stiffness: 200,
+          });
         }
       } else {
         translateY.value = withSpring(0, { damping: 15 });
@@ -199,47 +186,25 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
 
   const gesture = Gesture.Race(horizontalPan, verticalPan);
 
-  // Button-driven trigger (draft/pass)
+  // Button-driven trigger (draft/pass). Same instant-advance pattern as the
+  // gesture path: kick the index over right away so the next card is alive.
   useEffect(() => {
     if (!isFocused || !trigger) return;
     onTriggerHandled?.();
     lightImpact();
-    if (trigger === "draft") {
-      if (reducedMotion) {
-        translateY.value = withTiming(
-          -screenHeight * 0.3,
-          { duration: 180 },
-          (f) => {
-            if (f) runOnJS(onSwipeRight)();
-          },
-        );
-      } else {
-        translateY.value = withSpring(
-          -screenHeight * 1.2,
-          { damping: 15 },
-          () => {
-            runOnJS(onSwipeRight)();
-          },
-        );
-      }
+    const isDraft = trigger === "draft";
+    if (isDraft) onSwipeRight();
+    else onSwipeLeft();
+    if (reducedMotion) {
+      translateY.value = withTiming(
+        isDraft ? -screenHeight * 0.3 : screenHeight * 0.3,
+        { duration: 180 },
+      );
     } else {
-      if (reducedMotion) {
-        translateY.value = withTiming(
-          screenHeight * 0.3,
-          { duration: 180 },
-          (f) => {
-            if (f) runOnJS(onSwipeLeft)();
-          },
-        );
-      } else {
-        translateY.value = withSpring(
-          screenHeight * 1.2,
-          { damping: 15 },
-          () => {
-            runOnJS(onSwipeLeft)();
-          },
-        );
-      }
+      translateY.value = withSpring(
+        isDraft ? -screenHeight * 1.2 : screenHeight * 1.2,
+        { damping: 22, stiffness: 200 },
+      );
     }
   }, [trigger, isFocused]);
 
@@ -251,10 +216,20 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   // We include translateY in BOTH branches so a just-decided card that's now
   // a neighbor stays off-screen instead of snapping back into the prev slot.
   const cardAnimStyle = useAnimatedStyle(() => {
-    const distance =
+    const slotDistance =
       (absoluteIndex - focusedIndexSV.value) * slotWidth +
       carouselTranslateX.value;
-    const normalized = Math.min(1, Math.abs(distance) / slotWidth);
+    // A just-swiped card has its translateY mid-flight and (post-commit) is no
+    // longer focused. The index has already advanced on the JS thread, so the
+    // slot math would yank its translateX by -slotWidth — making it appear to
+    // snap sideways while it's still flying off-screen vertically. While the
+    // card is meaningfully off-center vertically, freeze translateX at 0 so it
+    // travels straight up/down. As the user starts a new gesture on the new
+    // focused card, translateY here stays put (off-screen) and the visual is
+    // clean.
+    const flinging = !isFocused && Math.abs(translateY.value) > 8;
+    const distance = flinging ? carouselTranslateX.value : slotDistance;
+    const normalized = Math.min(1, Math.abs(slotDistance) / slotWidth);
     const baseScale = 1 - 0.14 * normalized;
     const baseOpacity = 1 - 0.5 * normalized;
     const drag = Math.abs(translateY.value);

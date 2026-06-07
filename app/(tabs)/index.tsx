@@ -78,8 +78,9 @@ const successNotify = () => {
 
 // ------------------------------------------------------------------
 // DiscoverCard — shown to athletes swiping on recruiters
+// Memoized: changing currentIndex shouldn't re-render every visible card.
 // ------------------------------------------------------------------
-function DiscoverCard({
+function DiscoverCardImpl({
   recruiter,
   absoluteIndex,
   isFocused,
@@ -188,7 +189,8 @@ function DiscoverCard({
               style={styles.media}
               contentFit="cover"
               cachePolicy="memory-disk"
-              transition={120}
+              transition={0}
+              priority="high"
               recyclingKey={String(recruiter.id)}
             />
           ) : (
@@ -275,6 +277,8 @@ function DiscoverCard({
     </GestureDetector>
   );
 }
+
+const DiscoverCard = React.memo(DiscoverCardImpl);
 
 // ------------------------------------------------------------------
 // Match celebration overlay
@@ -385,13 +389,16 @@ function BackdropLayer({
 // crossfade: only CURRENT is visible, swapping instantly on commit
 // (Quick Sync fallback).
 // ------------------------------------------------------------------
-function DiscoverBackground({
+function DiscoverBackgroundImpl({
   sport,
   sportTheme,
   prevSport,
   prevTheme,
   nextSport,
   nextTheme,
+  outgoingSport,
+  outgoingTheme,
+  bgSwapProgress,
   carouselTranslateX,
   slotWidth,
   reducedMotion,
@@ -402,6 +409,9 @@ function DiscoverBackground({
   prevTheme?: SportTheme;
   nextSport?: string;
   nextTheme?: SportTheme;
+  outgoingSport?: string;
+  outgoingTheme?: SportTheme;
+  bgSwapProgress: SharedValue<number>;
   carouselTranslateX: SharedValue<number>;
   slotWidth: number;
   reducedMotion: boolean;
@@ -409,6 +419,7 @@ function DiscoverBackground({
   const liveCrossfade = !reducedMotion && slotWidth > 0;
   const hasPrev = !!prevTheme;
   const hasNext = !!nextTheme;
+  const hasOutgoing = !!outgoingTheme;
 
   const currentStyle = useAnimatedStyle(() => {
     if (!liveCrossfade) return { opacity: 1 };
@@ -430,6 +441,15 @@ function DiscoverBackground({
     return { opacity: tx < 0 ? Math.min(-tx / slotWidth, 1) : 0 };
   });
 
+  // Outgoing layer for vertical (draft/pass) commits. Stacked ABOVE the
+  // current layer so the OLD sport's image is visible at full opacity at the
+  // start of the swap and fades to reveal the NEW sport painted underneath.
+  // bgSwapProgress runs 0 → 1 over ~160ms via withTiming on the UI thread,
+  // which is in step with the card's fly-off animation (no JS-thread lag).
+  const outgoingStyle = useAnimatedStyle(() => ({
+    opacity: 1 - bgSwapProgress.value,
+  }));
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {hasPrev && (
@@ -445,6 +465,14 @@ function DiscoverBackground({
       <Animated.View style={[StyleSheet.absoluteFill, currentStyle]}>
         <BackdropLayer sport={sport} sportTheme={sportTheme} />
       </Animated.View>
+      {hasOutgoing && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, outgoingStyle]}
+          pointerEvents="none"
+        >
+          <BackdropLayer sport={outgoingSport} sportTheme={outgoingTheme!} />
+        </Animated.View>
+      )}
       <LinearGradient
         colors={[
           "rgba(0,0,0,0.55)",
@@ -457,6 +485,11 @@ function DiscoverBackground({
     </View>
   );
 }
+
+// Memoize so unrelated parent state (snackbar, swipesRemaining, match overlay,
+// pendingAction) never causes the backdrop to re-render — only sport / theme /
+// outgoing changes do. Themes are reference-stable (memoized in the parent).
+const DiscoverBackground = React.memo(DiscoverBackgroundImpl);
 
 // ------------------------------------------------------------------
 // Snackbar — in-screen undo bar (not a toast library)
@@ -546,6 +579,36 @@ export default function DiscoverScreen() {
   const carouselTranslateX = useSharedValue(0);
   const focusedIndexSV = useSharedValue(0);
   const bounceY = useSharedValue(0);
+  // Background sport-crossfade for vertical (draft/pass) commits. Default 1
+  // = no swap in progress (outgoing layer is invisible). Driven by withTiming
+  // on the UI thread, in step with the card's fly-off animation (~160ms).
+  const bgSwapProgress = useSharedValue(1);
+  const [bgOutgoing, setBgOutgoing] = useState<{
+    sport?: string;
+    theme: SportTheme;
+  } | null>(null);
+
+  const startBgSwap = useCallback(
+    (oldSport: string | undefined, oldTheme: SportTheme) => {
+      setBgOutgoing({ sport: oldSport, theme: oldTheme });
+      bgSwapProgress.value = 0;
+      bgSwapProgress.value = withTiming(
+        1,
+        { duration: 160 },
+        (finished) => {
+          if (finished) runOnJS(setBgOutgoing)(null);
+        },
+      );
+    },
+    [bgSwapProgress],
+  );
+
+  // Refs to the currently-focused card's sport + theme, refreshed on every
+  // render below. Vertical commit handlers (which are kept callback-identity-
+  // stable for React.memo on the cards) read these to capture the "old" sport
+  // for the crossfade without needing currentIndex in their deps.
+  const topCardSportRef = useRef<string | undefined>(undefined);
+  const topCardThemeRef = useRef<SportTheme | undefined>(undefined);
 
   // Preload every bundled sport image once on mount so swiping never waits on
   // Metro to serve an asset on first view (dev). After this, each card + its
@@ -676,80 +739,97 @@ export default function DiscoverScreen() {
     [circleSize],
   );
 
+  // Refactored to read currentIndex from functional setState so the callback
+  // identity stays stable across currentIndex changes — React.memo on the card
+  // components can then skip non-focus-flipping rows on every swipe.
   const handleSwipeLeft = useCallback(() => {
     setSwipeLock(true);
-    const current = discoverItems[currentIndex];
-    const name =
-      (current as RecruiterCard)?.name ??
-      (current as AthleteProfile)?.name ??
-      "";
-    const targetId = current?.id;
-    if (targetId) {
-      discoverService.swipe(targetId, "pass").catch(() => {});
-    }
-    setLastSwipe({ index: currentIndex, action: "pass", name });
-    setSnackbar({
-      visible: true,
-      message: name ? `Passed on ${name}` : "Passed",
-      canUndo: true,
+    // Kick the bg crossfade BEFORE the index advances so the outgoing layer
+    // captures the OLD sport while the current layer's prop swaps to the new.
+    const oldSport = topCardSportRef.current;
+    const oldTheme = topCardThemeRef.current;
+    if (oldSport && oldTheme) startBgSwap(oldSport, oldTheme);
+    setCurrentIndex((cur) => {
+      const current = discoverItems[cur];
+      const name =
+        (current as RecruiterCard)?.name ??
+        (current as AthleteProfile)?.name ??
+        "";
+      const targetId = current?.id;
+      if (targetId) {
+        discoverService.swipe(targetId, "pass").catch(() => {});
+      }
+      setLastSwipe({ index: cur, action: "pass", name });
+      setSnackbar({
+        visible: true,
+        message: name ? `Passed on ${name}` : "Passed",
+        canUndo: true,
+      });
+      const next = Math.min(cur + 1, discoverItems.length);
+      // Update both atomically so the worklet sees the new focused index and
+      // a reset translateX in the same UI frame (no 1-frame flicker).
+      focusedIndexSV.value = next;
+      carouselTranslateX.value = 0;
+      return next;
     });
-    const next = Math.min(currentIndex + 1, discoverItems.length);
-    // Update both atomically so the worklet sees the new focused index and
-    // a reset translateX in the same UI frame (no 1-frame flicker).
-    focusedIndexSV.value = next;
-    carouselTranslateX.value = 0;
-    setCurrentIndex(next);
-    setTimeout(() => setSwipeLock(false), 400);
-  }, [discoverItems, currentIndex, focusedIndexSV, carouselTranslateX]);
+    // Short button-mash debounce — bridges the gap between the trigger effect
+    // resetting pendingAction and the React commit advancing currentIndex.
+    setTimeout(() => setSwipeLock(false), 80);
+  }, [discoverItems, focusedIndexSV, carouselTranslateX, startBgSwap]);
 
   const handleSwipeRight = useCallback(() => {
     setSwipeLock(true);
-    const current = discoverItems[currentIndex];
-    const name =
-      (current as RecruiterCard)?.name ??
-      (current as AthleteProfile)?.name ??
-      "";
-    const targetId = current?.id;
-    setLastSwipe({ index: currentIndex, action: "draft", name });
+    const oldSport = topCardSportRef.current;
+    const oldTheme = topCardThemeRef.current;
+    if (oldSport && oldTheme) startBgSwap(oldSport, oldTheme);
+    setCurrentIndex((cur) => {
+      const current = discoverItems[cur];
+      const name =
+        (current as RecruiterCard)?.name ??
+        (current as AthleteProfile)?.name ??
+        "";
+      const targetId = current?.id;
+      setLastSwipe({ index: cur, action: "draft", name });
 
-    if (targetId) {
-      discoverService
-        .swipe(targetId, "draft")
-        .then((res) => {
-          setSwipesRemaining(res.swipesRemaining);
-          if (res.matched) {
-            setMatchOverlay({ visible: true, name });
-            successNotify();
-          } else {
+      if (targetId) {
+        discoverService
+          .swipe(targetId, "draft")
+          .then((res) => {
+            setSwipesRemaining(res.swipesRemaining);
+            if (res.matched) {
+              setMatchOverlay({ visible: true, name });
+              successNotify();
+            } else {
+              setSnackbar({
+                visible: true,
+                message: name ? `Drafted ${name}` : "Drafted",
+                canUndo: true,
+              });
+            }
+          })
+          .catch(() => {
+            // Honest copy on network error — no fake "Game On!"
             setSnackbar({
               visible: true,
               message: name ? `Drafted ${name}` : "Drafted",
               canUndo: true,
             });
-          }
-        })
-        .catch(() => {
-          // Honest copy on network error — no fake "Game On!"
-          setSnackbar({
-            visible: true,
-            message: name ? `Drafted ${name}` : "Drafted",
-            canUndo: true,
           });
+      } else {
+        setSnackbar({
+          visible: true,
+          message: name ? `Drafted ${name}` : "Drafted",
+          canUndo: true,
         });
-    } else {
-      setSnackbar({
-        visible: true,
-        message: name ? `Drafted ${name}` : "Drafted",
-        canUndo: true,
-      });
-    }
+      }
 
-    const next = Math.min(currentIndex + 1, discoverItems.length);
-    focusedIndexSV.value = next;
-    carouselTranslateX.value = 0;
-    setCurrentIndex(next);
-    setTimeout(() => setSwipeLock(false), 400);
-  }, [discoverItems, currentIndex, focusedIndexSV, carouselTranslateX]);
+      const next = Math.min(cur + 1, discoverItems.length);
+      focusedIndexSV.value = next;
+      carouselTranslateX.value = 0;
+      return next;
+    });
+    setTimeout(() => setSwipeLock(false), 80);
+  }, [discoverItems, focusedIndexSV, carouselTranslateX, startBgSwap]);
 
   const handleMatchDismiss = useCallback(() => {
     setMatchOverlay({ visible: false, name: "" });
@@ -776,18 +856,22 @@ export default function DiscoverScreen() {
   }, []);
 
   const goNext = useCallback(() => {
-    const next = Math.min(currentIndex + 1, Math.max(0, discoverItems.length - 1));
-    focusedIndexSV.value = next;
-    carouselTranslateX.value = 0;
-    setCurrentIndex(next);
-  }, [currentIndex, discoverItems.length, focusedIndexSV, carouselTranslateX]);
+    setCurrentIndex((cur) => {
+      const next = Math.min(cur + 1, Math.max(0, discoverItems.length - 1));
+      focusedIndexSV.value = next;
+      carouselTranslateX.value = 0;
+      return next;
+    });
+  }, [discoverItems.length, focusedIndexSV, carouselTranslateX]);
 
   const goPrev = useCallback(() => {
-    const prev = Math.max(currentIndex - 1, 0);
-    focusedIndexSV.value = prev;
-    carouselTranslateX.value = 0;
-    setCurrentIndex(prev);
-  }, [currentIndex, focusedIndexSV, carouselTranslateX]);
+    setCurrentIndex((cur) => {
+      const prev = Math.max(cur - 1, 0);
+      focusedIndexSV.value = prev;
+      carouselTranslateX.value = 0;
+      return prev;
+    });
+  }, [focusedIndexSV, carouselTranslateX]);
 
   // Keep focusedIndexSV in sync if currentIndex changes via other paths
   // (initial mount, search/preference reset, undo).
@@ -847,21 +931,39 @@ export default function DiscoverScreen() {
     return () => sub.remove();
   }, [matchOverlay.visible, handleMatchDismiss]);
 
-  // 3-card window around the focused index (prev / focused / next). At edges
-  // the window collapses to 2 cards (no prev at start, no next at end).
+  // 5-card window around the focused index (±2). Mounting next-next + prev-prev
+  // up front means the cards (and their images) are already decoded before the
+  // user reaches them — no per-swipe pop-in on the focused card. At edges the
+  // window collapses naturally (no prev at start, no next at end).
   // Must live above any early-return so the hook order stays stable.
   const visibleCards = useMemo(() => {
     if (currentIndex >= discoverItems.length) {
       return [] as { item: any; absoluteIndex: number }[];
     }
     const arr: { item: any; absoluteIndex: number }[] = [];
-    for (let i = currentIndex - 1; i <= currentIndex + 1; i++) {
+    for (let i = currentIndex - 2; i <= currentIndex + 2; i++) {
       if (i >= 0 && i < discoverItems.length) {
         arr.push({ item: discoverItems[i], absoluteIndex: i });
       }
     }
     return arr;
   }, [discoverItems, currentIndex]);
+
+  // Eagerly warm the upcoming card images each time the focused index moves.
+  // The initial feed-load already prefetched everything, but apiCards may be
+  // updated/extended later, and re-prefetching what's about to come on screen
+  // is cheap and guarantees no per-card decode wait on rapid swipes.
+  useEffect(() => {
+    if (!apiCards || apiCards.length === 0) return;
+    const urls: string[] = [];
+    for (let i = currentIndex + 1; i <= currentIndex + 3; i++) {
+      if (i >= apiCards.length) break;
+      const card = apiCards[i];
+      const url = card?.imageUrl || card?.photos?.[0];
+      if (typeof url === "string") urls.push(url);
+    }
+    if (urls.length) ExpoImage.prefetch(urls);
+  }, [currentIndex, apiCards]);
 
   if (!fontsLoaded) return null;
   if (isParent) return null;
@@ -874,14 +976,32 @@ export default function DiscoverScreen() {
   // re-themes the full Discover page background, not only decisions.
   // prev/next themes feed the drag-tracked crossfade in DiscoverBackground.
   const topCard = hasMoreCards ? discoverItems[currentIndex] : null;
-  const sportTheme = getSportTheme(topCard?.sport);
   const prevCard = currentIndex > 0 ? discoverItems[currentIndex - 1] : null;
   const nextCard =
     hasMoreCards && currentIndex + 1 < discoverItems.length
       ? discoverItems[currentIndex + 1]
       : null;
-  const prevTheme = prevCard ? getSportTheme(prevCard.sport) : undefined;
-  const nextTheme = nextCard ? getSportTheme(nextCard.sport) : undefined;
+  // Memoize theme lookups so the references stay stable across re-renders
+  // caused by unrelated state (snackbar, swipesRemaining, match overlay).
+  // Combined with React.memo on DiscoverBackground, this keeps the backdrop
+  // from re-rendering on every parent state tick — which would otherwise
+  // re-create useAnimatedStyle worklets and risk a visible flicker.
+  const sportTheme = useMemo(
+    () => getSportTheme(topCard?.sport),
+    [topCard?.sport],
+  );
+  const prevTheme = useMemo(
+    () => (prevCard ? getSportTheme(prevCard.sport) : undefined),
+    [prevCard?.sport],
+  );
+  const nextTheme = useMemo(
+    () => (nextCard ? getSportTheme(nextCard.sport) : undefined),
+    [nextCard?.sport],
+  );
+  // Refresh the refs used by the vertical commit handlers to capture the OLD
+  // sport at the moment of commit (for the background crossfade).
+  topCardSportRef.current = topCard?.sport;
+  topCardThemeRef.current = sportTheme;
   const outOfSwipes =
     typeof swipesRemaining === "number" && swipesRemaining <= 0;
   const topCardName = (topCard as any)?.name ?? "this profile";
@@ -895,6 +1015,9 @@ export default function DiscoverScreen() {
         prevTheme={prevTheme}
         nextSport={nextCard?.sport}
         nextTheme={nextTheme}
+        outgoingSport={bgOutgoing?.sport}
+        outgoingTheme={bgOutgoing?.theme}
+        bgSwapProgress={bgSwapProgress}
         carouselTranslateX={carouselTranslateX}
         slotWidth={slotWidth}
         reducedMotion={reducedMotion}
