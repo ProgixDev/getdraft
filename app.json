@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "myroster",
-    "slug": "myroster",
+    "name": "GetDraft",
+    "slug": "getdraft",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -16,7 +16,7 @@
       }
     },
     "android": {
-      "package": "com.achrefdev.myroster",
+      "package": "com.getdraft.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -55,9 +55,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "abdfc897-1a97-4964-85a2-90428a10ca4d"
+        "projectId": "7a6c8405-e237-49b1-b5be-b2334b70080c"
       }
     },
-    "owner": "achrefdev"
+    "owner": "achrafbenamrane"
   }
 }
