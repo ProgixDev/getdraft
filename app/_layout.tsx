@@ -160,6 +160,7 @@ function RootLayoutContent() {
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
         <Stack.Screen name="buy-swipes" options={{ headerShown: false }} />
         <Stack.Screen name="link-guardian" options={{ headerShown: false }} />
+        <Stack.Screen name="guardian-link" options={{ headerShown: false }} />
         <Stack.Screen name="admin-guardian-links" options={{ headerShown: false }} />
         <Stack.Screen name="help-center" options={{ headerShown: false }} />
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
@@ -180,7 +181,9 @@ export default function RootLayout() {
     <Provider store={store}>
       <StripeProvider
         publishableKey={stripePublishableKey}
-        merchantIdentifier="merchant.com.achrefdev.myroster"
+        // merchantIdentifier intentionally omitted while we sign with a
+        // free personal Apple team — Apple Pay capability requires a
+        // paid Developer Program membership. Add it back when we join.
       >
         <GestureHandlerRootView style={styles.container}>
           <RootLayoutContent />

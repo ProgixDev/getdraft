@@ -72,7 +72,8 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({
                 paymentIntentClientSecret: params.paymentIntentClientSecret,
                 // Saves the card to the customer for future renewals.
                 allowsDelayedPaymentMethods: false,
-                returnURL: 'myroster://stripe-redirect',
+                returnURL: 'getdraft://stripe-redirect',
+                defaultBillingDetails: { address: { country: 'CA' } },
                 appearance: {
                     primaryButton: {
                         colors: { background: brand.primary, text: brand.white },

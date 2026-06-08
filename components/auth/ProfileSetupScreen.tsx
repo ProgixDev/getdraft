@@ -33,6 +33,7 @@ import {
 import { brand, neutral } from '@/config/colors';
 import { SPORTS_WITH_POSITIONS } from '@/constants/sportsData';
 import { profilesService } from '@/services/profiles';
+import { usersService } from '@/services/users';
 
 const { width } = Dimensions.get('window');
 
@@ -45,37 +46,95 @@ interface ProfileSetupScreenProps {
 
 const GENDER_OPTIONS = ['Man', 'Woman'];
 
-const steps = [
-    {
+type Step = {
+    id: number;
+    title: string;
+    subtitle: string;
+    fields: { id: string; label: string; placeholder: string; icon: string }[];
+};
+
+/**
+ * Per-role step configuration. We intentionally don't show athlete-only
+ * fields (sport/position/jersey/height/weight) to parents, coaches, or
+ * recruiters — those screens collect the data each role actually needs.
+ */
+function stepsForRole(role: string): Step[] {
+    const personalInfo: Step = {
         id: 1,
         title: 'Personal Info',
+        subtitle: 'Tell us about yourself',
         fields: [
             { id: 'firstName', label: 'First Name', placeholder: 'John', icon: 'person-outline' },
             { id: 'lastName', label: 'Last Name', placeholder: 'Doe', icon: 'person-outline' },
             { id: 'gender', label: 'Gender', placeholder: 'Select', icon: 'male-female-outline' },
             { id: 'dateOfBirth', label: 'Date of Birth', placeholder: 'MM/DD/YYYY', icon: 'calendar-outline' },
         ],
-    },
-    {
-        id: 2,
-        title: 'Sport Details',
-        fields: [
-            { id: 'sport', label: 'Primary Sport', placeholder: 'Football', icon: 'football-outline' },
-            { id: 'level', label: 'Level', placeholder: 'High School', icon: 'trending-up-outline' },
-            { id: 'position', label: 'Position', placeholder: 'Quarterback', icon: 'trophy-outline' },
-            { id: 'experience', label: 'Years of Experience', placeholder: '5', icon: 'time-outline' },
-        ],
-    },
-    {
-        id: 3,
-        title: 'Physical Attributes',
-        fields: [
-            { id: 'height', label: 'Height', placeholder: '6\'2"', icon: 'resize-outline' },
-            { id: 'weight', label: 'Weight', placeholder: '185', icon: 'fitness-outline' },
-            { id: 'jerseyNumber', label: 'Jersey Number', placeholder: '10', icon: 'shirt-outline' },
-        ],
-    },
-];
+    };
+
+    if (role === 'athlete') {
+        return [
+            personalInfo,
+            {
+                id: 2,
+                title: 'Sport Details',
+                subtitle: 'Share your athletic background',
+                fields: [
+                    { id: 'sport', label: 'Primary Sport', placeholder: 'Football', icon: 'football-outline' },
+                    { id: 'level', label: 'Level', placeholder: 'High School', icon: 'trending-up-outline' },
+                    { id: 'position', label: 'Position', placeholder: 'Quarterback', icon: 'trophy-outline' },
+                    { id: 'experience', label: 'Years of Experience', placeholder: '5', icon: 'time-outline' },
+                ],
+            },
+            {
+                id: 3,
+                title: 'Physical Attributes',
+                subtitle: 'Your physical stats',
+                fields: [
+                    { id: 'height', label: 'Height', placeholder: '6\'2"', icon: 'resize-outline' },
+                    { id: 'weight', label: 'Weight', placeholder: '185', icon: 'fitness-outline' },
+                    { id: 'jerseyNumber', label: 'Jersey Number', placeholder: '10', icon: 'shirt-outline' },
+                ],
+            },
+        ];
+    }
+
+    if (role === 'parent') {
+        // Parent profile is mostly built via the guardian-link step;
+        // here we just need the basics.
+        return [personalInfo];
+    }
+
+    if (role === 'coach') {
+        return [
+            personalInfo,
+            {
+                id: 2,
+                title: 'Coaching Details',
+                subtitle: 'Tell us about your program',
+                fields: [
+                    { id: 'organization', label: 'Team / Organization', placeholder: 'Lincoln High Football', icon: 'school-outline' },
+                    { id: 'sport', label: 'Sport', placeholder: 'Football', icon: 'football-outline' },
+                    { id: 'level', label: 'Level Coached', placeholder: 'High School', icon: 'trending-up-outline' },
+                ],
+            },
+        ];
+    }
+
+    // recruiter / agent
+    return [
+        personalInfo,
+        {
+            id: 2,
+            title: 'Agency Details',
+            subtitle: 'How do you scout?',
+            fields: [
+                { id: 'organization', label: 'Agency / Organization', placeholder: 'Northeast Scouting', icon: 'business-outline' },
+                { id: 'sport', label: 'Primary Sport', placeholder: 'Basketball', icon: 'basketball-outline' },
+                { id: 'level', label: 'Tier Focus', placeholder: 'D1', icon: 'trophy-outline' },
+            ],
+        },
+    ];
+}
 
 export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     role,
@@ -90,6 +149,10 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         Poppins_700Bold,
         Poppins_800ExtraBold,
     });
+
+    // Resolved once per render — re-runs if the role changes, but in
+    // practice the role is locked in by the time we hit this screen.
+    const steps = React.useMemo(() => stepsForRole(role), [role]);
 
     const [currentStep, setCurrentStep] = useState(0);
     const [formData, setFormData] = useState<Record<string, string>>({});
@@ -242,29 +305,100 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         setFormData(prev => ({ ...prev, [fieldId]: value }));
     };
 
+    /**
+     * Route the persist call to the right profile table by role:
+     *   athlete   → athlete_profiles (sport/level/position/height/weight)
+     *   coach     → recruiter_profiles with role_type='coach'
+     *   recruiter → recruiter_profiles with role_type='agent'
+     *   parent    → parent_profiles (gets fleshed out via guardian-link)
+     * Personal-info fields (first/last/gender/DOB) also go to /users/me.
+     */
+    const persistProfile = async () => {
+        // Build display name + send to users.me first — every role needs this.
+        const fullName = [formData.firstName, formData.lastName]
+            .filter(Boolean)
+            .map((s) => s.trim())
+            .join(' ');
+        if (fullName) {
+            try {
+                await usersService.updateMe({
+                    name: fullName,
+                    // Persist DOB + gender into preferences for now (no
+                    // dedicated columns yet).
+                    preferences: {
+                        profile: {
+                            gender: formData.gender || undefined,
+                            dateOfBirth: formData.dateOfBirth || undefined,
+                        },
+                    },
+                });
+            } catch {
+                // Non-fatal — proceed to the role-specific upsert.
+            }
+        }
+
+        if (role === 'athlete') {
+            await profilesService.upsertAthleteProfile({
+                sport: formData.sport,
+                position: formData.position,
+                level: formData.level,
+                bio: '',
+                class_year: '',
+                height: formData.height ? `${formData.height}${heightUnit === 'in' ? '' : ' cm'}` : undefined,
+                weight: formData.weight ? `${formData.weight} ${weightUnit}` : undefined,
+            });
+            return;
+        }
+
+        if (role === 'coach' || role === 'recruiter') {
+            await profilesService.upsertRecruiterProfile({
+                organization: formData.organization,
+                sport: formData.sport,
+                role_type: role === 'coach' ? 'coach' : 'agent',
+                bio: '',
+                tags: formData.level ? [formData.level] : [],
+            });
+            return;
+        }
+
+        if (role === 'parent') {
+            // The full parent_profiles row (relationship + child link)
+            // gets written by the guardian-link step. Here we just
+            // make sure the row exists with sensible defaults.
+            await profilesService.upsertParentProfile({
+                relationship: 'parent',
+                bio: '',
+            });
+            return;
+        }
+    };
+
     const handleNext = async () => {
         if (currentStep < steps.length - 1) {
             setCurrentStep(prev => prev + 1);
-        } else {
-            try {
-                await profilesService.upsertAthleteProfile({
-                    sport: formData.sport,
-                    position: formData.position,
-                    level: formData.level,
-                    bio: '',
-                    class_year: '',
-                    height: formData.height ? `${formData.height}${heightUnit === 'in' ? '' : ' cm'}` : undefined,
-                    weight: formData.weight ? `${formData.weight} ${weightUnit}` : undefined,
-                });
-                onPayment();
-            } catch (err: any) {
-                const message =
-                    err?.response?.data?.message ||
-                    err?.message ||
-                    'Could not save your profile. Please try again.';
-                console.warn('[ProfileSetup] upsert failed:', message, err?.response?.data);
-                Alert.alert('Profile not saved', message);
+            return;
+        }
+        try {
+            await persistProfile();
+            onPayment();
+        } catch (err: any) {
+            const status = err?.response?.status;
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                'Could not save your profile. Please try again.';
+            console.warn('[ProfileSetup] upsert failed:', status, message, err?.response?.data);
+            if (status === 401 || message === 'Missing authorization token') {
+                // Session lost (common after a simulator wipe / prebuild --clean).
+                // Send them back to sign in.
+                Alert.alert(
+                    'Session expired',
+                    'Please sign in again to continue setting up your profile.',
+                    [{ text: 'Sign in', onPress: () => onBack() }],
+                );
+                return;
             }
+            Alert.alert('Profile not saved', message);
         }
     };
 
@@ -335,11 +469,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                         {/* Step Title */}
                         <View style={styles.cardHeader}>
                             <Text style={styles.cardTitle}>{currentStepData.title}</Text>
-                            <Text style={styles.cardSubtitle}>
-                                {currentStep === 0 && 'Tell us about yourself'}
-                                {currentStep === 1 && 'Share your athletic background'}
-                                {currentStep === 2 && 'Your physical stats'}
-                            </Text>
+                            <Text style={styles.cardSubtitle}>{currentStepData.subtitle}</Text>
                         </View>
 
                         {/* Form Fields */}

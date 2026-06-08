@@ -102,6 +102,7 @@ export const audio = {
 export const videos = {
     athlete1: require('@/assets/athlete1.mp4'),
     athlete2: require('@/assets/athlete2.mp4'),
+    exampleParent: require('@/assets/example-parent.mp4'),
 } as const;
 
 export default {

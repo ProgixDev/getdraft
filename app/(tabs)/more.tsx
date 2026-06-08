@@ -44,20 +44,34 @@ export default function MoreScreen() {
 
   if (!fontsLoaded) return null;
 
+  // Always reflect the user's real role. Previously this branch
+  // required a match in the mock-athletes list, so live athletes
+  // unconditionally rendered as "User". Show the actual role label
+  // and only enrich athletes with position/level when we have those.
   const roleLabel =
     user?.role === 'recruiter'
       ? 'Agent / Recruiter'
       : user?.role === 'coach'
         ? 'Coach'
-        : user?.role === 'athlete' && athleteProfile
-          ? `${athleteProfile.position} · ${athleteProfile.level}`
-          : user?.role === 'parent'
-            ? 'Parent'
-            : 'User';
+        : user?.role === 'parent'
+          ? 'Parent'
+          : user?.role === 'admin'
+            ? 'Admin'
+            : user?.role === 'athlete'
+              ? (athleteProfile
+                  ? `${athleteProfile.position} · ${athleteProfile.level}`
+                  : 'Athlete')
+              : 'User';
 
   const menuItems = [
     { icon: 'star-outline', label: 'Who Drafted You', onPress: () => router.push('/who-drafted-me') },
     { icon: 'settings-outline', label: 'Settings', onPress: () => router.push('/settings') },
+    // Parents get a quick route to the guardian-link flow so they can
+    // replay the tutorial video and record their declaration without
+    // digging through Settings.
+    ...(user?.role === 'parent'
+      ? [{ icon: 'videocam-outline' as const, label: 'Verify your guardian link', onPress: () => router.push('/guardian-link') }]
+      : []),
     { icon: 'diamond-outline', label: 'My Subscription', onPress: () => router.push('/subscription') },
     { icon: 'help-circle-outline', label: 'Help Center', onPress: () => router.push('/help-center') },
     { icon: 'people-outline', label: 'Invite Friends', onPress: () => router.push('/invite-friends') },

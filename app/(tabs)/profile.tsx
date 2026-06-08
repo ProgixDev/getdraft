@@ -542,7 +542,7 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 )}
-                {athleteProfile.gpa !== undefined && (
+                {typeof athleteProfile.gpa === 'number' && (
                   <View style={styles.infoRow}>
                     <Ionicons name="star" size={18} color={theme.textMuted} />
                     <Text style={styles.infoText}>GPA: {athleteProfile.gpa.toFixed(1)}</Text>

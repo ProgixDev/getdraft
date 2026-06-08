@@ -93,7 +93,7 @@ export class KycService {
     }
 
     // Otherwise create a fresh session at Didit. The client passes its
-    // own deep-link return URL (e.g. myroster://kyc/return) so the
+    // own deep-link return URL (e.g. getdraft://kyc/return) so the
     // in-app browser auto-closes after verification.
     const callbackUrl = clientCallbackUrl ?? this.callbackUrlFor(userId);
     const session = await this.diditService.createSession(userId, callbackUrl);

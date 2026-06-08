@@ -37,7 +37,7 @@ import { images } from '@/config/assets';
 import { brand, neutral } from '@/config/colors';
 import { MOCK_USERS } from '@/constants/mockUsers';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { login, loginAsync, completeOnboarding, completeOnboardingAsync, clearError } from '@/store/slices/authSlice';
+import { login, loginAsync, completeOnboarding, completeOnboardingAsync, clearError, logout } from '@/store/slices/authSlice';
 import { authService } from '@/services/auth';
 import { usersService } from '@/services/users';
 import { EmailVerificationScreen } from './EmailVerificationScreen';
@@ -173,6 +173,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     const { initPaymentSheet, presentPaymentSheet } = useStripe();
     const isAuthenticated = useAppSelector((s) => s.auth.isAuthenticated);
     const isOnboarded = useAppSelector((s) => s.auth.isOnboarded);
+    const user = useAppSelector((s) => s.auth.user);
 
     // Animation values
     const contentOpacity = useSharedValue(0);
@@ -199,23 +200,69 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         ) return;
         let cancelled = false;
         (async () => {
+            // First confirm the session is actually valid. If /users/me
+            // returns 401, the persisted user is dead (e.g. AsyncStorage
+            // was wiped by a prebuild --clean) — we must NOT drop the
+            // user into mid-flow steps without a token. Instead clear
+            // Redux + persisted auth so they re-authenticate cleanly.
+            let me: any = null;
+            let authBroken = false;
             try {
-                const [me, kyc, guardianLink] = await Promise.all([
-                    usersService.getMe().catch(() => null),
+                me = await usersService.getMe();
+            } catch (err: any) {
+                if (err?.response?.status === 401) authBroken = true;
+            }
+            if (cancelled) return;
+            if (authBroken) {
+                dispatch(logout());
+                return;
+            }
+
+            try {
+                const [kyc, guardianLink] = await Promise.all([
                     kycService.getStatus().catch(() => null),
                     guardianLinksService.getMyLink().catch(() => null),
                 ]);
                 if (cancelled) return;
-                const meRole = me?.role ?? role;
+                const meRole = (me?.role ?? role) as UserRole;
+                // Sync local role state with the authoritative DB role —
+                // otherwise after a reload the `role` state defaults to
+                // 'athlete' and downstream upserts hit the wrong table.
+                if (me?.role && me.role !== role) setRole(me.role as UserRole);
+                // Also push the corrected user into Redux so the UI
+                // (More tab, profile, tab gating) doesn't lag.
+                if (user && me?.role && me.role !== user.role) {
+                    dispatch(login({
+                        user: { ...user, role: me.role as UserRole, name: me.name ?? user.name },
+                        isOnboarded,
+                    }));
+                }
                 const hasLocation = !!me?.location;
                 const hasProfileBio = !!me?.bio || !!me?.profile_photo_url;
                 const kycApproved = kyc?.kycStatus === 'approved';
                 const guardianDone =
                     meRole !== 'parent' ||
+                    !!me?.preferences?.dev?.guardianSkipped ||
                     (guardianLink && (guardianLink.status === 'pending_admin' || guardianLink.status === 'approved'));
-                const answeredQuestions = !!me?.preferences?.onboarding?.answeredAt;
+                // Parent flow skips location / questions / tutorial /
+                // plan — see handleGuardianLinkComplete. So once their
+                // guardian-link is in, onboarding is effectively done
+                // and they should land in the app rather than re-enter
+                // the auth flow on reload.
+                const answeredQuestions =
+                    meRole === 'parent' || !!me?.preferences?.onboarding?.answeredAt;
                 let resumeAt: SignupStep = 'plan';
-                if (!hasLocation) resumeAt = 'location';
+                if (meRole === 'parent') {
+                    if (!hasProfileBio) resumeAt = 'profile';
+                    else if (!kycApproved) resumeAt = 'kyc';
+                    else if (!guardianDone) resumeAt = 'guardian-link';
+                    else {
+                        // Everything done — mark onboarded so the
+                        // layout sends the parent into the main app.
+                        finishOnboarding().catch(() => {});
+                        return;
+                    }
+                } else if (!hasLocation) resumeAt = 'location';
                 else if (!hasProfileBio) resumeAt = 'profile';
                 else if (!kycApproved) resumeAt = 'kyc';
                 else if (!guardianDone) resumeAt = 'guardian-link';
@@ -224,12 +271,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 setMode('signup');
                 setSignupStep(resumeAt);
             } catch {
-                // Fall back to starting from the location step — safer
-                // than the role picker which would corrupt their user row.
-                if (!cancelled) {
-                    setMode('signup');
-                    setSignupStep('location');
-                }
+                // Non-auth failure — keep them at the role picker rather
+                // than guessing a step we can't verify.
             }
         })();
         return () => { cancelled = true; };
@@ -279,7 +322,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 isOnboarded: false,
             }));
             setIsLoading(false);
-            setSignupStep('location');
+            // Parents skip location (no discover feed of their own) —
+            // jump straight to the profile basics.
+            setSignupStep(role === 'parent' ? 'profile' : 'location');
         } catch (err: any) {
             setIsLoading(false);
             const message =
@@ -319,7 +364,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             });
             dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
             setIsLoading(false);
-            setSignupStep('location');
+            setSignupStep(role === 'parent' ? 'profile' : 'location');
         } catch (err: any) {
             setIsLoading(false);
             const message =
@@ -348,7 +393,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 name: email.split('@')[0],
             });
             dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
-            setSignupStep('location');
+            setSignupStep(role === 'parent' ? 'profile' : 'location');
         } catch (err: any) {
             const message =
                 err?.response?.data?.message ||
@@ -383,7 +428,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 customerId: params.customerId,
                 customerEphemeralKeySecret: params.ephemeralKeySecret,
                 paymentIntentClientSecret: params.paymentIntentClientSecret,
-                returnURL: 'myroster://stripe-redirect',
+                returnURL: 'getdraft://stripe-redirect',
+                defaultBillingDetails: { address: { country: 'CA' } },
                 appearance: {
                     primaryButton: { colors: { background: brand.primary, text: brand.white } },
                 },
@@ -442,8 +488,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         setSignupStep(role === 'parent' ? 'guardian-link' : 'questions');
     };
 
-    const handleGuardianLinkComplete = () => {
-        setSignupStep('questions');
+    /**
+     * Guardian-link is the LAST signup step for parents. They don't go
+     * through the questionnaire (covered by guardian-link + the linked
+     * athlete's own preferences), the swipe tutorial (they don't
+     * swipe), or the plan picker (subscription lives on the athlete
+     * account). Finish onboarding directly.
+     */
+    const handleGuardianLinkComplete = async () => {
+        await finishOnboarding();
     };
 
     const handleQuestionsComplete = () => {
@@ -583,7 +636,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         role={role}
                         onComplete={handleTutorialComplete}
                         onPayment={handleProfilePayment}
-                        onBack={() => setSignupStep('location')}
+                        onBack={() =>
+                            // Parents skipped location, so "back" from
+                            // their profile step goes to the role picker.
+                            role === 'parent' ? handleBackToRoleSelection() : setSignupStep('location')
+                        }
                     />
                 );
             case 'kyc':

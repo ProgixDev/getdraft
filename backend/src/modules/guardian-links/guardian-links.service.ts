@@ -98,6 +98,21 @@ export class GuardianLinksService {
 
   /** Athlete generates a fresh QR token. Old tokens just expire on their own. */
   async issueQr(athleteUserId: string) {
+    // Refuse to mint a QR for non-athletes — would just produce a token
+    // the parent-side scan would reject with the confusing "Athlete
+    // not found" error.
+    const supabase = this.supabaseService.getAdminClient();
+    const { data: user } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', athleteUserId)
+      .maybeSingle();
+    if (!user) throw new NotFoundException('User not found.');
+    if (user.role !== 'athlete') {
+      throw new BadRequestException(
+        'Only athlete accounts can generate guardian-link QR codes.',
+      );
+    }
     return this.signToken(athleteUserId);
   }
 
@@ -162,9 +177,17 @@ export class GuardianLinksService {
       .select('id, role, name')
       .eq('id', athleteId)
       .maybeSingle();
-    if (!athlete) throw new NotFoundException('Athlete not found.');
+    if (!athlete) {
+      this.logger.warn(`[guardian-link] scan referenced unknown athleteId=${athleteId}`);
+      throw new NotFoundException('Athlete account not found. Ask them to regenerate the QR.');
+    }
     if (athlete.role !== 'athlete') {
-      throw new BadRequestException('That QR is not from an athlete account.');
+      this.logger.warn(
+        `[guardian-link] scan QR for user ${athleteId} with role=${athlete.role}`,
+      );
+      throw new BadRequestException(
+        `That QR isn't from an athlete account (role: ${athlete.role}).`,
+      );
     }
 
     // Upsert (athlete, guardian) — if the parent rescans we re-use the

@@ -219,6 +219,28 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        {/* Guardian link — parents see "Verify my link" so they can
+            replay the tutorial video and record their declaration. */}
+        {user?.role === 'parent' && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={theme.text} />
+              <Text style={styles.sectionTitle}>Guardian link</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.menuRow, styles.menuRowLast, pressed && styles.menuRowPressed]}
+              onPress={() => router.push('/guardian-link')}
+            >
+              <Ionicons name="videocam-outline" size={20} color={theme.textSecondary} />
+              <View style={styles.menuRowCopy}>
+                <Text style={styles.menuRowTitle}>Verify my link</Text>
+                <Text style={styles.menuRowValue}>Watch the tutorial and record your declaration video</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+            </Pressable>
+          </View>
+        )}
+
         {/* Guardians — only shown to athletes. */}
         {user?.role === 'athlete' && (
           <View style={styles.section}>

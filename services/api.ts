@@ -79,6 +79,18 @@ export interface Tokens {
 // --- Token storage ---
 
 export async function saveTokens(tokens: Tokens): Promise<void> {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log('[auth] saveTokens', {
+      hasAccess: !!tokens?.accessToken,
+      hasRefresh: !!tokens?.refreshToken,
+    });
+  }
+  if (!tokens?.accessToken || !tokens?.refreshToken) {
+    // eslint-disable-next-line no-console
+    console.warn('[auth] saveTokens called with missing fields — skipping write.');
+    return;
+  }
   await AsyncStorage.setItem(TOKEN_KEY, JSON.stringify(tokens));
 }
 
@@ -92,6 +104,12 @@ export async function loadTokens(): Promise<Tokens | null> {
 }
 
 export async function clearTokens(): Promise<void> {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log('[auth] clearTokens — caller stack:');
+    // eslint-disable-next-line no-console
+    console.log(new Error().stack);
+  }
   await AsyncStorage.removeItem(TOKEN_KEY);
 }
 

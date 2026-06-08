@@ -96,7 +96,8 @@ export default function BuySwipesScreen() {
           customerId: params.customerId,
           customerEphemeralKeySecret: params.ephemeralKeySecret,
           paymentIntentClientSecret: params.paymentIntentClientSecret,
-          returnURL: 'myroster://stripe-redirect',
+          returnURL: 'getdraft://stripe-redirect',
+          defaultBillingDetails: { address: { country: 'CA' } },
           appearance: {
             primaryButton: { colors: { background: brand.primary, text: brand.white } },
           },

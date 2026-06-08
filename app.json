@@ -1,21 +1,22 @@
 {
   "expo": {
-    "name": "myroster",
-    "slug": "myroster",
+    "name": "getdraft",
+    "slug": "getdraft",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myroster",
+    "scheme": "getdraft",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.achrefdev.myroster",
+      "bundleIdentifier": "com.achrefdev.getdraft",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
         "NSPhotoLibraryAddUsageDescription": "GetDraft saves selected photos to your profile.",
-        "NSCameraUsageDescription": "GetDraft uses the camera to capture profile photos and highlight clips."
+        "NSCameraUsageDescription": "GetDraft uses the camera to capture profile photos, scan guardian QR codes, and record your guardian declaration video.",
+        "NSMicrophoneUsageDescription": "GetDraft uses the microphone to record your guardian declaration video."
       }
     },
     "android": {
@@ -26,7 +27,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.achrefdev.getdraft"
     },
     "web": {
       "output": "static",
@@ -59,7 +65,6 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.achrefdev.myroster",
           "enableGooglePay": true
         }
       ],
