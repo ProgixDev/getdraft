@@ -19,6 +19,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { theme } from "@/config/colors";
 import { store, RootState } from "@/store";
 import { SplashScreen, WelcomeScreen, AuthScreen } from "@/components";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
 import { login } from "@/store/slices/authSlice";
 
@@ -174,11 +175,13 @@ function RootLayoutContent() {
 
 export default function RootLayout() {
   return (
-    <Provider store={store}>
-      <GestureHandlerRootView style={styles.container}>
-        <RootLayoutContent />
-      </GestureHandlerRootView>
-    </Provider>
+    <ErrorBoundary>
+      <Provider store={store}>
+        <GestureHandlerRootView style={styles.container}>
+          <RootLayoutContent />
+        </GestureHandlerRootView>
+      </Provider>
+    </ErrorBoundary>
   );
 }
 
