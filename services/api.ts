@@ -102,7 +102,11 @@ export async function clearTokens(): Promise<void> {
 
 const api = axios.create({
   baseURL,
-  timeout: 15000,
+  // Render's free tier sleeps after ~15 min of no traffic and takes ~45-55s to
+  // cold-start. A 15s timeout caused login/signup to fail on a fresh app open.
+  // 60s covers worst-case wake + first DB query; the _layout prewarm ping
+  // usually means real requests land on a warm dyno.
+  timeout: 60000,
   headers: { "Content-Type": "application/json" },
 });
 

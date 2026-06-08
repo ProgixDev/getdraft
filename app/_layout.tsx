@@ -22,6 +22,7 @@ import { SplashScreen, WelcomeScreen, AuthScreen } from "@/components";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
 import { login } from "@/store/slices/authSlice";
+import { API_ORIGIN } from "@/services/api";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -41,6 +42,14 @@ function RootLayoutContent() {
   const [appState, setAppState] = useState<AppState>("loading");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionOpacity = useSharedValue(1);
+
+  // Prewarm the backend the moment the app launches. Render's free tier
+  // sleeps after ~15 min; this fire-and-forget ping wakes it during splash /
+  // welcome / auth so the first real request lands on a warm dyno instead
+  // of timing out on a 45-55s cold start.
+  useEffect(() => {
+    fetch(`${API_ORIGIN}/api/health`).catch(() => {});
+  }, []);
 
   // Restore auth on app start
   useEffect(() => {

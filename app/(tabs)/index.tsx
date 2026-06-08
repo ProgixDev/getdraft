@@ -965,9 +965,6 @@ export default function DiscoverScreen() {
     if (urls.length) ExpoImage.prefetch(urls);
   }, [currentIndex, apiCards]);
 
-  if (!fontsLoaded) return null;
-  if (isParent) return null;
-
   const hasMoreCards = currentIndex < discoverItems.length;
   const remaining = discoverItems.length - currentIndex;
   const canGoNext = currentIndex < discoverItems.length - 1;
@@ -1005,6 +1002,13 @@ export default function DiscoverScreen() {
   const outOfSwipes =
     typeof swipesRemaining === "number" && swipesRemaining <= 0;
   const topCardName = (topCard as any)?.name ?? "this profile";
+
+  // Rules-of-Hooks: every hook (useState/useEffect/useMemo/useCallback/useRef/
+  // useSharedValue) must run unconditionally on every render. Keep these two
+  // early returns BELOW all hooks so the call order is stable when fontsLoaded
+  // flips from false to true or the parent role check redirects.
+  if (!fontsLoaded) return null;
+  if (isParent) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
