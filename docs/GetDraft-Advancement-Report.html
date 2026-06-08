@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>GetDraft — Advancement Report</title>
+<style>
+  :root {
+    --ink:#16202b; --navy:#143a5a; --navy-deep:#0e2a42;
+    --green:#1faa59; --green-soft:#e8f6ee; --green-deep:#15813f;
+    --muted:#5f6b78; --line:#dfe5ec; --soft:#f5f7fa; --paper:#fff;
+    --chip:#eef2f7; --pass:#e5484d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,"Segoe UI",Inter,Roboto,Arial,sans-serif;font-size:10.5px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @page{size:A4;margin:14mm 13mm;}
+  .page{max-width:182mm;margin:0 auto;}
+
+  .banner{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--green);padding-bottom:8px;margin-bottom:12px;}
+  .logo{font-size:24px;font-weight:800;color:var(--navy);letter-spacing:-.5px;}
+  .logo .dot{color:var(--green);}
+  .banner .title{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--green-deep);font-weight:700;margin-top:2px;}
+  .banner .right{text-align:right;font-size:9.5px;color:var(--muted);line-height:1.5;}
+  .banner .right b{color:var(--navy);}
+
+  .summary{background:var(--green-soft);border-left:4px solid var(--green);border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:14px;}
+  .summary .l{font-size:8px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--green-deep);margin-bottom:4px;}
+  .summary p{margin:0;font-size:10.5px;color:var(--ink);}
+
+  .stats{display:flex;gap:10px;margin:0 0 16px;}
+  .stat{flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:#fff;}
+  .stat .v{font-size:17px;font-weight:800;color:var(--navy);}
+  .stat .v.g{color:var(--green-deep);}
+  .stat .k{font-size:8px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-weight:700;margin-top:1px;}
+
+  h2{font-size:13px;color:var(--navy-deep);margin:16px 0 8px;padding-bottom:4px;border-bottom:1.5px solid var(--line);letter-spacing:-.2px;}
+  h2 .n{color:var(--green);font-weight:800;margin-right:7px;}
+
+  .feat{list-style:none;padding:0;margin:0;}
+  .feat li{position:relative;padding:7px 12px 7px 30px;border:1px solid var(--line);border-left:3px solid var(--green);border-radius:5px;margin-bottom:6px;background:#fff;}
+  .feat li::before{content:"✓";position:absolute;left:10px;top:7px;color:var(--green);font-weight:800;font-size:11px;}
+  .feat .t{font-weight:700;color:var(--ink);font-size:10.5px;}
+  .feat .d{color:var(--muted);font-size:10px;margin-top:1px;}
+
+  .note{border-left:4px solid var(--navy);background:var(--soft);border-radius:0 6px 6px 0;padding:9px 13px;margin:14px 0 0;font-size:10px;}
+  .note b{color:var(--navy-deep);}
+
+  .doc-footer{border-top:1px solid var(--line);margin-top:16px;padding-top:8px;text-align:center;color:var(--muted);font-size:8.5px;letter-spacing:.3px;}
+  .doc-footer b{color:var(--green-deep);}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="banner">
+    <div>
+      <div class="logo">Get<span class="dot">Draft</span></div>
+      <div class="title">Advancement Report</div>
+    </div>
+    <div class="right">
+      <div><b>Prepared by:</b> Achraf Benamrane — Progix</div>
+      <div><b>Date:</b> June 8, 2026</div>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="l">Executive Summary</div>
+    <p>The GetDraft mobile application has reached a major milestone: the core product is <b>fully functional on a live backend and database</b>. Athletes and recruiters can create verified accounts, build complete profiles, discover and connect with one another through the swipe-based "Draft" experience, communicate in real time, and share photos and videos through a built-in social feed. The sections below detail the modules delivered to date.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="v g">7</div><div class="k">Core modules delivered</div></div>
+    <div class="stat"><div class="v g">Live</div><div class="k">Backend &amp; database online</div></div>
+    <div class="stat"><div class="v">Real-time</div><div class="k">Messaging &amp; social feed</div></div>
+  </div>
+
+  <h2><span class="n">01</span>Accounts &amp; Onboarding</h2>
+  <ul class="feat">
+    <li><div class="t">Secure sign-up with email verification</div><div class="d">New users register and confirm their account with a 6-digit code sent to their email (with a resend option) before entering the app.</div></li>
+    <li><div class="t">Guided onboarding</div><div class="d">A step-by-step flow captures role, plan, location and profile details so every account is ready to use from the first session.</div></li>
+  </ul>
+
+  <h2><span class="n">02</span>Profiles</h2>
+  <ul class="feat">
+    <li><div class="t">Fully editable profile</div><div class="d">Users edit their name, location, bio, sport and profile photo. Athletes additionally set position, level, height, weight, date of birth and gender.</div></li>
+    <li><div class="t">Map-based location</div><div class="d">Location can be set with a single tap ("use my current location") or by searching country then city, with a live map preview.</div></li>
+  </ul>
+
+  <h2><span class="n">03</span>Discover &amp; Matching — the "Draft" experience</h2>
+  <ul class="feat">
+    <li><div class="t">Immersive swipe interface</div><div class="d">A full-screen card experience: swipe left/right to browse, up to <b>Draft</b> (show interest), down to <b>Pass</b>, plus double-tap to like. Each card's background adapts to the athlete's sport.</div></li>
+    <li><div class="t">Smooth, instant browsing</div><div class="d">Cards and their imagery are pre-loaded so swiping is fast and fluid, with the background changing in step with each card.</div></li>
+    <li><div class="t">Mutual matches</div><div class="d">When two users Draft each other, an instant "Game On!" match is created, opening a direct line of communication.</div></li>
+  </ul>
+
+  <h2><span class="n">04</span>Draft Board — connections hub</h2>
+  <ul class="feat">
+    <li><div class="t">Received, Sent, Matches &amp; Messages in one place</div><div class="d">Users see who drafted them and can <b>Accept</b> or <b>Refuse</b>; review and <b>Withdraw</b> drafts they have sent; view confirmed matches; and open their conversations — all from a single tabbed board.</div></li>
+    <li><div class="t">Conversation access on every connection</div><div class="d">A message action on each connection opens a private conversation directly.</div></li>
+  </ul>
+
+  <h2><span class="n">05</span>Real-time Messaging</h2>
+  <ul class="feat">
+    <li><div class="t">Private one-to-one chat in real time</div><div class="d">Any two users can message privately; messages are delivered to the other device in under two seconds, with no refresh required.</div></li>
+    <li><div class="t">Inbox with search and unread indicators</div><div class="d">A conversations inbox lists chats with message previews and unread counts, and includes a search to start a new conversation with any user.</div></li>
+  </ul>
+
+  <h2><span class="n">06</span>Social Feed — Posts &amp; Reels</h2>
+  <ul class="feat">
+    <li><div class="t">Share photos and videos</div><div class="d">From a dedicated tab, users publish photo <b>Posts</b> and video <b>Reels</b> with captions to a feed that switches between the two formats.</div></li>
+    <li><div class="t">Likes and comments</div><div class="d">Viewers like (including double-tap), comment, reply to comments, and like comments — a complete and familiar social interaction layer.</div></li>
+  </ul>
+
+  <h2><span class="n">07</span>Platform &amp; Infrastructure</h2>
+  <ul class="feat">
+    <li><div class="t">Live backend and database</div><div class="d">The application's server and database are deployed and online, so the product is fully operational over the internet.</div></li>
+    <li><div class="t">Media hosted within the platform</div><div class="d">Profile and post images and videos are uploaded to and served from the application's own storage.</div></li>
+  </ul>
+
+  <div class="note">
+    All modules above are implemented and operating on GetDraft's live backend infrastructure.
+  </div>
+
+  <div class="doc-footer">
+    GetDraft <b>·</b> Sports Recruiting Platform <b>·</b> Advancement Report <b>·</b> June 8, 2026 <b>·</b> Prepared by Progix
+  </div>
+
+</div>
+</body>
+</html>
