@@ -54,14 +54,17 @@ function RootLayoutContent() {
     fetch(`${API_ORIGIN}/api/health`).catch(() => {});
   }, []);
 
-  // Restore auth on app start
+  // Restore auth on app start. Users who haven't finished onboarding
+  // (location / profile / KYC / guardian-link / questions / plan) MUST
+  // drop back into the auth flow — otherwise a reload mid-signup would
+  // skip straight to home and leave them unverified.
   useEffect(() => {
     loadAuth().then((persisted) => {
       if (persisted?.user) {
         dispatch(
           login({ user: persisted.user, isOnboarded: persisted.isOnboarded }),
         );
-        setAppState("app");
+        setAppState(persisted.isOnboarded ? "app" : "auth");
       } else {
         setAppState("splash");
       }

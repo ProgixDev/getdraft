@@ -19,7 +19,6 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withDelay,
-  withSpring,
   FadeIn,
   FadeInDown,
 } from "react-native-reanimated";
@@ -33,6 +32,7 @@ import {
   Poppins_700Bold,
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
+import { useStripe } from "@stripe/stripe-react-native";
 import { images } from "@/config/assets";
 import { brand, neutral } from "@/config/colors";
 import { MOCK_USERS } from "@/constants/mockUsers";
@@ -40,46 +40,61 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   login,
   loginAsync,
-  signupAsync,
   completeOnboarding,
   completeOnboardingAsync,
   clearError,
+  logout,
 } from "@/store/slices/authSlice";
+import { authService } from "@/services/auth";
 import { usersService } from "@/services/users";
-import type { AuthResponse } from "@/services/auth";
+import { subscriptionsService } from "@/services/subscriptions";
+import { kycService } from "@/services/kyc";
+import { guardianLinksService } from "@/services/guardianLinks";
 import { EmailVerificationScreen } from "./EmailVerificationScreen";
+import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { PlanSelectionScreen } from "./PlanSelectionScreen";
 import { LocationSelectionScreen } from "./LocationSelectionScreen";
 import { ProfileSetupScreen } from "./ProfileSetupScreen";
-import { PaymentScreen } from "./PaymentScreen";
 import { TutorialScreen } from "./TutorialScreen";
-import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
+import { KycVerificationScreen } from "./KycVerificationScreen";
+import { OnboardingQuestionsScreen } from "./OnboardingQuestionsScreen";
+import { GuardianLinkScreen } from "./GuardianLinkScreen";
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 interface AuthScreenProps {
   onLogin?: () => void;
   onSignup?: () => void;
   /**
-   * Phone-OTP handoff from AuthLanding: a verified phone + the signed
-   * verification token for /auth/complete-signup. Honored by the step-9
-   * signup-flow restructure; accepted here so AuthLanding compiles.
+   * Set when the user arrived via the phone signup path. We skip the
+   * email/OTP steps and just collect role + name + password, then call
+   * completeSignup with this token.
    */
   phoneVerificationToken?: string;
+  /** Display-only: shown on the phone-signup welcome line. */
   initialPhone?: string;
-  /** OAuth handoff from AuthLanding (user exists, needs role + onboarding). */
+  /**
+   * Set when the user arrived via OAuth (Apple, Google) and is brand
+   * new. The Supabase user already exists with the trigger-default
+   * 'athlete' role; we just need to ask them which role they actually
+   * want and update the row before continuing onboarding.
+   */
   oauthMode?: { initialName?: string; initialEmail?: string };
 }
 
-type AuthMode = "login" | "signup";
+type AuthMode = "login" | "signup" | "forgot";
 type SignupStep =
   | "role"
+  | "phone-role" // role + name + password (no email) for phone signups
+  | "oauth-role" // role + name (no email, no password) for OAuth signups
   | "verify"
-  | "plan"
   | "location"
   | "profile"
-  | "payment"
-  | "tutorial";
+  | "kyc" // Didit identity verification
+  | "guardian-link" // Parent-only — scan athlete QR, answer questions, record video
+  | "questions" // Per-role onboarding questionnaire — feeds the matching algorithm
+  | "tutorial"
+  | "plan"; // Subscription pick — LAST step; tap pays via Stripe, X skips (stay on Basic)
 type UserRole = "athlete" | "parent" | "coach" | "recruiter";
 
 interface RoleOption {
@@ -121,9 +136,15 @@ const roleOptions: RoleOption[] = [
   },
 ];
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({
+  onLogin,
+  phoneVerificationToken,
+  initialPhone,
+  oauthMode,
+}) => {
   const dispatch = useAppDispatch();
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const isPhoneSignup = !!phoneVerificationToken;
+  const isOauthSignup = !!oauthMode;
 
   // Fonts
   const [fontsLoaded] = useFonts({
@@ -134,16 +155,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     Poppins_800ExtraBold,
   });
 
-  // State
-  const [mode, setMode] = useState<AuthMode>("login");
-  const [signupStep, setSignupStep] = useState<SignupStep>("role");
+  // State — when arriving with a phoneVerificationToken we jump straight
+  // into the role + name + password step. OAuth arrivals jump to the
+  // oauth-role step (role + name, no password).
+  const [mode, setMode] = useState<AuthMode>(
+    isPhoneSignup || isOauthSignup ? "signup" : "login",
+  );
+  const [signupStep, setSignupStep] = useState<SignupStep>(
+    isPhoneSignup ? "phone-role" : isOauthSignup ? "oauth-role" : "role",
+  );
   const [role, setRole] = useState<UserRole>("athlete");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(oauthMode?.initialEmail ?? "");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState(oauthMode?.initialName ?? "");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("basic");
   const [location, setLocation] = useState({ city: "", country: "" });
+  /** Set after the OTP is verified; carried into completeSignup. */
+  const [verificationToken, setVerificationToken] = useState<string | null>(
+    null,
+  );
+
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const isAuthenticated = useAppSelector((s) => s.auth.isAuthenticated);
+  const isOnboarded = useAppSelector((s) => s.auth.isOnboarded);
+  const user = useAppSelector((s) => s.auth.user);
 
   // Animation values
   const contentOpacity = useSharedValue(0);
@@ -151,6 +188,113 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   useEffect(() => {
     contentOpacity.value = withDelay(300, withTiming(1, { duration: 600 }));
   }, []);
+
+  /**
+   * Resume signup at the right step when the user is logged in but
+   * not onboarded (e.g. they reloaded mid-signup). We ask the backend
+   * what's been completed already and drop them at the earliest
+   * unfinished step, instead of bouncing them back to "Choose your role".
+   */
+  useEffect(() => {
+    if (!isAuthenticated || isOnboarded) return;
+    // Only auto-resume out of the initial role/phone-role/oauth-role
+    // steps — once the user has clicked into a later step we trust
+    // their in-progress local state.
+    if (
+      signupStep !== "role" &&
+      signupStep !== "phone-role" &&
+      signupStep !== "oauth-role"
+    )
+      return;
+    let cancelled = false;
+    (async () => {
+      // First confirm the session is actually valid. If /users/me
+      // returns 401, the persisted user is dead (e.g. AsyncStorage
+      // was wiped by a prebuild --clean) — we must NOT drop the
+      // user into mid-flow steps without a token. Instead clear
+      // Redux + persisted auth so they re-authenticate cleanly.
+      let me: any = null;
+      let authBroken = false;
+      try {
+        me = await usersService.getMe();
+      } catch (err: any) {
+        if (err?.response?.status === 401) authBroken = true;
+      }
+      if (cancelled) return;
+      if (authBroken) {
+        dispatch(logout());
+        return;
+      }
+
+      try {
+        const [kyc, guardianLink] = await Promise.all([
+          kycService.getStatus().catch(() => null),
+          guardianLinksService.getMyLink().catch(() => null),
+        ]);
+        if (cancelled) return;
+        const meRole = (me?.role ?? role) as UserRole;
+        // Sync local role state with the authoritative DB role —
+        // otherwise after a reload the `role` state defaults to
+        // 'athlete' and downstream upserts hit the wrong table.
+        if (me?.role && me.role !== role) setRole(me.role as UserRole);
+        // Also push the corrected user into Redux so the UI
+        // (More tab, profile, tab gating) doesn't lag.
+        if (user && me?.role && me.role !== user.role) {
+          dispatch(
+            login({
+              user: {
+                ...user,
+                role: me.role as UserRole,
+                name: me.name ?? user.name,
+              },
+              isOnboarded,
+            }),
+          );
+        }
+        const hasLocation = !!me?.location;
+        const hasProfileBio = !!me?.bio || !!me?.avatar_url;
+        const kycApproved = kyc?.kycStatus === "approved";
+        const guardianDone =
+          meRole !== "parent" ||
+          !!me?.preferences?.dev?.guardianSkipped ||
+          (guardianLink &&
+            (guardianLink.status === "pending_admin" ||
+              guardianLink.status === "approved"));
+        // Parent flow skips location / questions / tutorial /
+        // plan — see handleGuardianLinkComplete. So once their
+        // guardian-link is in, onboarding is effectively done
+        // and they should land in the app rather than re-enter
+        // the auth flow on reload.
+        const answeredQuestions =
+          meRole === "parent" || !!me?.preferences?.onboarding?.answeredAt;
+        let resumeAt: SignupStep = "plan";
+        if (meRole === "parent") {
+          if (!hasProfileBio) resumeAt = "profile";
+          else if (!kycApproved) resumeAt = "kyc";
+          else if (!guardianDone) resumeAt = "guardian-link";
+          else {
+            // Everything done — mark onboarded so the
+            // layout sends the parent into the main app.
+            finishOnboarding().catch(() => {});
+            return;
+          }
+        } else if (!hasLocation) resumeAt = "location";
+        else if (!hasProfileBio) resumeAt = "profile";
+        else if (!kycApproved) resumeAt = "kyc";
+        else if (!guardianDone) resumeAt = "guardian-link";
+        else if (!answeredQuestions) resumeAt = "questions";
+        else resumeAt = "plan";
+        setMode("signup");
+        setSignupStep(resumeAt);
+      } catch {
+        // Non-auth failure — keep them at the role picker rather
+        // than guessing a step we can't verify.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isOnboarded]);
 
   const animatedContentStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
@@ -165,23 +309,180 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   const handleBackToRoleSelection = () => {
-    setSignupStep("role");
-  };
-
-  const handleEmailVerified = (result: AuthResponse) => {
-    dispatch(
-      login({
-        user: result.user,
-        isOnboarded: result.isOnboarded,
-      }),
+    setSignupStep(
+      isPhoneSignup ? "phone-role" : isOauthSignup ? "oauth-role" : "role",
     );
-    setSignupStep(result.isOnboarded ? "role" : "plan");
-    if (result.isOnboarded) onLogin?.();
   };
 
-  const handlePlanSelected = (planId: string) => {
+  /**
+   * OAuth signup: Supabase user is already created. We just need to
+   * record the chosen role + name on public.users, then drop into the
+   * onboarding flow.
+   */
+  const handleOauthRoleSubmit = async () => {
+    if (isLoading) return;
+    if (!name.trim()) {
+      Alert.alert("Error", "Please enter your name.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await usersService.updateMe({ role, name: name.trim() });
+      // Refresh Redux user with the new role + name so downstream screens see it.
+      const me = await usersService.getMe().catch(() => null);
+      dispatch(
+        login({
+          user: {
+            id: me?.id ?? oauthMode?.initialEmail ?? "",
+            email: me?.email ?? oauthMode?.initialEmail ?? "",
+            role,
+            name: name.trim(),
+          },
+          isOnboarded: false,
+        }),
+      );
+      setIsLoading(false);
+      // Parents skip location (no discover feed of their own) —
+      // jump straight to the profile basics.
+      setSignupStep(role === "parent" ? "profile" : "location");
+    } catch (err: any) {
+      setIsLoading(false);
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Could not save your role. Please try again.";
+      Alert.alert("Error", String(message));
+    }
+  };
+
+  /**
+   * Phone signup: role + name + password are already collected. Call
+   * completeSignup with the phoneVerificationToken so the Supabase user
+   * is created NOW (first time the user exists in Supabase). Then drop
+   * into the onboarding flow.
+   */
+  const handlePhoneRoleSubmit = async () => {
+    if (isLoading) return;
+    if (!phoneVerificationToken) return;
+
+    if (!name.trim()) {
+      Alert.alert("Error", "Please enter your name.");
+      return;
+    }
+    if (!password || password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await authService.completeSignup({
+        verificationToken: phoneVerificationToken,
+        password,
+        role,
+        name: name.trim(),
+      });
+      dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
+      setIsLoading(false);
+      setSignupStep(role === "parent" ? "profile" : "location");
+    } catch (err: any) {
+      setIsLoading(false);
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Could not finish creating your account. Please try again.";
+      Alert.alert("Sign-up failed", String(message));
+    }
+  };
+
+  /**
+   * The OTP screen hands us a signed verification token. We immediately
+   * call /auth/complete-signup which creates the Supabase user (the
+   * FIRST time the user exists in Supabase), saves session tokens, and
+   * flips the app into authenticated state. The remaining steps
+   * (location / profile / kyc / questions / plan) then run as normal
+   * authenticated API calls.
+   */
+  const handleEmailVerified = async (token: string) => {
+    setVerificationToken(token);
+    try {
+      const result = await authService.completeSignup({
+        verificationToken: token,
+        password,
+        role,
+        name: email.split("@")[0],
+      });
+      dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
+      setSignupStep(role === "parent" ? "profile" : "location");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Could not finish creating your account. Please try again.";
+      Alert.alert("Sign-up failed", String(message));
+      // Bounce back to OTP so the user can try a fresh code if it
+      // was a timing issue.
+      setSignupStep("verify");
+    }
+  };
+
+  /**
+   * Final step in signup. Free plan = finish onboarding. Paid plan =
+   * open Stripe Payment Sheet; on success finish onboarding, on
+   * cancellation throw so PlanSelectionScreen clears its spinner.
+   */
+  const handlePlanSelected = async (planId: string) => {
     setSelectedPlan(planId);
-    setSignupStep("location");
+    const plan = (await import("@/constants/plansData")).plans.find(
+      (p) => p.id === planId,
+    );
+    if (!plan || plan.price === 0) {
+      await finishOnboarding();
+      return;
+    }
+    try {
+      const params = await subscriptionsService.createPaymentSheet(planId);
+      if (!params?.paymentIntentClientSecret) {
+        throw new Error("Stripe did not return a payment session.");
+      }
+      const { error: initErr } = await initPaymentSheet({
+        merchantDisplayName: "GetDraft",
+        customerId: params.customerId,
+        customerEphemeralKeySecret: params.ephemeralKeySecret,
+        paymentIntentClientSecret: params.paymentIntentClientSecret,
+        returnURL: "getdraft://stripe-redirect",
+        defaultBillingDetails: { address: { country: "CA" } },
+        appearance: {
+          primaryButton: {
+            colors: { background: brand.primary, text: brand.white },
+          },
+        },
+      });
+      if (initErr)
+        throw new Error(initErr.message || "Could not prepare checkout.");
+      const { error: payErr } = await presentPaymentSheet();
+      if (payErr) {
+        if (payErr.code === "Canceled") {
+          throw new Error("Canceled");
+        }
+        throw new Error(payErr.message || "Payment failed.");
+      }
+      await finishOnboarding();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ?? err?.message ?? "Payment failed.";
+      if (msg !== "Canceled") {
+        Alert.alert("Could not complete payment", String(msg));
+      }
+      // Re-throw so the per-card spinner on PlanSelectionScreen resets.
+      throw err;
+    }
+  };
+
+  /** X-to-skip: skip plan selection, stay on Basic, finish onboarding. */
+  const handleSkipPlan = async () => {
+    setSelectedPlan("basic");
+    await finishOnboarding();
   };
 
   const handleLocationSelected = async (city: string, country: string) => {
@@ -203,20 +504,49 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   const handleProfilePayment = () => {
-    setSignupStep("payment");
+    // Insert the KYC gate between Profile and Payment so we don't
+    // collect money from users who'd fail verification.
+    setSignupStep("kyc");
   };
 
-  const handlePaymentComplete = () => {
+  /**
+   * After KYC: parents go through guardian-link first (scan + video),
+   * everyone else goes straight to the onboarding questionnaire.
+   */
+  const handleKycComplete = () => {
+    setSignupStep(role === "parent" ? "guardian-link" : "questions");
+  };
+
+  /**
+   * Guardian-link is the LAST signup step for parents. They don't go
+   * through the questionnaire (covered by guardian-link + the linked
+   * athlete's own preferences), the swipe tutorial (they don't
+   * swipe), or the plan picker (subscription lives on the athlete
+   * account). Finish onboarding directly.
+   */
+  const handleGuardianLinkComplete = async () => {
+    await finishOnboarding();
+  };
+
+  const handleQuestionsComplete = () => {
     setSignupStep("tutorial");
   };
 
-  const handleTutorialComplete = async () => {
-    // Persist is_onboarded=true to backend (and update Redux + AsyncStorage)
+  /** Tutorial → plan (the new last step). */
+  const handleTutorialComplete = () => {
+    setSignupStep("plan");
+  };
+
+  /**
+   * Mark onboarding complete on the backend + Redux + AsyncStorage,
+   * then drop the user into the main app. Called from both the
+   * plan-paid success path and the X-to-skip path.
+   */
+  const finishOnboarding = async () => {
     try {
       await dispatch(completeOnboardingAsync()).unwrap();
     } catch (err: any) {
       console.warn("[AuthScreen] completeOnboardingAsync failed:", err);
-      // Fall back to local state-only update so the user isn't stuck
       dispatch(completeOnboarding());
     }
     onLogin?.();
@@ -246,19 +576,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
     if (mode === "signup") {
       try {
-        await dispatch(
-          signupAsync({ email, password, role, name: email.split("@")[0] }),
-        ).unwrap();
+        // Backend OWNS the verification: it sends a 6-digit OTP via
+        // SMTP, and won't create a Supabase user until /auth/complete-signup.
+        await authService.requestEmailOtp(email);
         setIsLoading(false);
-        // Supabase has emailed a 6-digit OTP. Continue to the verify step.
         setSignupStep("verify");
       } catch (err: any) {
         setIsLoading(false);
-        Alert.alert(
-          "Sign-up failed",
-          err?.toString?.() ||
-            "Could not create your account. Please try again.",
-        );
+        const message =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Could not send the verification code. Please try again.";
+        Alert.alert("Sign-up failed", String(message));
       }
     } else {
       // Login
@@ -268,9 +597,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         if (result.isOnboarded) {
           onLogin?.();
         } else {
-          // Resume onboarding for an existing user that never finished
+          // Resume onboarding for an existing user that never finished —
+          // the resume effect above figures out the exact step.
           setMode("signup");
-          setSignupStep("plan");
+          setSignupStep("location");
         }
       } catch (err: any) {
         // Fallback to mock users only if backend is unreachable (network error, no response)
@@ -309,11 +639,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   if (!fontsLoaded) return null;
 
-  if (showForgotPassword) {
+  // Forgot password flow
+  if (mode === "forgot") {
     return (
       <ForgotPasswordScreen
         initialEmail={email}
-        onBack={() => setShowForgotPassword(false)}
+        onBack={() => setMode("login")}
       />
     );
   }
@@ -329,18 +660,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             onBack={handleBackToRoleSelection}
           />
         );
-      case "plan":
-        return (
-          <PlanSelectionScreen
-            onPlanSelected={handlePlanSelected}
-            onBack={handleBackToRoleSelection}
-          />
-        );
       case "location":
         return (
           <LocationSelectionScreen
             onLocationSelected={handleLocationSelected}
-            onBack={() => setSignupStep("plan")}
+            onBack={handleBackToRoleSelection}
           />
         );
       case "profile":
@@ -349,20 +673,340 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             role={role}
             onComplete={handleTutorialComplete}
             onPayment={handleProfilePayment}
-            onBack={() => setSignupStep("location")}
+            onBack={() =>
+              // Parents skipped location, so "back" from
+              // their profile step goes to the role picker.
+              role === "parent"
+                ? handleBackToRoleSelection()
+                : setSignupStep("location")
+            }
           />
         );
-      case "payment":
+      case "kyc":
         return (
-          <PaymentScreen
-            selectedPlanId={selectedPlan}
-            onPaymentComplete={handlePaymentComplete}
+          <KycVerificationScreen
+            onComplete={handleKycComplete}
             onBack={() => setSignupStep("profile")}
+          />
+        );
+      case "guardian-link":
+        return (
+          <GuardianLinkScreen
+            onComplete={handleGuardianLinkComplete}
+            onBack={() => setSignupStep("kyc")}
+          />
+        );
+      case "questions":
+        return (
+          <OnboardingQuestionsScreen
+            role={role}
+            onComplete={handleQuestionsComplete}
+            onBack={() =>
+              setSignupStep(role === "parent" ? "guardian-link" : "kyc")
+            }
           />
         );
       case "tutorial":
         return <TutorialScreen onComplete={handleTutorialComplete} />;
+      case "plan":
+        return (
+          <PlanSelectionScreen
+            onPlanSelected={handlePlanSelected}
+            onSkip={handleSkipPlan}
+          />
+        );
+      case "phone-role":
+        return renderPhoneRoleStep();
+      case "oauth-role":
+        return renderOauthRoleStep();
     }
+  }
+
+  function renderOauthRoleStep() {
+    return (
+      <LinearGradient
+        colors={[brand.primary, "#0a4d8f", brand.primary]}
+        style={styles.container}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.container}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
+              <Image
+                source={images.logoWhite}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.tagline}>Welcome to GetDraft</Text>
+            </Animated.View>
+
+            <Animated.View
+              entering={FadeInDown.duration(600).delay(150)}
+              style={styles.card}
+            >
+              <Text style={styles.title}>Choose Your Role</Text>
+              <Text style={styles.subtitle}>
+                Tell us how you'll use GetDraft.
+              </Text>
+
+              <View style={styles.rolesGrid}>
+                {roleOptions.map((roleOption) => {
+                  const isActive = role === roleOption.id;
+                  return (
+                    <Pressable
+                      key={roleOption.id}
+                      style={[styles.roleCard, isActive && styles.roleCardActive]}
+                      onPress={() => setRole(roleOption.id)}
+                    >
+                      <View
+                        style={[
+                          styles.roleIconContainer,
+                          isActive && styles.roleIconContainerActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name={roleOption.icon}
+                          size={24}
+                          color={isActive ? brand.white : brand.primary}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.roleLabel,
+                          isActive && styles.roleLabelActive,
+                        ]}
+                      >
+                        {roleOption.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.roleDescription,
+                          isActive && { color: "rgba(255,255,255,0.85)" },
+                        ]}
+                      >
+                        {roleOption.description}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.rolePrice,
+                          isActive && styles.rolePriceActive,
+                        ]}
+                      >
+                        {roleOption.price}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.formContainer}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color={neutral.gray400}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Your name"
+                    placeholderTextColor={neutral.gray500}
+                    autoCapitalize="words"
+                    editable={!isLoading}
+                    autoComplete="name"
+                  />
+                </View>
+
+                <Pressable
+                  style={[styles.submitButton, isLoading && { opacity: 0.7 }]}
+                  onPress={handleOauthRoleSubmit}
+                  disabled={isLoading}
+                >
+                  <LinearGradient
+                    colors={[brand.primary, "#0a4d8f"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.submitButtonGradient}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator color={brand.white} />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Continue</Text>
+                    )}
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    );
+  }
+
+  function renderPhoneRoleStep() {
+    return (
+      <LinearGradient
+        colors={[brand.primary, "#0a4d8f", brand.primary]}
+        style={styles.container}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.container}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
+              <Image
+                source={images.logoWhite}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.tagline}>One last step</Text>
+            </Animated.View>
+
+            <Animated.View
+              entering={FadeInDown.duration(600).delay(150)}
+              style={styles.card}
+            >
+              <Text style={styles.title}>Choose Your Role</Text>
+              <Text style={styles.subtitle}>
+                Signing up as {initialPhone ?? "your phone"}
+              </Text>
+
+              <View style={styles.rolesGrid}>
+                {roleOptions.map((roleOption) => {
+                  const isActive = role === roleOption.id;
+                  return (
+                    <Pressable
+                      key={roleOption.id}
+                      style={[styles.roleCard, isActive && styles.roleCardActive]}
+                      onPress={() => setRole(roleOption.id)}
+                    >
+                      <View
+                        style={[
+                          styles.roleIconContainer,
+                          isActive && styles.roleIconContainerActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name={roleOption.icon}
+                          size={24}
+                          color={isActive ? brand.white : brand.primary}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.roleLabel,
+                          isActive && styles.roleLabelActive,
+                        ]}
+                      >
+                        {roleOption.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.roleDescription,
+                          isActive && { color: "rgba(255,255,255,0.85)" },
+                        ]}
+                      >
+                        {roleOption.description}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.rolePrice,
+                          isActive && styles.rolePriceActive,
+                        ]}
+                      >
+                        {roleOption.price}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.formContainer}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color={neutral.gray400}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Your name"
+                    placeholderTextColor={neutral.gray500}
+                    autoCapitalize="words"
+                    editable={!isLoading}
+                    autoComplete="name"
+                  />
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={20}
+                    color={neutral.gray400}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Password (min. 6 characters)"
+                    placeholderTextColor={neutral.gray500}
+                    secureTextEntry={!isPasswordVisible}
+                    editable={!isLoading}
+                    autoComplete="new-password"
+                  />
+                  <Pressable
+                    onPress={() => setIsPasswordVisible((v) => !v)}
+                    style={styles.eyeIcon}
+                  >
+                    <Ionicons
+                      name={isPasswordVisible ? "eye" : "eye-off"}
+                      size={20}
+                      color={neutral.gray400}
+                    />
+                  </Pressable>
+                </View>
+
+                <Pressable
+                  style={[styles.submitButton, isLoading && { opacity: 0.7 }]}
+                  onPress={handlePhoneRoleSubmit}
+                  disabled={isLoading}
+                >
+                  <LinearGradient
+                    colors={[brand.primary, "#0a4d8f"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.submitButtonGradient}
+                  >
+                    {isLoading ? (
+                      <ActivityIndicator color={brand.white} />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Continue</Text>
+                    )}
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
+    );
   }
 
   // Render login or initial signup screen
@@ -520,7 +1164,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               {mode === "login" && (
                 <Pressable
                   style={styles.forgotPassword}
-                  onPress={() => setShowForgotPassword(true)}
+                  onPress={() => setMode("forgot")}
                 >
                   <Text style={styles.forgotPasswordText}>
                     Forgot password?
@@ -547,7 +1191,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     <ActivityIndicator color={brand.white} />
                   ) : (
                     <Text style={styles.submitButtonText}>
-                      {mode === "login" ? "Sign In" : "Continue to Plans"}
+                      {mode === "login" ? "Sign In" : "Continue"}
                     </Text>
                   )}
                 </LinearGradient>
@@ -723,26 +1367,6 @@ const styles = StyleSheet.create({
     color: brand.primary,
     fontSize: 13,
     fontFamily: "Poppins_500Medium",
-  },
-  demoCard: {
-    marginTop: 2,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: neutral.gray50,
-    borderWidth: 1,
-    borderColor: neutral.gray200,
-  },
-  demoTitle: {
-    fontSize: 12,
-    fontFamily: "Poppins_600SemiBold",
-    color: brand.primary,
-    marginBottom: 4,
-  },
-  demoLine: {
-    fontSize: 12,
-    fontFamily: "Poppins_400Regular",
-    color: neutral.gray600,
-    lineHeight: 18,
   },
   submitButton: {
     height: 54,

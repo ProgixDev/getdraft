@@ -6,6 +6,7 @@ import {
   Pressable,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
@@ -24,12 +25,26 @@ import { Plan, plans } from "@/constants/plansData";
 const { width } = Dimensions.get("window");
 
 interface PlanSelectionScreenProps {
-  onPlanSelected: (planId: string) => void;
-  onBack: () => void;
+  /**
+   * Called when the user picks a plan. For paid plans the parent
+   * should present Stripe and resolve once the charge is confirmed;
+   * for the free plan it should just advance. Returning a rejected
+   * promise stops the per-card spinner so the user can retry.
+   */
+  onPlanSelected: (planId: string) => Promise<void> | void;
+  /**
+   * Optional X-to-skip handler. Shown as a close icon at the top-right
+   * when present — used at the end of signup so users can defer the
+   * subscription decision and finish onboarding on Basic.
+   */
+  onSkip?: () => void;
+  /** Optional back-chevron, shown top-left when present. */
+  onBack?: () => void;
 }
 
 export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
   onPlanSelected,
+  onSkip,
   onBack,
 }) => {
   const [fontsLoaded] = useFonts({
@@ -40,10 +55,23 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
     Poppins_800ExtraBold,
   });
 
-  const [selectedPlan, setSelectedPlan] = useState("pro");
+  const [processingPlanId, setProcessingPlanId] = useState<string | null>(
+    null,
+  );
 
-  const handleContinue = () => {
-    onPlanSelected(selectedPlan);
+  const handlePick = async (planId: string) => {
+    if (processingPlanId) return;
+    setProcessingPlanId(planId);
+    try {
+      await onPlanSelected(planId);
+      // Parent navigates away on success — leave the spinner on so
+      // the card doesn't visually "reset" before unmount.
+    } catch {
+      // Failure / cancellation — release the spinner so the user
+      // can pick again. The parent is expected to surface the
+      // error message itself.
+      setProcessingPlanId(null);
+    }
   };
 
   if (!fontsLoaded) return null;
@@ -57,22 +85,43 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Back Button */}
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={brand.white} />
-        </Pressable>
+        {/* Top bar — back chevron (optional) + X-to-skip (optional) */}
+        <View style={styles.topBar}>
+          {onBack ? (
+            <Pressable onPress={onBack} style={styles.iconButton}>
+              <Ionicons name="arrow-back" size={22} color={brand.white} />
+            </Pressable>
+          ) : (
+            <View style={styles.iconButton} />
+          )}
+          {onSkip ? (
+            <Pressable
+              onPress={onSkip}
+              style={styles.iconButton}
+              disabled={processingPlanId !== null}
+            >
+              <Ionicons name="close" size={22} color={brand.white} />
+            </Pressable>
+          ) : (
+            <View style={styles.iconButton} />
+          )}
+        </View>
 
         {/* Header */}
         <Animated.View entering={FadeIn.duration(800)} style={styles.header}>
           <Text style={styles.title}>Choose Your Plan</Text>
           <Text style={styles.subtitle}>
-            Start with free and upgrade anytime
+            Tap a paid plan to pay now — start free anytime.
           </Text>
         </Animated.View>
 
         {/* Plans */}
         <View style={styles.plansContainer}>
-          {plans.map((plan, index) => (
+          {plans.map((plan, index) => {
+            const isProcessing = processingPlanId === plan.id;
+            const isDisabled = processingPlanId !== null && !isProcessing;
+            const isSelected = isProcessing; // visual highlight for the tapped one
+            return (
             <Animated.View
               key={plan.id}
               entering={FadeInDown.duration(600).delay(100 * index)}
@@ -80,10 +129,12 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
               <Pressable
                 style={[
                   styles.planCard,
-                  selectedPlan === plan.id && styles.planCardSelected,
+                  isSelected && styles.planCardSelected,
                   plan.popular && styles.planCardPopular,
+                  isDisabled && { opacity: 0.5 },
                 ]}
-                onPress={() => setSelectedPlan(plan.id)}
+                onPress={() => handlePick(plan.id)}
+                disabled={processingPlanId !== null}
               >
                 {plan.popular && (
                   <View style={styles.popularBadge}>
@@ -95,7 +146,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                   <Text
                     style={[
                       styles.planName,
-                      selectedPlan === plan.id && styles.planNameSelected,
+                      isSelected && styles.planNameSelected,
                     ]}
                   >
                     {plan.name}
@@ -106,7 +157,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                       <Text
                         style={[
                           styles.freeText,
-                          selectedPlan === plan.id && styles.priceSelected,
+                          isSelected && styles.priceSelected,
                         ]}
                       >
                         FREE
@@ -116,7 +167,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                         <Text
                           style={[
                             styles.priceSymbol,
-                            selectedPlan === plan.id && styles.priceSelected,
+                            isSelected && styles.priceSelected,
                           ]}
                         >
                           $
@@ -124,7 +175,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                         <Text
                           style={[
                             styles.priceAmount,
-                            selectedPlan === plan.id && styles.priceSelected,
+                            isSelected && styles.priceSelected,
                           ]}
                         >
                           {plan.price}
@@ -136,7 +187,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                   <Text
                     style={[
                       styles.pricePeriod,
-                      selectedPlan === plan.id && styles.pricePeriodSelected,
+                      isSelected && styles.pricePeriodSelected,
                     ]}
                   >
                     {plan.period}
@@ -148,13 +199,13 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                     name="heart"
                     size={16}
                     color={
-                      selectedPlan === plan.id ? brand.primary : neutral.gray500
+                      isSelected ? brand.primary : neutral.gray500
                     }
                   />
                   <Text
                     style={[
                       styles.swipesText,
-                      selectedPlan === plan.id && styles.swipesTextSelected,
+                      isSelected && styles.swipesTextSelected,
                     ]}
                   >
                     {plan.swipes}
@@ -170,7 +221,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                         name="checkmark-circle"
                         size={18}
                         color={
-                          selectedPlan === plan.id
+                          isSelected
                             ? brand.primary
                             : neutral.gray400
                         }
@@ -178,7 +229,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                       <Text
                         style={[
                           styles.featureText,
-                          selectedPlan === plan.id &&
+                          isSelected &&
                             styles.featureTextSelected,
                         ]}
                       >
@@ -188,42 +239,16 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                   ))}
                 </View>
 
-                {selectedPlan === plan.id && (
+                {isProcessing ? (
                   <View style={styles.selectedIndicator}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={24}
-                      color={brand.primary}
-                    />
+                    <ActivityIndicator size="small" color={brand.primary} />
                   </View>
-                )}
+                ) : null}
               </Pressable>
             </Animated.View>
-          ))}
+            );
+          })}
         </View>
-
-        {/* Continue Button */}
-        <Animated.View entering={FadeInDown.duration(800).delay(400)}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.continueButton,
-              pressed && { transform: [{ scale: 0.98 }] },
-            ]}
-            onPress={handleContinue}
-          >
-            <LinearGradient
-              colors={[brand.white, brand.white]}
-              style={styles.buttonGradient}
-            >
-              <Text style={styles.buttonText}>
-                {plans.find((p) => p.id === selectedPlan)?.price === 0
-                  ? "Start Free"
-                  : "Continue"}
-              </Text>
-              <Ionicons name="arrow-forward" size={20} color={brand.primary} />
-            </LinearGradient>
-          </Pressable>
-        </Animated.View>
       </ScrollView>
     </LinearGradient>
   );
@@ -238,14 +263,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 30,
   },
   header: {
     alignItems: "center",

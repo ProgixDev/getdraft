@@ -17,11 +17,12 @@ import {
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
-import { authService, type AuthResponse } from "@/services/auth";
+import { authService } from "@/services/auth";
 
 interface EmailVerificationScreenProps {
   email: string;
-  onVerified: (result: AuthResponse) => void;
+  /** Called with the signed verification token returned by /auth/email/verify-otp. */
+  onVerified: (verificationToken: string) => void;
   onBack: () => void;
 }
 
@@ -83,9 +84,12 @@ export const EmailVerificationScreen: React.FC<
     setIsLoading(true);
 
     try {
-      const result = await authService.verifyEmail(email, enteredCode);
+      const { verificationToken } = await authService.verifyEmailOtp(
+        email,
+        enteredCode,
+      );
       setIsLoading(false);
-      onVerified(result);
+      onVerified(verificationToken);
     } catch (err: any) {
       setIsLoading(false);
       const message =
@@ -101,7 +105,9 @@ export const EmailVerificationScreen: React.FC<
     setInfoMsg(null);
     setIsResending(true);
     try {
-      await authService.resendOtp(email);
+      // The backend-owned flow re-issues by upserting a fresh OTP —
+      // /auth/resend-otp only covers the legacy Supabase-mailer path.
+      await authService.requestEmailOtp(email);
       setInfoMsg("A new code has been sent.");
       setTimer(60);
     } catch (err: any) {
