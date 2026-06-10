@@ -1,6 +1,6 @@
 # Feature Gap Report — porting `feat/onboarding-billing-updates` into this project
 
-**Date:** 2026-06-10 · **Analyst:** Claude Code · **Status:** Phase 1 complete, awaiting approval (Phase 2)
+**Date:** 2026-06-10 · **Analyst:** Claude Code · **Status:** ✅ PORT COMPLETE (2026-06-10) — see "Port completion report" at the end for final statuses, env vars, and manual steps
 
 ## Executive summary
 
@@ -164,3 +164,100 @@
 - Supabase: enable Apple + Google OAuth providers (client ids/secrets, redirect URL), create `guardian-videos` bucket happens automatically in code.
 - Gmail/SMTP: app password for dev.
 - Device testing: phone OTP, OAuth (real bundle id), Payment Sheet, camera QR scan + video record (dev build, not Expo Go), push notifications (physical device).
+
+---
+
+# Port completion report (2026-06-10)
+
+All 11 steps landed on `feat/discover-pinterest-redesign`, one conventional
+commit per step, tsc green in app + backend after every step:
+
+| Step | Commit | Scope |
+|---|---|---|
+| 1 | a75156d | Foundations: scheme `getdraft`, plugins, rawBody, deps, .env.example, .mcp.json.example |
+| 2 | 86af50b | Migrations 013–018 (renumbered) + MIGRATIONS_TO_RUN.sql + Prisma schema |
+| 3 | 1797100 | Mail module + email OTP backend (request-otp / verify-otp / complete-signup) |
+| 4 | bea12fb | Phone OTP via Twilio Verify (SMS + WhatsApp) |
+| 5 | 5c73ac1 | ⭐ Guardian linking full stack (QR → scan → questionnaire → declaration video → admin review) |
+| 6 | 01e0fe2 | Didit KYC full stack (rawBody HMAC webhook adaptation) |
+| 7 | 9f0007e | Billing: Payment Sheet, cancel/resume, swipe packs (Prisma bonus_swipes rewrite), 3-plan pricing |
+| 8 | 7886bbb | AuthLanding + phone screens + Apple/Google OAuth + forgot-password UI |
+| 9 | 7d36d05 | Signup flow restructure + OnboardingQuestionsScreen (plan last, skippable) |
+| 10 | 7570b94 | Settings persistence, push loop, chat polish, public profile + block, media add/delete, video route, splash counters, more-tab entries |
+
+## Final feature matrix
+
+| # | Feature | Final status |
+|---|---------|--------------|
+| F1 | Foundations | ✅ ported (step 1) |
+| F2 | Mail module | ✅ ported |
+| F3 | Email OTP signup | ✅ ported; local verify-email/resend-otp/forgot-password kept alongside |
+| F4 | Resend verification | ⏭️ superseded — resend = `request-otp` again (backend-owned upsert) |
+| F5 | Phone OTP (Twilio) | ✅ ported (backend step 4, screens step 8) |
+| F6 | Apple + Google OAuth | ✅ ported (PKCE, `getdraft://auth/callback`) |
+| F7 | AuthLanding + GrainyGradient | ✅ ported, mounted as auth entry in _layout |
+| F8 | Forgot-password UI | ✅ ported, dead button wired |
+| F9–F11 | Payment Sheet / cancel-resume / swipe packs | ✅ ported; bonus_swipes spend rewritten with Prisma in Discover |
+| F12 | 3-plan pricing $0/$7/$15 | ✅ adopted, WITHOUT the "See who drafted you" Pro bullet (free here) |
+| F13 | Didit KYC | ✅ ported; webhook HMAC over raw bytes (reference re-stringified — fixed) |
+| F14 | ⭐ Guardian linking | ✅ ported; `profile_photo_url`→`avatar_url` adaptation, Alert.prompt Android guard |
+| F15 | Onboarding questionnaire | ✅ ported (preferences.onboarding) |
+| F16 | Signup flow restructure | ✅ ported (role→verify→location→profile→kyc→guardian-link→questions→tutorial→plan-last) |
+| F17 | Settings persistence | ✅ ported (DTO fix in step 5, UI in step 10) |
+| F18 | Push loop | ✅ ported (hook + chat/discover/outreach triggers) |
+| F19 | Chat polish | ✅ ported (typing, read-on-incoming, AppState reconnect) |
+| F20 | Public profile + block | ✅ ported (`app/user/[userId].tsx`, chat-header entry point) |
+| F21 | Who-drafted-you gate | ⏭️ superseded — stays FREE (`/drafts-received`) |
+| F22 | Media long-press delete + services/media.ts | ✅ ported (profile tab add/delete, storage cleanup) |
+| F23 | profile-edit.tsx | ⏭️ skipped — local `app/edit-profile.tsx` wins |
+| F24 | Stats wiring | ✅ globe was already done; splash welcome counters now live (JS setInterval kept) |
+| F25 | Video route | ✅ ported (`app/video.tsx`) |
+| F26 | More-tab entries | ✅ ported (Who Drafted You → /drafts-received; parent guardian entry) |
+| F27 | Chores | ✅ ported (step 1) |
+
+## Environment variables to set (Render + backend/.env)
+
+All are templated in `backend/.env.example`:
+
+| Var | Feature | Required for |
+|---|---|---|
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM` | F2 | Email OTP signup |
+| `AUTH_VERIFICATION_SECRET` | F3 | Verification JWTs (generate: `openssl rand -base64 48`) |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID` + `TWILIO_API_KEY_SECRET` (or `TWILIO_AUTH_TOKEN`), `TWILIO_VERIFY_SERVICE_SID` | F5 | Phone OTP |
+| `TEST_PHONES` | F5 | Dev only — reusable test numbers |
+| `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID`, `DIDIT_WEBHOOK_SECRET`, `PUBLIC_BACKEND_URL` | F13 | KYC (dev can rely on POST /kyc/dev-approve) |
+| `GUARDIAN_QR_SECRET` | F14 | QR token HMAC (falls back to JWT_SECRET) |
+| `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO` | F9 | Payment Sheet (PREMIUM price no longer used) |
+| `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | F9–F11 | Payment Sheet bundle + webhook verify |
+| `EXPO_ACCESS_TOKEN` | F18 | Push sends |
+| `FRONTEND_URL` | F6/F13 | Deep-link bases |
+
+Frontend (`app.json` → `extra`): `supabaseUrl` ✅ set, `supabaseAnonKey` ⚠️ fill in, `stripePublishableKey` ⚠️ fill in.
+
+## Manual dashboard steps (owner)
+
+1. **Supabase SQL editor**: run the 013–018 section of `backend/MIGRATIONS_TO_RUN.sql`.
+2. **Supabase Storage**: create a private **`guardian-videos`** bucket (the reference never created it in code despite its comment claiming so).
+3. **Supabase Auth**: enable Apple + Google OAuth providers; add redirect URL `getdraft://auth/callback`.
+4. **Stripe**: create Starter ($7/mo) + Pro ($15/mo) recurring prices; webhook endpoint → `<render-url>/api/webhooks/stripe` listening to `invoice.paid`, `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.*`, `payment_intent.succeeded`; copy publishable key into app.json.
+5. **Twilio**: create a Verify service ("GetDraft Verify"), generate an API key pair; optional WhatsApp sender.
+6. **Didit**: create the KYC workflow, set webhook URL `<render-url>/api/kyc/webhooks/didit` + shared secret.
+7. **Gmail**: app password for SMTP_PASS (dev).
+8. **Render**: set every env var above, redeploy.
+
+## Device-testing checklist (dev build required — NOT Expo Go)
+
+- [ ] Email signup end-to-end (OTP email → code → complete-signup → onboarding chain)
+- [ ] Phone signup via SMS and WhatsApp (use TEST_PHONES to iterate)
+- [ ] Apple / Google sign-in (returning + brand-new user → oauth-role step)
+- [ ] KYC step (dev: "Skip verification (dev)" button → /kyc/dev-approve)
+- [ ] ⭐ Guardian link: athlete QR (Settings → Link a guardian / More tab) → parent scan → questionnaire → example video → ≤20s recording → upload → admin review (Settings → Admin tools with an admin user)
+- [ ] Plan step last: pay Starter/Pro via Payment Sheet; X-skip stays Basic
+- [ ] Buy swipes pack; verify bonus_swipes credited after webhook and spent after daily limit
+- [ ] Subscription screen: upgrade / cancel-at-period-end / resume
+- [ ] Push notifications (physical device): new message (recipient outside thread), Game On! match, outreach
+- [ ] Chat: typing indicator both ways, read receipts, background→foreground reconnect, header → public profile → block
+- [ ] Settings toggles persist across reinstall/devices
+- [ ] Profile: +Add photos/videos, long-press delete, full-screen video route
+- [ ] Splash counters reflect live /stats/welcome data
+- [ ] Mid-signup reload resumes at the correct step (and broken sessions fall back to login)
