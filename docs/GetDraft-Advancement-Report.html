@@ -46,8 +46,21 @@
   .note{border-left:4px solid var(--navy);background:var(--soft);border-radius:0 6px 6px 0;padding:9px 13px;margin:14px 0 0;font-size:10px;}
   .note b{color:var(--navy-deep);}
 
+  .trial{border:1px solid var(--green);background:var(--green-soft);border-radius:8px;padding:11px 15px;margin:14px 0 0;}
+  .trial .h{font-size:11px;font-weight:800;color:var(--green-deep);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;}
+  .trial p{margin:0 0 6px;font-size:10px;color:var(--ink);}
+  .trial ol{margin:0 0 4px;padding-left:18px;}
+  .trial li{font-size:10px;color:var(--ink);margin-bottom:3px;}
+  .trial .tip{font-size:9.5px;color:var(--muted);font-style:italic;margin:4px 0 0;}
+
   .doc-footer{border-top:1px solid var(--line);margin-top:16px;padding-top:8px;text-align:center;color:var(--muted);font-size:8.5px;letter-spacing:.3px;}
   .doc-footer b{color:var(--green-deep);}
+
+  .gallery-intro{font-size:10px;color:var(--muted);margin:0 0 9px;}
+  .shots{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;}
+  .shot{width:calc(33.333% - 7px);border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;page-break-inside:avoid;}
+  .shot img{width:100%;height:auto;display:block;background:#f0f2f5;}
+  .shot figcaption{font-size:9px;color:var(--navy);font-weight:700;text-align:center;padding:5px 4px;border-top:1px solid var(--line);}
 </style>
 </head>
 <body>
@@ -59,14 +72,14 @@
       <div class="title">Advancement Report</div>
     </div>
     <div class="right">
-      <div><b>Prepared by:</b> Achraf Benamrane — Progix</div>
+      <div><b>Developer:</b> Achraf Benamrane — Progix</div>
       <div><b>Date:</b> June 8, 2026</div>
     </div>
   </div>
 
   <div class="summary">
     <div class="l">Executive Summary</div>
-    <p>The GetDraft mobile application has reached a major milestone: the core product is <b>fully functional on a live backend and database</b>. Athletes and recruiters can create verified accounts, build complete profiles, discover and connect with one another through the swipe-based "Draft" experience, communicate in real time, and share photos and videos through a built-in social feed. The sections below detail the modules delivered to date.</p>
+    <p>The GetDraft mobile application has reached a major milestone: the core product is <b>fully functional on a live backend and database</b>. Athletes and recruiters can create verified accounts, build complete profiles, discover and connect with one another through the swipe-based "Draft" experience, communicate in real time, and share photos and videos through a built-in social feed. It is now available as an <b>installable Android app running on live infrastructure</b> — ready to try today. The sections below detail the modules delivered to date, followed by a short guide to trying it yourself.</p>
   </div>
 
   <div class="stats">
@@ -122,8 +135,20 @@
     All modules above are implemented and operating on GetDraft's live backend infrastructure.
   </div>
 
+  <div class="trial">
+    <div class="h">Try it yourself — with two accounts</div>
+    <p>To experience the full product — including <b>real-time chat</b> and <b>mutual matching</b> — please create <b>two accounts</b> (ideally one <b>athlete</b> and one <b>recruiter / coach</b>, so they appear to each other in Discover):</p>
+    <ol>
+      <li><b>Sign up two accounts</b> — each confirms with the 6-digit code sent by email. Best done on <b>two phones</b> so you can watch updates happen live on both.</li>
+      <li><b>Draft each other</b> in Discover — swipe up to <b>Draft</b> on each account. When both have drafted, an instant <b>"Game On!" match</b> is created.</li>
+      <li><b>Open the chat</b> from the match and send a message — it appears on the other device in <b>under 2 seconds</b>, with no refresh.</li>
+      <li><b>Explore the rest:</b> edit your profile and set your location on the map, publish a <b>Post</b> or <b>Reel</b> and like / comment, and manage your <b>Draft Board</b> (accept, refuse, withdraw).</li>
+    </ol>
+    <p class="tip">Tip: two devices show the real-time chat and matching best — but you can also sign in to the second account on the same phone.</p>
+  </div>
+
   <div class="doc-footer">
-    GetDraft <b>·</b> Sports Recruiting Platform <b>·</b> Advancement Report <b>·</b> June 8, 2026 <b>·</b> Prepared by Progix
+    GetDraft <b>·</b> Sports Recruiting Platform <b>·</b> Advancement Report <b>·</b> June 8, 2026 <b>·</b> Developed by Achraf Benamrane — Progix
   </div>
 
 </div>

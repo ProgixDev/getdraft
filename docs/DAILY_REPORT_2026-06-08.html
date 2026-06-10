@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Report — Achraf Benamrane — 7→8 June 2026</title>
+<style>
+  :root {
+    --navy: #1F4E7A;
+    --navy-deep: #14304D;
+    --navy-soft: #E8EFF6;
+    --saffron: #E8A53D;
+    --saffron-soft: #FBEDD3;
+    --cream: #F4F6F9;
+    --cream-warm: #E3E9F1;
+    --deep: #0F1A26;
+    --text: #2A323D;
+    --text-muted: #6B7480;
+    --border: #C9D2DC;
+    --border-soft: #DDE3EB;
+    --green: #1E7A4D;
+    --green-soft: #E5F2EC;
+  }
+  @page { size: A4; margin: 8mm 11mm 8mm 11mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: #fff; color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Inter", Roboto, sans-serif;
+    font-size: 8.5pt; line-height: 1.3;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 178mm; margin: 0 auto; }
+
+  .report-banner {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 5px; margin-bottom: 8px;
+    border-bottom: 1.5px solid var(--navy);
+  }
+  .report-title { font-size: 18pt; font-weight: 800; color: var(--navy); letter-spacing: -0.3px; line-height: 1; }
+  .report-author { text-align: right; line-height: 1.35; }
+  .report-author .name { font-size: 10.5pt; font-weight: 700; color: var(--navy); }
+  .report-author .date { font-size: 9pt; color: #5A6B7E; margin-top: 2px; }
+
+  .brand-strip {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+    color: #fff; border-radius: 6px; padding: 7px 16px; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .brand-strip .left { font-size: 9pt; letter-spacing: 0.16em; text-transform: uppercase; color: var(--saffron); font-weight: 700; }
+  .brand-strip .left::before { content: "▲"; margin-right: 6px; font-size: 10pt; vertical-align: -1px; }
+  .brand-strip .right { font-size: 9pt; color: rgba(255,255,255,0.78); }
+  .brand-strip .right strong { color: #fff; font-weight: 600; }
+
+  .summary {
+    background: var(--green-soft); border-left: 4px solid var(--green);
+    border-radius: 4px; padding: 7px 14px; margin-bottom: 8px;
+  }
+  .summary-label { font-size: 8pt; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin-bottom: 3px; }
+  .summary p { margin: 0; font-size: 9pt; color: var(--deep); }
+
+  .effort-note {
+    background: var(--saffron-soft); border-left: 4px solid var(--saffron);
+    border-radius: 4px; padding: 6px 14px; margin-bottom: 8px;
+    font-size: 8.5pt; color: var(--deep);
+  }
+  .effort-note strong { color: var(--navy-deep); }
+
+  h2 {
+    font-size: 10.5pt; font-weight: 700; color: var(--navy-deep);
+    margin: 8px 0 4px 0; padding-bottom: 2px;
+    border-bottom: 1.5px solid var(--border-soft);
+    letter-spacing: -0.2px;
+  }
+  h2 .num { color: var(--saffron); font-weight: 800; margin-right: 6px; }
+
+  strong { font-weight: 700; color: var(--deep); }
+
+  .stats { display: flex; gap: 8px; margin: 2px 0 8px 0; }
+  .stat {
+    flex: 1; background: #fff; border: 1px solid var(--border-soft);
+    border-radius: 6px; padding: 5px 10px; text-align: left;
+  }
+  .stat .label { font-size: 7pt; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .stat .value { font-size: 11pt; font-weight: 700; color: var(--navy-deep); margin-top: 1px; }
+  .stat .sub { font-size: 7.5pt; color: var(--text-muted); margin-top: 0; }
+
+  .task-list {
+    list-style: none; padding: 0; margin: 5px 0 9px 0; counter-reset: tcnt;
+  }
+  .task-list > li {
+    position: relative; background: #fff; border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--green); border-radius: 4px;
+    padding: 4px 12px 4px 34px; margin-bottom: 3px;
+    counter-increment: tcnt;
+  }
+  .task-list > li::before {
+    content: counter(tcnt, decimal-leading-zero);
+    position: absolute; left: 10px; top: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt; font-weight: 700; color: var(--saffron);
+  }
+  .task-list > li .title { font-weight: 600; color: var(--deep); font-size: 8.5pt; }
+  .task-list > li .body { color: var(--text-muted); font-size: 8pt; margin-top: 1px; line-height: 1.4; }
+
+  .doc-footer {
+    border-top: 1px solid var(--border); margin-top: 9px; padding-top: 6px;
+    text-align: center; color: var(--text-muted); font-size: 7.5pt; letter-spacing: 0.04em;
+  }
+  .doc-footer .knot { color: var(--saffron); font-weight: 700; margin: 0 6px; }
+
+  @media print {
+    body { background: #fff; }
+    .brand-strip, .summary, .effort-note, .task-list > li, .stat {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="report-banner">
+    <div class="report-title">Daily Report</div>
+    <div class="report-author">
+      <div class="name">Achraf Benamrane</div>
+      <div class="date">7 June 2026 (from 17:00) → 8 June 2026</div>
+    </div>
+  </div>
+
+  <div class="brand-strip">
+    <div class="left">GetDraft · Recrutement Sportif</div>
+    <div class="right">Focus: <strong>APK Android de production · stabilisation · livraison client · diagnostic OTP</strong></div>
+  </div>
+
+  <div class="summary">
+    <div class="summary-label">Summary</div>
+    <p>Session de soirée et de nuit (à partir de <strong>17h00 le 7 juin</strong>) entièrement consacrée à la <strong>mise en production de l'APK Android</strong> de GetDraft et à sa <strong>stabilisation en vue de la livraison au client</strong>. Au programme : génération de l'<strong>APK de production</strong> installable sur appareil, déblocage de la chaîne de compilation, correction d'un <strong>plantage au démarrage</strong>, <strong>fiabilisation de la connexion</strong> face à la mise en veille du serveur, ajout d'un écran de diagnostic des erreurs, et <strong>diagnostic du système de vérification par code (OTP)</strong>. L'APK a été installé et vérifié sur <strong>téléphone réel</strong> — il est <strong>prêt à être envoyé au client</strong>.</p>
+  </div>
+
+  <div class="effort-note">
+    <strong>Note :</strong> Session intensive en soirée / nuit (depuis 17h00). APK de production <strong>généré, installé et vérifié sur appareil réel</strong> (connexion, navigation, écrans principaux). Prêt pour envoi au client.
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Session</div>
+      <div class="value" style="color:#14304D;">Soir → Nuit</div>
+      <div class="sub">depuis 17h00 — 7 juin</div>
+    </div>
+    <div class="stat">
+      <div class="label">APK production</div>
+      <div class="value" style="color:#1E7A4D;">Livré</div>
+      <div class="sub">préversion Android, testée sur appareil</div>
+    </div>
+    <div class="stat">
+      <div class="label">Points traités</div>
+      <div class="value" style="color:#14304D;">4</div>
+      <div class="sub">compilation · plantage · connexion · OTP</div>
+    </div>
+  </div>
+
+  <h2><span class="num">01</span>Build &amp; livraison — APK de production</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Génération de l'APK de production (Android)</div>
+      <div class="body">Production de l'<strong>APK Android</strong> de GetDraft, <strong>installable directement sur appareil</strong> (hors store) et branché sur le backend en ligne. APK <strong>installé et vérifié sur téléphone réel</strong> — connexion, navigation et écrans principaux fonctionnels. <strong>Prêt à être envoyé au client</strong> pour démonstration.</div>
+    </li>
+    <li>
+      <div class="title">Déblocage de la chaîne de compilation</div>
+      <div class="body">Résolution des erreurs qui empêchaient la génération de l'APK : <strong>désactivation du React Compiler</strong> (expérimental, il cassait le bundle de release) ; <strong>alignement des versions des dépendances</strong> sur le SDK ; <strong>retrait d'une dépendance native inutilisée</strong> (cartes) ; et correction d'une <strong>image d'asset invalide</strong> (un JPEG enregistré avec une extension .png que le compilateur de ressources Android refusait) — <strong>réencodage de toutes les images</strong> en PNG valides.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">02</span>Stabilité &amp; connexion</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Correction d'un plantage au démarrage (écran Discover)</div>
+      <div class="body">L'écran Discover plantait au lancement sur la version de production (« Rendered more hooks » — une <strong>violation des règles des hooks React</strong> : certains hooks s'exécutaient après des retours conditionnels). Réorganisation du code pour garantir un <strong>nombre de hooks stable à chaque rendu</strong> — l'application s'ouvre désormais correctement.</div>
+    </li>
+    <li>
+      <div class="title">Fiabilisation de la connexion (démarrage à froid du serveur)</div>
+      <div class="body">Le serveur (hébergement mutualisé) se met en veille après inactivité et met <strong>45-55s à se réveiller</strong>, alors que le délai d'attente côté application était de 15s → <strong>connexion impossible au premier lancement</strong>. Délai <strong>porté à 60s</strong> et <strong>préchauffage du serveur</strong> déclenché dès l'ouverture de l'app pour que la connexion aboutisse de façon fiable.</div>
+    </li>
+    <li>
+      <div class="title">Écran de diagnostic des erreurs</div>
+      <div class="body">Ajout d'un mécanisme qui <strong>affiche l'erreur réelle à l'écran</strong> sur la version de production (où il n'y a pas de débogueur). C'est ce qui a permis d'<strong>identifier précisément</strong> le plantage du démarrage et de le corriger.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">03</span>Diagnostic — vérification par code (OTP)</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Diagnostic de l'envoi des codes de vérification</div>
+      <div class="body">Investigation du problème d'arrivée des codes OTP à l'inscription. <strong>Cause identifiée</strong> : la limite d'envoi d'emails du service d'authentification était plafonnée à <strong>2 emails par heure</strong>, ce qui bloquait l'envoi des codes après quelques essais. La logique d'inscription et de vérification a été <strong>confirmée fonctionnelle</strong> côté serveur ; le correctif (relèvement de la limite d'envoi) a été <strong>identifié et préparé</strong>.</div>
+    </li>
+  </ol>
+
+  <div class="doc-footer">
+    GetDraft <span class="knot">·</span> Recrutement Sportif <span class="knot">·</span> Daily report <span class="knot">·</span> 7 June 2026 (17:00) → 8 June 2026 <span class="knot">·</span> Achraf Benamrane
+  </div>
+
+</div>
+</body>
+</html>
