@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "twilio": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@twilio-alpha/mcp",
+        "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:your-api-key-secret"
+      ]
+    },
+    "didit": {
+      "command": "npx",
+      "args": ["-y", "@didit-protocol/mcp-server"],
+      "env": {
+        "DIDIT_API_KEY": "your-didit-api-key"
+      }
+    }
+  }
+}

@@ -13,6 +13,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
+    // Stripe + Didit webhooks verify HMAC signatures over the exact bytes
+    // they signed — rawBody must be preserved alongside the parsed body.
+    { rawBody: true },
   );
 
   // CORS

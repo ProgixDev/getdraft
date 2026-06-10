@@ -5,14 +5,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myroster",
+    "scheme": "getdraft",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.achrefdev.myroster",
+      "bundleIdentifier": "com.getdraft.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
+        "NSPhotoLibraryAddUsageDescription": "GetDraft saves selected photos to your profile.",
+        "NSCameraUsageDescription": "GetDraft uses the camera to capture profile photos, scan guardian QR codes, and record your guardian declaration video.",
+        "NSMicrophoneUsageDescription": "GetDraft uses the microphone to record your guardian declaration video."
       }
     },
     "android": {
@@ -24,7 +28,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -48,7 +56,28 @@
       "@react-native-community/datetimepicker",
       "expo-video",
       "expo-web-browser",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
+          "cameraPermission": "GetDraft uses the camera to capture profile photos and highlight clips."
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": true
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "GetDraft uses the camera to scan QR codes for guardian linking and to record your guardian declaration video.",
+          "microphonePermission": "GetDraft uses the microphone to record your guardian declaration video.",
+          "recordAudioAndroid": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -57,7 +86,10 @@
       "router": {},
       "eas": {
         "projectId": "7a6c8405-e237-49b1-b5be-b2334b70080c"
-      }
+      },
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "stripePublishableKey": ""
     },
     "owner": "achrafbenamrane"
   }
