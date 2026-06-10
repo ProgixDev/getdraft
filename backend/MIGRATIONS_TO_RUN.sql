@@ -31,3 +31,185 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription_id
 -- 4. Index for unique (viewer, viewed) profile-view dedup queries.
 CREATE INDEX IF NOT EXISTS idx_profile_views_viewer_viewed
   ON public.profile_views(viewer_id, viewed_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 013_user_preferences.sql
+-- ------------------------------------------------------------
+
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 014_signup_otps.sql
+-- ------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.signup_otps (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contact       TEXT NOT NULL,
+  contact_type  TEXT NOT NULL CHECK (contact_type IN ('email', 'phone')),
+  code_hash     TEXT NOT NULL,
+  attempts      INT  NOT NULL DEFAULT 0,
+  verified      BOOLEAN NOT NULL DEFAULT FALSE,
+  expires_at    TIMESTAMPTZ NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signup_otps_contact
+  ON public.signup_otps(contact, contact_type);
+
+CREATE INDEX IF NOT EXISTS idx_signup_otps_expires_at
+  ON public.signup_otps(expires_at);
+
+ALTER TABLE public.signup_otps ENABLE ROW LEVEL SECURITY;
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 015_users_phone.sql
+-- (handle_new_user merged with local 001 version — adds phone only)
+-- ------------------------------------------------------------
+
+ALTER TABLE public.users
+  ALTER COLUMN email DROP NOT NULL;
+
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS phone TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone_unique
+  ON public.users(phone)
+  WHERE phone IS NOT NULL;
+
+ALTER TABLE public.users
+  DROP CONSTRAINT IF EXISTS users_email_or_phone;
+ALTER TABLE public.users
+  ADD CONSTRAINT users_email_or_phone
+  CHECK (email IS NOT NULL OR phone IS NOT NULL);
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.users (id, email, phone, role, name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    NEW.phone,
+    COALESCE(NEW.raw_user_meta_data->>'role', 'athlete'),
+    COALESCE(NEW.raw_user_meta_data->>'name', '')
+  );
+  INSERT INTO public.subscriptions (user_id, plan_id, daily_swipe_limit)
+  VALUES (NEW.id, 'basic', 10);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 016_kyc.sql
+-- ------------------------------------------------------------
+
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS kyc_status TEXT NOT NULL DEFAULT 'none'
+    CHECK (kyc_status IN ('none', 'pending', 'in_review', 'approved', 'declined')),
+  ADD COLUMN IF NOT EXISTS kyc_completed_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS public.kyc_sessions (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  didit_session_id  TEXT NOT NULL UNIQUE,
+  workflow_id       TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'in_review', 'approved', 'declined', 'expired')),
+  decision          JSONB,
+  verification_url  TEXT,
+  callback_url      TEXT,
+  started_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_user_started
+  ON public.kyc_sessions(user_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kyc_sessions_status
+  ON public.kyc_sessions(status)
+  WHERE status IN ('pending', 'in_review');
+
+ALTER TABLE public.kyc_sessions ENABLE ROW LEVEL SECURITY;
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 017_swipe_packs.sql
+-- ------------------------------------------------------------
+
+ALTER TABLE public.subscriptions
+  ADD COLUMN IF NOT EXISTS bonus_swipes INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS public.swipe_pack_purchases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  stripe_payment_intent_id TEXT UNIQUE NOT NULL,
+  pack_id TEXT NOT NULL,
+  swipes_granted INTEGER NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'usd',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'succeeded', 'failed')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  granted_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS swipe_pack_purchases_user_idx
+  ON public.swipe_pack_purchases (user_id, created_at DESC);
+
+-- ------------------------------------------------------------
+-- -- MIGRATION À EXÉCUTER MANUELLEMENT --
+-- 018_guardian_links.sql
+-- ------------------------------------------------------------
+
+CREATE TYPE guardian_relationship AS ENUM (
+  'parent',
+  'legal_guardian',
+  'step_parent',
+  'sibling',
+  'aunt_uncle',
+  'grandparent',
+  'other'
+);
+
+CREATE TYPE guardian_link_status AS ENUM (
+  'pending_video',
+  'pending_admin',
+  'approved',
+  'declined',
+  'expired'
+);
+
+CREATE TABLE IF NOT EXISTS public.guardian_links (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  athlete_user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  guardian_user_id    UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  relationship        guardian_relationship NOT NULL,
+  questionnaire       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status              guardian_link_status NOT NULL DEFAULT 'pending_video',
+  qr_token            TEXT UNIQUE,
+  qr_expires_at       TIMESTAMPTZ,
+  video_storage_path  TEXT,
+  video_recorded_at   TIMESTAMPTZ,
+  admin_notes         TEXT,
+  decided_at          TIMESTAMPTZ,
+  decided_by          UUID REFERENCES public.users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (athlete_user_id, guardian_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_guardian_links_athlete
+  ON public.guardian_links(athlete_user_id);
+CREATE INDEX IF NOT EXISTS idx_guardian_links_guardian
+  ON public.guardian_links(guardian_user_id);
+CREATE INDEX IF NOT EXISTS idx_guardian_links_status_pending
+  ON public.guardian_links(status)
+  WHERE status IN ('pending_video', 'pending_admin');
+
+CREATE TRIGGER guardian_links_updated_at BEFORE UPDATE ON public.guardian_links
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+ALTER TABLE public.guardian_links ENABLE ROW LEVEL SECURITY;

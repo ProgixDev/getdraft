@@ -685,6 +685,7 @@ model subscriptions {
   current_period_end     DateTime?    @db.Timestamptz(6)
   daily_swipe_limit      Int          @default(10)
   swipes_used_today      Int?         @default(0)
+  bonus_swipes           Int          @default(0)
   swipes_reset_at        DateTime?    @default(dbgenerated("CURRENT_DATE")) @db.Date
   created_at             DateTime?    @default(now()) @db.Timestamptz(6)
   updated_at             DateTime?    @default(now()) @db.Timestamptz(6)
@@ -715,7 +716,8 @@ model swipes {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model public_users {
   id                                                      String               @id @db.Uuid
-  email                                                   String               @unique
+  email                                                   String?              @unique
+  phone                                                   String?
   name                                                    String?
   role                                                    String
   avatar_url                                              String?
@@ -728,6 +730,9 @@ model public_users {
   latitude                                                Float?
   longitude                                               Float?
   is_banned                                               Boolean?             @default(false)
+  preferences                                             Json                 @default("{}")
+  kyc_status                                              String               @default("none")
+  kyc_completed_at                                        DateTime?            @db.Timestamptz(6)
   created_at                                              DateTime?            @default(now()) @db.Timestamptz(6)
   updated_at                                              DateTime?            @default(now()) @db.Timestamptz(6)
   athlete_profiles                                        athlete_profiles?
@@ -756,6 +761,11 @@ model public_users {
   subscriptions                                           subscriptions?
   swipes_swipes_swiped_idTousers                          swipes[]             @relation("swipes_swiped_idTousers")
   swipes_swipes_swiper_idTousers                          swipes[]             @relation("swipes_swiper_idTousers")
+  kyc_sessions                                            kyc_sessions[]
+  swipe_pack_purchases                                    swipe_pack_purchases[]
+  guardian_links_guardian_links_athlete_user_idTousers    guardian_links[]     @relation("guardian_links_athlete_user_idTousers")
+  guardian_links_guardian_links_guardian_user_idTousers   guardian_links[]     @relation("guardian_links_guardian_user_idTousers")
+  guardian_links_guardian_links_decided_byTousers         guardian_links[]     @relation("guardian_links_decided_byTousers")
   users                                                   auth_users           @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("users")
@@ -862,6 +872,106 @@ model direct_messages {
   users           public_users  @relation(fields: [sender_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([conversation_id, created_at], map: "idx_dm_conv")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model signup_otps {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  contact      String
+  contact_type String
+  code_hash    String
+  attempts     Int      @default(0)
+  verified     Boolean  @default(false)
+  expires_at   DateTime @db.Timestamptz(6)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([contact, contact_type], map: "idx_signup_otps_contact")
+  @@index([expires_at], map: "idx_signup_otps_expires_at")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model kyc_sessions {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String       @db.Uuid
+  didit_session_id String       @unique
+  workflow_id      String
+  status           String       @default("pending")
+  decision         Json?
+  verification_url String?
+  callback_url     String?
+  started_at       DateTime     @default(now()) @db.Timestamptz(6)
+  completed_at     DateTime?    @db.Timestamptz(6)
+  users            public_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, started_at(sort: Desc)], map: "idx_kyc_sessions_user_started")
+  @@schema("public")
+}
+
+model swipe_pack_purchases {
+  id                       String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                  String       @db.Uuid
+  stripe_payment_intent_id String       @unique
+  pack_id                  String
+  swipes_granted           Int
+  amount_cents             Int
+  currency                 String       @default("usd")
+  status                   String       @default("pending")
+  created_at               DateTime?    @default(now()) @db.Timestamptz(6)
+  granted_at               DateTime?    @db.Timestamptz(6)
+  users                    public_users @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, created_at(sort: Desc)], map: "swipe_pack_purchases_user_idx")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model guardian_links {
+  id                                          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  athlete_user_id                             String                @db.Uuid
+  guardian_user_id                            String                @db.Uuid
+  relationship                                guardian_relationship
+  questionnaire                               Json                  @default("{}")
+  status                                      guardian_link_status  @default(pending_video)
+  qr_token                                    String?               @unique
+  qr_expires_at                               DateTime?             @db.Timestamptz(6)
+  video_storage_path                          String?
+  video_recorded_at                           DateTime?             @db.Timestamptz(6)
+  admin_notes                                 String?
+  decided_at                                  DateTime?             @db.Timestamptz(6)
+  decided_by                                  String?               @db.Uuid
+  created_at                                  DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                                  DateTime              @default(now()) @db.Timestamptz(6)
+  users_guardian_links_athlete_user_idTousers public_users          @relation("guardian_links_athlete_user_idTousers", fields: [athlete_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_guardian_links_guardian_user_idTousers public_users         @relation("guardian_links_guardian_user_idTousers", fields: [guardian_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_guardian_links_decided_byTousers      public_users?         @relation("guardian_links_decided_byTousers", fields: [decided_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([athlete_user_id, guardian_user_id])
+  @@index([athlete_user_id], map: "idx_guardian_links_athlete")
+  @@index([guardian_user_id], map: "idx_guardian_links_guardian")
+  @@schema("public")
+}
+
+enum guardian_relationship {
+  parent
+  legal_guardian
+  step_parent
+  sibling
+  aunt_uncle
+  grandparent
+  other
+
+  @@schema("public")
+}
+
+enum guardian_link_status {
+  pending_video
+  pending_admin
+  approved
+  declined
+  expired
+
   @@schema("public")
 }
 
