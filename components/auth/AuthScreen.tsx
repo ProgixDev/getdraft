@@ -197,15 +197,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
    */
   useEffect(() => {
     if (!isAuthenticated || isOnboarded) return;
-    // Only auto-resume out of the initial role/phone-role/oauth-role
-    // steps — once the user has clicked into a later step we trust
-    // their in-progress local state.
-    if (
-      signupStep !== "role" &&
-      signupStep !== "phone-role" &&
-      signupStep !== "oauth-role"
-    )
-      return;
+    // A phone/OAuth handoff means the user is creating a NEW account right
+    // now — any authenticated session at this point is a stale leftover
+    // from a previous (test) signup and must not yank them off the
+    // role+name+password step before they can type into it.
+    if (isPhoneSignup || isOauthSignup) return;
+    // Only auto-resume out of the initial role step — once the user has
+    // clicked into a later step we trust their in-progress local state.
+    if (signupStep !== "role") return;
     let cancelled = false;
     (async () => {
       // First confirm the session is actually valid. If /users/me
