@@ -172,6 +172,12 @@ function RootLayoutContent() {
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="drafts-received" options={{ headerShown: false }} />
+        <Stack.Screen name="link-guardian" options={{ headerShown: false }} />
+        <Stack.Screen name="guardian-link" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="admin-guardian-links"
+          options={{ headerShown: false }}
+        />
         <Stack.Screen
           name="modal"
           options={{ presentation: "modal", title: "Modal" }}

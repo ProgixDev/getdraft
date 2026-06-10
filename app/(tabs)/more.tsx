@@ -96,6 +96,18 @@ export default function MoreScreen() {
       label: "Settings",
       onPress: () => router.push("/settings"),
     },
+    // Parents get a quick route to the guardian-link flow so they can
+    // replay the tutorial video and record their declaration without
+    // digging through Settings.
+    ...(user?.role === "parent"
+      ? [
+          {
+            icon: "videocam-outline",
+            label: "Verify your guardian link",
+            onPress: () => router.push("/guardian-link"),
+          },
+        ]
+      : []),
     {
       icon: "diamond-outline",
       label: "My Subscription",
