@@ -87,7 +87,7 @@
       "eas": {
         "projectId": "7a6c8405-e237-49b1-b5be-b2334b70080c"
       },
-      "supabaseUrl": "",
+      "supabaseUrl": "https://jzzsnputbvzxssbraetl.supabase.co",
       "supabaseAnonKey": "",
       "stripePublishableKey": ""
     },
