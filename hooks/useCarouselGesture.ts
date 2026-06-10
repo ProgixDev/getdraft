@@ -6,6 +6,7 @@ import {
   withSpring,
   withTiming,
   runOnJS,
+  Easing,
   SharedValue,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
@@ -66,12 +67,29 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     trigger,
     onTriggerHandled,
   } = args;
-  const gestureEnabled = isFocused && (canGesture ?? true);
+  // Split enabled flags:
+  //  - horizontal browse is alive whenever this card is the committed focus —
+  //    NOT gated by canGesture, so rapid flicks aren't held by a settle/lock.
+  //  - vertical Draft/Pass keeps the canGesture gate (used by parent for the
+  //    swipeLock/out-of-swipes guards).
+  const horizontalEnabled = isFocused;
+  const verticalEnabled = isFocused && (canGesture ?? true);
 
   const translateY = useSharedValue(0);
+  // Baseline captured at each new pan start so a gesture begun mid-settle
+  // picks up from the current animated position with no jump.
+  const horizontalStartTx = useSharedValue(0);
+
   const verticalThreshold = Math.min(160, Math.max(110, cardHeight * 0.18));
-  const horizontalThreshold = Math.max(60, slotWidth * 0.28);
+  // Easier horizontal commit: 25% of a slot OR a velocity flick > 350.
+  // Light, quick flicks now advance one card.
+  const horizontalThreshold = Math.max(40, slotWidth * 0.25);
+  const horizontalVelocity = 350;
   const overlayDivisor = Math.max(80, cardHeight * 0.2);
+
+  // Fast, crisp settle — lands in ~160-200ms with no soft overshoot.
+  const fastSpring = { damping: 24, stiffness: 280, mass: 0.6 } as const;
+  const fastTiming = { duration: 160, easing: Easing.out(Easing.cubic) };
 
   // When this card transitions back to focused (e.g. user browsed back to an
   // already-decided card whose translateY was flung off-screen), bring it home.
@@ -82,67 +100,60 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   }, [isFocused]);
 
   const horizontalPan = Gesture.Pan()
-    .enabled(gestureEnabled)
+    .enabled(horizontalEnabled)
     .activeOffsetX([-20, 20])
     .failOffsetY([-24, 24])
+    .onStart(() => {
+      // Interruptible carousel: pick up from wherever the previous animation
+      // left off. Direct writes to carouselTranslateX in onUpdate also
+      // implicitly cancel any in-flight spring/timing.
+      horizontalStartTx.value = carouselTranslateX.value;
+    })
     .onUpdate((e) => {
       let dx = e.translationX;
       if (!canGoPrev && dx > 0) dx = dx * 0.3;
       if (!canGoNext && dx < 0) dx = dx * 0.3;
-      carouselTranslateX.value = dx;
+      carouselTranslateX.value = horizontalStartTx.value + dx;
     })
     .onEnd((e) => {
       const dx = e.translationX;
       const shouldNext =
-        canGoNext && (dx < -horizontalThreshold || e.velocityX < -500);
+        canGoNext &&
+        (dx < -horizontalThreshold || e.velocityX < -horizontalVelocity);
       const shouldPrev =
-        canGoPrev && (dx > horizontalThreshold || e.velocityX > 500);
+        canGoPrev &&
+        (dx > horizontalThreshold || e.velocityX > horizontalVelocity);
 
       if (shouldNext) {
         runOnJS(lightImpact)();
-        if (reducedMotion) {
-          carouselTranslateX.value = withTiming(
-            -slotWidth,
-            { duration: 180 },
-            (f) => {
-              if (f) runOnJS(goNext)();
-            },
-          );
-        } else {
-          carouselTranslateX.value = withSpring(
-            -slotWidth,
-            { damping: 18, stiffness: 220 },
-            (f) => {
-              if (f) runOnJS(goNext)();
-            },
-          );
-        }
+        // EAGER COMMIT: advance focus on the UI thread NOW so the new centre
+        // card is gesture-live (its slot math uses focusedIndexSV directly).
+        // Compensate carouselTranslateX by +slot so the visual position is
+        // identical at the commit instant, then spring it to 0. React state
+        // catches up on the same tick via runOnJS(goNext).
+        focusedIndexSV.value = focusedIndexSV.value + 1;
+        carouselTranslateX.value = carouselTranslateX.value + slotWidth;
+        runOnJS(goNext)();
+        carouselTranslateX.value = reducedMotion
+          ? withTiming(0, fastTiming)
+          : withSpring(0, fastSpring);
       } else if (shouldPrev) {
         runOnJS(lightImpact)();
-        if (reducedMotion) {
-          carouselTranslateX.value = withTiming(
-            slotWidth,
-            { duration: 180 },
-            (f) => {
-              if (f) runOnJS(goPrev)();
-            },
-          );
-        } else {
-          carouselTranslateX.value = withSpring(
-            slotWidth,
-            { damping: 18, stiffness: 220 },
-            (f) => {
-              if (f) runOnJS(goPrev)();
-            },
-          );
-        }
+        focusedIndexSV.value = focusedIndexSV.value - 1;
+        carouselTranslateX.value = carouselTranslateX.value - slotWidth;
+        runOnJS(goPrev)();
+        carouselTranslateX.value = reducedMotion
+          ? withTiming(0, fastTiming)
+          : withSpring(0, fastSpring);
       } else {
-        carouselTranslateX.value = withSpring(0, { damping: 18 });
+        carouselTranslateX.value = reducedMotion
+          ? withTiming(0, fastTiming)
+          : withSpring(0, fastSpring);
       }
     });
 
   const verticalPan = Gesture.Pan()
-    .enabled(gestureEnabled)
+    .enabled(verticalEnabled)
     .activeOffsetY([-20, 20])
     .failOffsetX([-24, 24])
     .onUpdate((e) => {
@@ -208,41 +219,61 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     }
   }, [trigger, isFocused]);
 
-  // Unified per-card style.
-  // distance = (absoluteIndex - focusedIndex) * slot + carouselTranslateX.
-  // - translateX = distance (so focused at 0 when drag is 0; neighbors at ±slot)
-  // - scale/opacity interpolate by |distance| / slot
-  // - focused additionally applies translateY (vertical drag/fling) and a tiny drag scale
-  // We include translateY in BOTH branches so a just-decided card that's now
-  // a neighbor stays off-screen instead of snapping back into the prev slot.
+  // Unified per-card style — emphasis (scale/opacity/zIndex/elevation) all
+  // driven off the LIVE on-screen position so the centre card never "pops" at
+  // commit. The card crossing toward the centre rises and sharpens in step
+  // with the finger; the card sliding away dims and drops back.
+  //
+  // slotDistance = (absoluteIndex - focusedIndex) * slot + carouselTranslateX
+  //               i.e. the live x-offset from the visual centre.
+  //
+  // A just-decided card that's mid-fling vertically is no longer the committed
+  // focus, but visually it sits at x=0 while flying up/down — so we treat it
+  // as visually centred (visualDistance = 0) for emphasis. Otherwise the slot
+  // math would yank its translateX by ±slot and dim it as it leaves, which
+  // looks wrong.
   const cardAnimStyle = useAnimatedStyle(() => {
     const slotDistance =
       (absoluteIndex - focusedIndexSV.value) * slotWidth +
       carouselTranslateX.value;
-    // A just-swiped card has its translateY mid-flight and (post-commit) is no
-    // longer focused. The index has already advanced on the JS thread, so the
-    // slot math would yank its translateX by -slotWidth — making it appear to
-    // snap sideways while it's still flying off-screen vertically. While the
-    // card is meaningfully off-center vertically, freeze translateX at 0 so it
-    // travels straight up/down. As the user starts a new gesture on the new
-    // focused card, translateY here stays put (off-screen) and the visual is
-    // clean.
     const flinging = !isFocused && Math.abs(translateY.value) > 8;
-    const distance = flinging ? carouselTranslateX.value : slotDistance;
-    const normalized = Math.min(1, Math.abs(slotDistance) / slotWidth);
-    const baseScale = 1 - 0.14 * normalized;
-    const baseOpacity = 1 - 0.5 * normalized;
+    const visualDistance = flinging ? 0 : slotDistance;
+    const normalized = Math.min(1, Math.abs(visualDistance) / slotWidth);
+    // Neighbours land at scale 0.9 / opacity 0.55; centre at 1 / 1.
+    const baseScale = 1 - 0.1 * normalized;
+    const baseOpacity = 1 - 0.45 * normalized;
     const drag = Math.abs(translateY.value);
     const dragScale = reducedMotion ? 1 : 1 - Math.min(drag / 1400, 0.04);
 
+    // Single-threshold flip: the card crossing the half-slot mark takes the
+    // top stacking BEFORE commit. One discrete flip per card keeps Android
+    // view-reorder cost minimal (continuous zIndex on the UI thread can
+    // cause flicker on some devices).
+    const isVisuallyCentered = Math.abs(visualDistance) < slotWidth / 2;
+
     return {
       transform: [
-        { translateX: distance },
+        { translateX: flinging ? 0 : slotDistance },
         { translateY: translateY.value },
-        { scale: isFocused ? baseScale * dragScale : baseScale },
+        { scale: baseScale * dragScale },
       ],
-      opacity: isFocused ? 1 : baseOpacity,
+      opacity: baseOpacity,
+      zIndex: isVisuallyCentered ? 10 : 1,
+      elevation: isVisuallyCentered ? 14 : 0,
     };
+  });
+
+  // Blur overlay opacity, driven off the same live visual distance — centre
+  // card renders at 0 (no blur), neighbours at 1 (full blur), interpolated
+  // continuously through a swipe so there's no snap on commit.
+  const blurOverlayStyle = useAnimatedStyle(() => {
+    const slotDistance =
+      (absoluteIndex - focusedIndexSV.value) * slotWidth +
+      carouselTranslateX.value;
+    const flinging = !isFocused && Math.abs(translateY.value) > 8;
+    const visualDistance = flinging ? 0 : slotDistance;
+    const normalized = Math.min(1, Math.abs(visualDistance) / slotWidth);
+    return { opacity: normalized };
   });
 
   const draftOverlayStyle = useAnimatedStyle(() => ({
@@ -260,6 +291,7 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   return {
     gesture,
     cardAnimStyle,
+    blurOverlayStyle,
     draftOverlayStyle,
     passOverlayStyle,
   };

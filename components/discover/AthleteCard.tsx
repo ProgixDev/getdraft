@@ -7,6 +7,7 @@ import Animated, { useReducedMotion } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { AthleteProfile } from "@/constants/discoverData";
 import { getSportTheme } from "@/constants/sportThemes";
@@ -106,26 +107,31 @@ function AthleteCardImpl({
     };
   }, [player, hasPhoto]);
 
-  const { gesture, cardAnimStyle, draftOverlayStyle, passOverlayStyle } =
-    useCarouselGesture({
-      absoluteIndex,
-      isFocused,
-      canGesture,
-      cardHeight,
-      slotWidth,
-      screenHeight,
-      focusedIndexSV,
-      carouselTranslateX,
-      onSwipeLeft,
-      onSwipeRight,
-      goNext,
-      goPrev,
-      canGoNext,
-      canGoPrev,
-      reducedMotion: !!reducedMotion,
-      trigger: trigger ?? null,
-      onTriggerHandled,
-    });
+  const {
+    gesture,
+    cardAnimStyle,
+    blurOverlayStyle,
+    draftOverlayStyle,
+    passOverlayStyle,
+  } = useCarouselGesture({
+    absoluteIndex,
+    isFocused,
+    canGesture,
+    cardHeight,
+    slotWidth,
+    screenHeight,
+    focusedIndexSV,
+    carouselTranslateX,
+    onSwipeLeft,
+    onSwipeRight,
+    goNext,
+    goPrev,
+    canGoNext,
+    canGoPrev,
+    reducedMotion: !!reducedMotion,
+    trigger: trigger ?? null,
+    onTriggerHandled,
+  });
 
   const renderMedia = () => {
     if (active && phase === "video" && hasVideo && player) {
@@ -193,6 +199,8 @@ function AthleteCardImpl({
         style={[
           styles.card,
           { width: cardWidth, height: cardHeight },
+          // cardAnimStyle drives zIndex/elevation off the LIVE visual distance
+          // so the centre-most card always sits on top — including mid-swipe.
           cardAnimStyle,
         ]}
       >
@@ -268,6 +276,19 @@ function AthleteCardImpl({
               </Text>
             )}
           </LinearGradient>
+          {/* Blur overlay — always mounted; opacity driven by live visual
+              distance (centre = 0, neighbour = 1) so emphasis follows the
+              finger continuously with no commit-time snap. */}
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, blurOverlayStyle]}
+          >
+            <BlurView
+              intensity={60}
+              tint="dark"
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
         </View>
       </Animated.View>
     </GestureDetector>
