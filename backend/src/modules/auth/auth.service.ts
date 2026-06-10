@@ -404,15 +404,34 @@ export class AuthService {
       }
     }
 
+    // Dev bypass for TEST_PHONES: skip Twilio entirely (no trial-account
+    // verified-caller-id needed). verifyPhoneOtp accepts the fixed code
+    // 000000 for these numbers. Never active in production.
+    if (isTest && this.configService.get('NODE_ENV') !== 'production') {
+      this.logger.log(
+        `[test-phone] Twilio bypassed for ${normalized} — use code 000000`,
+      );
+      return { message: 'If this number is unused, a code has been sent.' };
+    }
+
     await this.twilioService.startVerification(normalized, channel);
     return { message: 'If this number is unused, a code has been sent.' };
   }
 
   async verifyPhoneOtp(phone: string, code: string): Promise<{ verificationToken: string }> {
     const normalized = phone.trim();
-    const approved = await this.twilioService.checkVerification(normalized, code);
-    if (!approved) {
-      throw new BadRequestException('Incorrect or expired code.');
+    const isTest = this.testPhones().has(normalized);
+
+    if (isTest && this.configService.get('NODE_ENV') !== 'production') {
+      // Dev bypass — pairs with the Twilio skip in requestPhoneOtp.
+      if (code !== '000000') {
+        throw new BadRequestException('Incorrect or expired code.');
+      }
+    } else {
+      const approved = await this.twilioService.checkVerification(normalized, code);
+      if (!approved) {
+        throw new BadRequestException('Incorrect or expired code.');
+      }
     }
     const verificationToken = this.verificationTokenService.sign({
       contact: normalized,
