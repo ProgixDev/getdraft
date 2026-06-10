@@ -20,7 +20,8 @@ import Animated, {
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { theme } from "@/config/colors";
 import { store, RootState } from "@/store";
-import { SplashScreen, WelcomeScreen, AuthScreen } from "@/components";
+import { SplashScreen, WelcomeScreen } from "@/components";
+import { AuthLanding } from "@/components/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
 import { login } from "@/store/slices/authSlice";
@@ -148,7 +149,7 @@ function RootLayoutContent() {
     return (
       <>
         <StatusBar style="light" />
-        <AuthScreen onLogin={handleAuthComplete} />
+        <AuthLanding onLogin={handleAuthComplete} />
       </>
     );
   }

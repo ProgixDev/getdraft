@@ -53,12 +53,22 @@ import { LocationSelectionScreen } from "./LocationSelectionScreen";
 import { ProfileSetupScreen } from "./ProfileSetupScreen";
 import { PaymentScreen } from "./PaymentScreen";
 import { TutorialScreen } from "./TutorialScreen";
+import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 
 const { width, height } = Dimensions.get("window");
 
 interface AuthScreenProps {
   onLogin?: () => void;
   onSignup?: () => void;
+  /**
+   * Phone-OTP handoff from AuthLanding: a verified phone + the signed
+   * verification token for /auth/complete-signup. Honored by the step-9
+   * signup-flow restructure; accepted here so AuthLanding compiles.
+   */
+  phoneVerificationToken?: string;
+  initialPhone?: string;
+  /** OAuth handoff from AuthLanding (user exists, needs role + onboarding). */
+  oauthMode?: { initialName?: string; initialEmail?: string };
 }
 
 type AuthMode = "login" | "signup";
@@ -113,6 +123,7 @@ const roleOptions: RoleOption[] = [
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const dispatch = useAppDispatch();
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   // Fonts
   const [fontsLoaded] = useFonts({
@@ -297,6 +308,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   if (!fontsLoaded) return null;
+
+  if (showForgotPassword) {
+    return (
+      <ForgotPasswordScreen
+        initialEmail={email}
+        onBack={() => setShowForgotPassword(false)}
+      />
+    );
+  }
 
   // Render signup flow screens
   if (mode === "signup" && signupStep !== "role") {
@@ -498,7 +518,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               </View>
 
               {mode === "login" && (
-                <Pressable style={styles.forgotPassword}>
+                <Pressable
+                  style={styles.forgotPassword}
+                  onPress={() => setShowForgotPassword(true)}
+                >
                   <Text style={styles.forgotPasswordText}>
                     Forgot password?
                   </Text>
