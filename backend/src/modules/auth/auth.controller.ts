@@ -9,6 +9,11 @@ import {
   RefreshTokenDto,
   ForgotPasswordDto,
 } from './dto/verify-email.dto';
+import {
+  RequestEmailOtpDto,
+  VerifyEmailOtpDto,
+  CompleteSignupDto,
+} from './dto/email-otp.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -67,5 +72,28 @@ export class AuthController {
       ? headerAuth.slice(7)
       : null;
     return this.authService.logout(dto.accessToken || headerToken);
+  }
+
+  // ----- New OTP-driven signup flow -----
+
+  @Public()
+  @Post('email/request-otp')
+  @ApiOperation({ summary: 'Send an email OTP to begin signup' })
+  requestEmailOtp(@Body() dto: RequestEmailOtpDto) {
+    return this.authService.requestEmailOtp(dto.email);
+  }
+
+  @Public()
+  @Post('email/verify-otp')
+  @ApiOperation({ summary: 'Verify the email OTP and receive a verification token' })
+  verifyEmailOtp(@Body() dto: VerifyEmailOtpDto) {
+    return this.authService.verifyEmailOtp(dto.email, dto.code);
+  }
+
+  @Public()
+  @Post('complete-signup')
+  @ApiOperation({ summary: 'Finalize signup with verified contact + chosen password' })
+  completeSignup(@Body() dto: CompleteSignupDto) {
+    return this.authService.completeSignup(dto);
   }
 }
