@@ -13,6 +13,7 @@ import { UserRole } from '../../common/types';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
+import { TwilioService, VerifyChannel } from './twilio.service';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +24,7 @@ export class AuthService {
     private mailService: MailService,
     private signupOtpService: SignupOtpService,
     private verificationTokenService: VerificationTokenService,
+    private twilioService: TwilioService,
     private configService: ConfigService,
   ) {}
 
@@ -380,5 +382,42 @@ export class AuthService {
       accessToken: session.session.access_token,
       refreshToken: session.session.refresh_token,
     };
+  }
+
+  // ----- Phone OTP (Twilio Verify: SMS or WhatsApp) -----
+
+  async requestPhoneOtp(phone: string, channel: VerifyChannel): Promise<{ message: string }> {
+    const normalized = phone.trim();
+    const isTest = this.testPhones().has(normalized);
+
+    // Anti-enumeration — same shape as request-email-otp. Test phones
+    // bypass the "already taken" silent-no-op so we can retry signups.
+    if (!isTest) {
+      const admin = this.supabaseService.getAdminClient();
+      const { data: existing } = await admin
+        .from('users')
+        .select('id')
+        .eq('phone', normalized)
+        .maybeSingle();
+      if (existing) {
+        return { message: 'If this number is unused, a code has been sent.' };
+      }
+    }
+
+    await this.twilioService.startVerification(normalized, channel);
+    return { message: 'If this number is unused, a code has been sent.' };
+  }
+
+  async verifyPhoneOtp(phone: string, code: string): Promise<{ verificationToken: string }> {
+    const normalized = phone.trim();
+    const approved = await this.twilioService.checkVerification(normalized, code);
+    if (!approved) {
+      throw new BadRequestException('Incorrect or expired code.');
+    }
+    const verificationToken = this.verificationTokenService.sign({
+      contact: normalized,
+      contactType: 'phone',
+    });
+    return { verificationToken };
   }
 }
