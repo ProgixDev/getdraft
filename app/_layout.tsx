@@ -18,6 +18,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { theme } from "@/config/colors";
 import { store, RootState } from "@/store";
 import { SplashScreen, WelcomeScreen } from "@/components";
@@ -45,6 +46,10 @@ function RootLayoutContent() {
   const [appState, setAppState] = useState<AppState>("loading");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionOpacity = useSharedValue(1);
+
+  // Register the Expo push token + handle notification taps once the
+  // user is authenticated. Physical device required.
+  usePushNotifications(isAuthenticated && !!user);
 
   // Prewarm the backend the moment the app launches. Render's free tier
   // sleeps after ~15 min; this fire-and-forget ping wakes it during splash /
@@ -179,6 +184,11 @@ function RootLayoutContent() {
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="drafts-received" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="video"
+          options={{ headerShown: false, animation: "fade" }}
+        />
+        <Stack.Screen name="user/[userId]" options={{ headerShown: false }} />
         <Stack.Screen name="link-guardian" options={{ headerShown: false }} />
         <Stack.Screen name="guardian-link" options={{ headerShown: false }} />
         <Stack.Screen

@@ -12,6 +12,7 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { SupabaseService } from '../../config/supabase.config';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -28,6 +29,7 @@ export class ChatGateway
   constructor(
     private chatService: ChatService,
     private supabaseService: SupabaseService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Run token validation during the socket handshake (NOT post-connect). This
@@ -105,11 +107,59 @@ export class ChatGateway
         text: data.text,
         createdAt: message.created_at,
       });
+
+      // Push to recipient if they're not actively viewing this thread.
+      // Resolve the recipient (the other user on the match) and check whether
+      // any of their sockets is in the thread room.
+      const recipientId = await this.getOtherUserId(data.matchId, userId);
+      if (recipientId) {
+        const threadSockets = await this.server
+          .in(`thread:${data.matchId}`)
+          .fetchSockets();
+        const recipientInThread = threadSockets.some(
+          (s) => (s.data as any).userId === recipientId,
+        );
+        if (!recipientInThread) {
+          const senderName = await this.getUserName(userId);
+          await this.notificationsService.sendPushToUser(
+            recipientId,
+            senderName ? `New message from ${senderName}` : 'New message',
+            data.text.length > 120 ? data.text.slice(0, 117) + '…' : data.text,
+            { type: 'new_message', matchId: data.matchId },
+          );
+        }
+      }
     } catch (error: any) {
       client.emit('error', {
         message: error?.message || 'Failed to send message',
       });
     }
+  }
+
+  private async getOtherUserId(
+    matchId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('matches')
+      .select('user_1_id, user_2_id')
+      .eq('id', matchId)
+      .maybeSingle();
+    if (!data) return null;
+    if (data.user_1_id === userId) return data.user_2_id;
+    if (data.user_2_id === userId) return data.user_1_id;
+    return null;
+  }
+
+  private async getUserName(userId: string): Promise<string | null> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', userId)
+      .maybeSingle();
+    return data?.name ?? null;
   }
 
   @SubscribeMessage('typing')

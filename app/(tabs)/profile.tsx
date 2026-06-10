@@ -28,6 +28,8 @@ import type { MediaSource } from "@/constants/discoverData";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
 import { matchesService } from "@/services/matches";
+import { uploadsService, UploadBucket } from "@/services/uploads";
+import { pickAndUploadMedia } from "@/services/media";
 
 const { width } = Dimensions.get("window");
 const PHOTO_SIZE = (width - 48) / 3 - 8;
@@ -36,6 +38,54 @@ const BANNER_HEIGHT = 140;
 
 function comingSoon(feature: string) {
   Alert.alert(feature, "This feature is coming soon!", [{ text: "OK" }]);
+}
+
+function pathFromPublicUrl(url: string, bucket: UploadBucket): string | null {
+  const marker = `/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  try {
+    return decodeURIComponent(url.slice(idx + marker.length));
+  } catch {
+    return null;
+  }
+}
+
+const ATHLETE_DTO_FIELDS = [
+  "sport",
+  "position",
+  "level",
+  "bio",
+  "class_year",
+  "gpa",
+  "height",
+  "weight",
+  "forty_yard_dash",
+  "awards",
+  "photos",
+  "videos",
+] as const;
+
+const RECRUITER_DTO_FIELDS = [
+  "organization",
+  "sport",
+  "role_type",
+  "tags",
+  "bio",
+  "photos",
+  "videos",
+] as const;
+
+function pickFields<T extends string>(
+  src: any,
+  keys: readonly T[],
+): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of keys) {
+    const v = src?.[k];
+    if (v != null) out[k] = v;
+  }
+  return out;
 }
 
 type NormalizedAthleteProfile = {
@@ -117,6 +167,8 @@ export default function ProfileScreen() {
   const [childRaw, setChildRaw] = useState<any | null>(null);
   const [matchesCount, setMatchesCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState<null | "photos" | "videos">(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -160,7 +212,146 @@ export default function ProfileScreen() {
       return () => {
         cancelled = true;
       };
-    }, [isAthlete, isRecruiter, isParent]),
+    }, [isAthlete, isRecruiter, isParent, reloadKey]),
+  );
+
+  const handleAddMedia = useCallback(
+    async (kind: "photos" | "videos") => {
+      if (uploading) return;
+      if (!isAthlete && !isRecruiter) {
+        comingSoon("Add Media");
+        return;
+      }
+      setUploading(kind);
+      try {
+        const newUrls = await pickAndUploadMedia(
+          kind === "videos" ? "video" : "image",
+          kind,
+          {
+            allowsMultipleSelection: kind === "photos",
+            selectionLimit: kind === "photos" ? 6 : 1,
+          },
+        );
+        if (newUrls.length === 0) return;
+
+        let current: any = {};
+        try {
+          current = isAthlete
+            ? await profilesService.getAthleteProfile()
+            : await profilesService.getRecruiterProfile();
+        } catch {
+          /* 404 = no profile yet */
+        }
+        if (isAthlete && !current?.sport) {
+          Alert.alert(
+            "Set up your profile first",
+            "Add your sport and position before uploading media. Tap the pencil to edit your profile.",
+          );
+          return;
+        }
+        if (
+          isRecruiter &&
+          (!current?.organization || !current?.sport || !current?.role_type)
+        ) {
+          Alert.alert(
+            "Set up your profile first",
+            "Add your organization, sport, and role before uploading media. Tap the pencil to edit your profile.",
+          );
+          return;
+        }
+        const merged = pickFields(
+          current,
+          isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+        );
+        const existing: string[] = Array.isArray(current[kind])
+          ? current[kind]
+          : [];
+        merged[kind] = [...existing, ...newUrls];
+        if (isAthlete) {
+          await profilesService.upsertAthleteProfile(merged);
+        } else {
+          await profilesService.upsertRecruiterProfile(merged);
+        }
+        setReloadKey((k) => k + 1);
+      } catch (err: any) {
+        Alert.alert(
+          "Upload failed",
+          err?.message ?? "Something went wrong while uploading.",
+        );
+      } finally {
+        setUploading(null);
+      }
+    },
+    [uploading, isAthlete, isRecruiter],
+  );
+
+  const handleDeleteMedia = useCallback(
+    (kind: "photos" | "videos", url: string) => {
+      if (uploading) return;
+      if (!isAthlete && !isRecruiter) return;
+      Alert.alert(
+        kind === "videos" ? "Delete this video?" : "Delete this photo?",
+        "This cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              setUploading(kind);
+              try {
+                let current: any = {};
+                try {
+                  current = isAthlete
+                    ? await profilesService.getAthleteProfile()
+                    : await profilesService.getRecruiterProfile();
+                } catch {
+                  /* 404 — nothing to delete from */
+                  return;
+                }
+                const existing: string[] = Array.isArray(current[kind])
+                  ? current[kind]
+                  : [];
+                const next = existing.filter((u: string) => u !== url);
+                if (next.length === existing.length) {
+                  // URL wasn't in the array (e.g. mock data). Skip.
+                  return;
+                }
+
+                const bucket: UploadBucket =
+                  kind === "videos" ? "videos" : "photos";
+                const path = pathFromPublicUrl(url, bucket);
+                if (path) {
+                  await uploadsService.deleteFile(bucket, path).catch(() => {
+                    // If storage delete fails (already gone, race), still strip from profile
+                  });
+                }
+
+                const merged = pickFields(
+                  current,
+                  isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+                );
+                merged[kind] = next;
+                if (isAthlete) {
+                  await profilesService.upsertAthleteProfile(merged);
+                } else {
+                  await profilesService.upsertRecruiterProfile(merged);
+                }
+                setReloadKey((k) => k + 1);
+              } catch (err: any) {
+                Alert.alert(
+                  "Could not delete",
+                  err?.message ?? "Try again in a moment.",
+                );
+              } finally {
+                setUploading(null);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [uploading, isAthlete, isRecruiter],
   );
 
   const athleteProfile = useMemo<NormalizedAthleteProfile | null>(() => {
@@ -524,20 +715,36 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>
               {isParent ? "Child's Photos" : "Photos"}
             </Text>
-            <Pressable onPress={() => comingSoon("Add Photos")}>
-              <Text style={styles.addText}>+ Add</Text>
+            <Pressable
+              onPress={() => handleAddMedia("photos")}
+              disabled={uploading !== null}
+            >
+              {uploading === "photos" ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <Text style={styles.addText}>+ Add</Text>
+              )}
             </Pressable>
           </View>
           <View style={styles.photoGrid}>
             {photos.length > 0 ? (
               photos.map((photo, i) => (
-                <View key={i} style={styles.photoItem}>
+                <Pressable
+                  key={i}
+                  style={styles.photoItem}
+                  onLongPress={() => {
+                    if (typeof photo === "string") {
+                      handleDeleteMedia("photos", photo);
+                    }
+                  }}
+                  delayLongPress={400}
+                >
                   <Image
                     source={typeof photo === "string" ? { uri: photo } : photo}
                     style={styles.photoImage}
                     resizeMode="cover"
                   />
-                </View>
+                </Pressable>
               ))
             ) : (
               <View style={styles.emptyMedia}>
@@ -553,7 +760,12 @@ export default function ProfileScreen() {
                 </Text>
                 <Pressable
                   style={styles.addMediaButton}
-                  onPress={() => comingSoon("Add Photos")}
+                  onPress={() =>
+                    isParent
+                      ? comingSoon("Request Uploads")
+                      : handleAddMedia("photos")
+                  }
+                  disabled={uploading !== null}
                 >
                   <Text style={styles.addMediaButtonText}>
                     {isParent ? "Request Uploads" : "Add Photos"}
@@ -570,17 +782,39 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>
               {isParent ? "Child's Videos" : "Videos"}
             </Text>
-            <Pressable onPress={() => comingSoon("Add Videos")}>
-              <Text style={styles.addText}>+ Add</Text>
+            <Pressable
+              onPress={() => handleAddMedia("videos")}
+              disabled={uploading !== null}
+            >
+              {uploading === "videos" ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <Text style={styles.addText}>+ Add</Text>
+              )}
             </Pressable>
           </View>
           <View style={styles.videoSection}>
             {videos.length > 0 ? (
-              videos.map((_, i) => (
+              videos.map((video, i) => (
                 <Pressable
                   key={i}
                   style={styles.videoItem}
-                  onPress={() => comingSoon("Video Player")}
+                  onPress={() => {
+                    if (typeof video === "string") {
+                      router.push({
+                        pathname: "/video",
+                        params: { url: video, title: `Highlight Reel ${i + 1}` },
+                      });
+                    } else {
+                      comingSoon("Video Player");
+                    }
+                  }}
+                  onLongPress={() => {
+                    if (typeof video === "string") {
+                      handleDeleteMedia("videos", video);
+                    }
+                  }}
+                  delayLongPress={400}
                 >
                   <View style={styles.videoPlaceholder}>
                     <Ionicons
@@ -608,7 +842,12 @@ export default function ProfileScreen() {
                 </Text>
                 <Pressable
                   style={styles.addMediaButton}
-                  onPress={() => comingSoon("Add Videos")}
+                  onPress={() =>
+                    isParent
+                      ? comingSoon("Request Uploads")
+                      : handleAddMedia("videos")
+                  }
+                  disabled={uploading !== null}
                 >
                   <Text style={styles.addMediaButtonText}>
                     {isParent ? "Request Uploads" : "Add Videos"}

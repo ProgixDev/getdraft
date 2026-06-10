@@ -13,12 +13,16 @@ import {
   SendOutreachMessageDto,
 } from './dto/create-outreach.dto';
 import { CurrentUserPayload, UserRole } from '../../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class OutreachService {
   private readonly logger = new Logger(OutreachService.name);
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async createOutreach(user: CurrentUserPayload, dto: CreateOutreachDto) {
     if (user.role !== UserRole.RECRUITER && user.role !== UserRole.COACH) {
@@ -80,6 +84,20 @@ export class OutreachService {
       );
       throw new BadRequestException(msgError.message);
     }
+
+    // Push to the parent (best-effort; the method swallows its own errors)
+    const { data: senderRow } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', user.id)
+      .maybeSingle();
+    const senderName = senderRow?.name ?? 'A recruiter';
+    await this.notificationsService.sendPushToUser(
+      dto.parentId,
+      `${senderName} is interested in your athlete`,
+      dto.message.length > 120 ? dto.message.slice(0, 117) + '…' : dto.message,
+      { type: 'outreach', outreachId: outreach.id },
+    );
 
     return outreach;
   }

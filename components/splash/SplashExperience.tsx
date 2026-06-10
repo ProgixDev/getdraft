@@ -16,6 +16,7 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { theme } from "@/config/colors";
+import { statsService } from "@/services/stats";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const LOGO_SIZE = SCREEN_WIDTH * 0.45;
@@ -90,36 +91,41 @@ const STATS = [
 ];
 
 // ── JS-side animated counter (no worklets, no crash) ──
+// Restarts cleanly if `target` changes (late-arriving API data).
 function useJSCounter(target: number, duration: number, startAt: number) {
   const [value, setValue] = useState(0);
-  const started = useRef(false);
 
   useEffect(() => {
+    setValue(0);
+    let tickId: ReturnType<typeof setInterval> | null = null;
     const startTimer = setTimeout(() => {
-      if (started.current) return;
-      started.current = true;
       const steps = 40;
       const interval = duration / steps;
       let step = 0;
-      const tick = setInterval(() => {
+      tickId = setInterval(() => {
         step++;
         const progress = step / steps;
         const eased = 1 - Math.pow(1 - progress, 3);
         setValue(Math.floor(target * eased));
-        if (step >= steps) clearInterval(tick);
+        if (step >= steps && tickId) clearInterval(tickId);
       }, interval);
     }, startAt);
-    return () => clearTimeout(startTimer);
-  }, []);
+    return () => {
+      clearTimeout(startTimer);
+      if (tickId) clearInterval(tickId);
+    };
+  }, [target, duration, startAt]);
 
   return value.toLocaleString("en-US");
 }
+
+type Stat = { target: number; suffix: string; label: string };
 
 function StatColumn({
   stat,
   index,
 }: {
-  stat: (typeof STATS)[0];
+  stat: Stat;
   index: number;
 }) {
   const delay = STATS_STAGGER_START + index * 250;
@@ -164,6 +170,29 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
   onAnimationComplete,
 }) => {
   useFonts({ Poppins_500Medium, Poppins_700Bold, Poppins_800ExtraBold });
+
+  const [stats, setStats] = useState<Stat[]>(STATS);
+
+  // Fetch live welcome stats in parallel with animations. Counter targets
+  // update reactively if data arrives before the count-up starts (~3.3s).
+  useEffect(() => {
+    statsService
+      .getWelcomeStats()
+      .then((data) => {
+        if (!data) return;
+        const apiAthletes = Number(data.athletes ?? 0);
+        const apiCoaches = Number(data.coaches ?? 0);
+        const apiRecruiters = Number(data.recruiters ?? 0);
+        const totalRecruiters = apiRecruiters + apiCoaches;
+        if (apiAthletes <= 0 && totalRecruiters <= 0) return; // empty DB — keep aspirational mock
+        setStats((prev) => [
+          { ...prev[0], target: apiAthletes || prev[0].target },
+          { ...prev[1], target: totalRecruiters || prev[1].target },
+          prev[2], // Countries: no matching API field — keep mock
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   const logoOpacity = useSharedValue(0);
   const logoScale = useSharedValue(0.7);
@@ -307,7 +336,7 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
 
           {/* Stats bar — three columns */}
           <View style={styles.statsBar}>
-            {STATS.map((stat, i) => (
+            {stats.map((stat, i) => (
               <React.Fragment key={stat.label}>
                 {i > 0 && <View style={styles.statDivider} />}
                 <StatColumn stat={stat} index={i} />

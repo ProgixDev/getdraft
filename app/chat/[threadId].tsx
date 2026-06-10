@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -24,6 +25,7 @@ import {
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
+import { matchesService } from "@/services/matches";
 import type { Socket } from "socket.io-client";
 
 type ChatMessage = {
@@ -59,6 +61,16 @@ export default function ChatScreen() {
   const [header, setHeader] = useState<ChatHeader | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [otherIsTyping, setOtherIsTyping] = useState(false);
+  const [otherUserId, setOtherUserId] = useState<string | null>(null);
+
+  // Local typing-emit debouncer: emit(true) when user types,
+  // emit(false) after 2s of inactivity. Refs to avoid re-renders.
+  const localTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localIsTyping = useRef(false);
+  // Remote typing auto-clear: hide indicator if no new event arrives
+  // within 4s (handles missed `stop` events).
+  const remoteTypingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -111,6 +123,17 @@ export default function ChatScreen() {
 
     chatService.markRead(matchId).catch(() => {});
 
+    // Resolve the other user's id so the header can deep-link to their profile
+    matchesService
+      .getMatch(matchId)
+      .then((match: any) => {
+        if (cancelled) return;
+        const other =
+          match?.user_1_id === user.id ? match?.user_2_id : match?.user_1_id;
+        if (other) setOtherUserId(String(other));
+      })
+      .catch(() => {});
+
     let activeSocket: Socket | null = null;
     const onNewMessage = (msg: any) => {
       if (cancelled) return;
@@ -136,6 +159,24 @@ export default function ChatScreen() {
         }
         return [...prev, incoming];
       });
+      // Mark as read whenever a new incoming message arrives while we're open
+      if (!mine) {
+        chatService.markRead(matchId).catch(() => {});
+      }
+    };
+
+    const onUserTyping = (evt: any) => {
+      if (cancelled || !evt) return;
+      if (String(evt.matchId) !== matchId) return;
+      if (evt.userId === user.id) return; // ignore self
+      setOtherIsTyping(!!evt.isTyping);
+      if (remoteTypingClear.current) clearTimeout(remoteTypingClear.current);
+      if (evt.isTyping) {
+        remoteTypingClear.current = setTimeout(
+          () => setOtherIsTyping(false),
+          4000,
+        );
+      }
     };
 
     chatService.connectSocket().then((s) => {
@@ -143,6 +184,8 @@ export default function ChatScreen() {
       activeSocket = s;
       s.off("new_message", onNewMessage);
       s.on("new_message", onNewMessage);
+      s.off("user_typing", onUserTyping);
+      s.on("user_typing", onUserTyping);
       const joinNow = () => chatService.joinThread(matchId);
       if (s.connected) joinNow();
       s.on("connect", joinNow);
@@ -152,12 +195,58 @@ export default function ChatScreen() {
       cancelled = true;
       chatService.leaveThread(matchId);
       activeSocket?.off("new_message", onNewMessage);
+      activeSocket?.off("user_typing", onUserTyping);
+      // Clear our own typing indicator on unmount
+      if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
+      if (remoteTypingClear.current) clearTimeout(remoteTypingClear.current);
+      if (localIsTyping.current) {
+        chatService.emitTyping(matchId, false);
+        localIsTyping.current = false;
+      }
     };
   }, [matchId, user?.id]);
+
+  // Reconnect socket when app returns to foreground
+  useEffect(() => {
+    if (!matchId || !user?.id) return;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      const socket = chatService.getSocket();
+      if (!socket || !socket.connected) {
+        chatService.connectSocket().then(() => {
+          chatService.joinThread(matchId);
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [matchId, user?.id]);
+
+  const onDraftChange = (val: string) => {
+    setDraft(val);
+    if (!matchId) return;
+    if (!localIsTyping.current) {
+      chatService.emitTyping(matchId, true);
+      localIsTyping.current = true;
+    }
+    if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
+    localTypingTimer.current = setTimeout(() => {
+      if (localIsTyping.current) {
+        chatService.emitTyping(matchId, false);
+        localIsTyping.current = false;
+      }
+    }, 2000);
+  };
 
   const handleSend = () => {
     const text = draft.trim();
     if (!text || !matchId) return;
+
+    // Stop the typing indicator immediately on send
+    if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
+    if (localIsTyping.current) {
+      chatService.emitTyping(matchId, false);
+      localIsTyping.current = false;
+    }
 
     const optimisticId = `local-${Date.now()}`;
     setMessages((prev) => [
@@ -226,7 +315,18 @@ export default function ChatScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={theme.text} />
         </Pressable>
-        <View style={styles.headerCenter}>
+        <Pressable
+          style={styles.headerCenter}
+          onPress={() => {
+            if (otherUserId) {
+              router.push({
+                pathname: "/user/[userId]",
+                params: { userId: otherUserId },
+              });
+            }
+          }}
+          disabled={!otherUserId}
+        >
           <View style={styles.headerTitleRow}>
             <Text style={styles.headerTitle}>{headerTitle}</Text>
             {header?.verified && (
@@ -240,7 +340,7 @@ export default function ChatScreen() {
           {headerSubtitle ? (
             <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
           ) : null}
-        </View>
+        </Pressable>
         <View style={styles.headerIconButton} />
       </View>
 
@@ -321,11 +421,21 @@ export default function ChatScreen() {
         </ScrollView>
       )}
 
+      {otherIsTyping && (
+        <View style={styles.typingRow}>
+          <View style={styles.typingBubble}>
+            <Text style={styles.typingLabel} numberOfLines={1}>
+              {headerTitle} is typing…
+            </Text>
+          </View>
+        </View>
+      )}
+
       <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
         <View style={styles.inputWrap}>
           <TextInput
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={onDraftChange}
             placeholder="Type a message..."
             placeholderTextColor={theme.inputPlaceholder}
             style={styles.input}
@@ -475,6 +585,24 @@ const styles = StyleSheet.create({
   },
   mineTimeText: {
     color: "rgba(255,255,255,0.85)",
+  },
+  typingRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    alignItems: "flex-start",
+  },
+  typingBubble: {
+    backgroundColor: theme.surface,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    maxWidth: "70%",
+  },
+  typingLabel: {
+    fontSize: 12,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
+    fontStyle: "italic",
   },
   composer: {
     borderTopWidth: 1,

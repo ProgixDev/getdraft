@@ -92,6 +92,11 @@ export default function MoreScreen() {
       onPress: () => router.push("/(tabs)/profile"),
     },
     {
+      icon: "star-outline",
+      label: "Who Drafted You",
+      onPress: () => router.push("/drafts-received"),
+    },
+    {
       icon: "settings-outline",
       label: "Settings",
       onPress: () => router.push("/settings"),

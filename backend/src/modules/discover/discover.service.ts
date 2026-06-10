@@ -15,12 +15,16 @@ import {
   UserRole,
   SwipeDirection,
 } from '../../common/types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class DiscoverService {
   private readonly logger = new Logger(DiscoverService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async getFeed(user: CurrentUserPayload, query: DiscoverQueryDto) {
     if (user.role === UserRole.PARENT) {
@@ -320,6 +324,32 @@ export class DiscoverService {
             throw e;
           }
         }
+      }
+
+      if (matched && matchId) {
+        // Push "Game On!" to both users (best-effort; sendPushToUser
+        // swallows its own errors).
+        const names = await this.prisma.public_users.findMany({
+          where: { id: { in: [user.id, dto.targetUserId] } },
+          select: { id: true, name: true },
+        });
+        const nameOf = (id: string) =>
+          names.find((n) => n.id === id)?.name ?? 'Someone';
+        const data = { type: 'new_match', matchId };
+        await Promise.all([
+          this.notificationsService.sendPushToUser(
+            dto.targetUserId,
+            'Game On! 🤝',
+            `You matched with ${nameOf(user.id)}`,
+            data,
+          ),
+          this.notificationsService.sendPushToUser(
+            user.id,
+            'Game On! 🤝',
+            `You matched with ${nameOf(dto.targetUserId)}`,
+            data,
+          ),
+        ]);
       }
     }
 

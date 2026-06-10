@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -21,17 +21,32 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
+import { usersService } from "@/services/users";
+
+const PREF_DEFAULTS = {
+  matchAlerts: true,
+  messageNotifications: true,
+  recruiterActivity: false,
+  profileVisible: true,
+  showDistance: true,
+};
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
 
-  const [matchAlerts, setMatchAlerts] = useState(true);
-  const [messageNotifications, setMessageNotifications] = useState(true);
-  const [recruiterActivity, setRecruiterActivity] = useState(false);
-  const [profileVisible, setProfileVisible] = useState(true);
-  const [showDistance, setShowDistance] = useState(true);
+  const [matchAlerts, setMatchAlerts] = useState(PREF_DEFAULTS.matchAlerts);
+  const [messageNotifications, setMessageNotifications] = useState(
+    PREF_DEFAULTS.messageNotifications,
+  );
+  const [recruiterActivity, setRecruiterActivity] = useState(
+    PREF_DEFAULTS.recruiterActivity,
+  );
+  const [profileVisible, setProfileVisible] = useState(
+    PREF_DEFAULTS.profileVisible,
+  );
+  const [showDistance, setShowDistance] = useState(PREF_DEFAULTS.showDistance);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -39,6 +54,76 @@ export default function SettingsScreen() {
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
+
+  // Hydrate from /users/me on focus.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      usersService
+        .getMe()
+        .then((me: any) => {
+          if (cancelled) return;
+          const p = me?.preferences ?? {};
+          if (typeof p.matchAlerts === "boolean") setMatchAlerts(p.matchAlerts);
+          if (typeof p.messageNotifications === "boolean")
+            setMessageNotifications(p.messageNotifications);
+          if (typeof p.recruiterActivity === "boolean")
+            setRecruiterActivity(p.recruiterActivity);
+          if (typeof p.profileVisible === "boolean")
+            setProfileVisible(p.profileVisible);
+          if (typeof p.showDistance === "boolean")
+            setShowDistance(p.showDistance);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
+  // Persist a delta to /users/me.preferences. Best-effort; toggle stays
+  // applied locally even on save failure so the user isn't fighting the UI.
+  const persist = useCallback(
+    (delta: Record<string, boolean>) => {
+      const next = {
+        matchAlerts,
+        messageNotifications,
+        recruiterActivity,
+        profileVisible,
+        showDistance,
+        ...delta,
+      };
+      usersService.updateMe({ preferences: next }).catch(() => {});
+    },
+    [
+      matchAlerts,
+      messageNotifications,
+      recruiterActivity,
+      profileVisible,
+      showDistance,
+    ],
+  );
+
+  const onMatchAlerts = (v: boolean) => {
+    setMatchAlerts(v);
+    persist({ matchAlerts: v });
+  };
+  const onMessageNotifications = (v: boolean) => {
+    setMessageNotifications(v);
+    persist({ messageNotifications: v });
+  };
+  const onRecruiterActivity = (v: boolean) => {
+    setRecruiterActivity(v);
+    persist({ recruiterActivity: v });
+  };
+  const onProfileVisible = (v: boolean) => {
+    setProfileVisible(v);
+    persist({ profileVisible: v });
+  };
+  const onShowDistance = (v: boolean) => {
+    setShowDistance(v);
+    persist({ showDistance: v });
+  };
 
   if (!fontsLoaded) return null;
 
@@ -99,7 +184,7 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={matchAlerts}
-              onValueChange={setMatchAlerts}
+              onValueChange={onMatchAlerts}
               trackColor={{ false: theme.borderLight, true: brand.primary }}
               thumbColor={brand.white}
             />
@@ -114,7 +199,7 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={messageNotifications}
-              onValueChange={setMessageNotifications}
+              onValueChange={onMessageNotifications}
               trackColor={{ false: theme.borderLight, true: brand.primary }}
               thumbColor={brand.white}
             />
@@ -129,7 +214,7 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={recruiterActivity}
-              onValueChange={setRecruiterActivity}
+              onValueChange={onRecruiterActivity}
               trackColor={{ false: theme.borderLight, true: brand.primary }}
               thumbColor={brand.white}
             />
@@ -154,7 +239,7 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={profileVisible}
-              onValueChange={setProfileVisible}
+              onValueChange={onProfileVisible}
               trackColor={{ false: theme.borderLight, true: brand.primary }}
               thumbColor={brand.white}
             />
@@ -169,12 +254,126 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={showDistance}
-              onValueChange={setShowDistance}
+              onValueChange={onShowDistance}
               trackColor={{ false: theme.borderLight, true: brand.primary }}
               thumbColor={brand.white}
             />
           </View>
         </View>
+
+        {/* Admin tools — only shown to users with role=admin. */}
+        {user?.role === "admin" && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color={theme.text}
+              />
+              <Text style={styles.sectionTitle}>Admin tools</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.menuRow,
+                styles.menuRowLast,
+                pressed && styles.menuRowPressed,
+              ]}
+              onPress={() => router.push("/admin-guardian-links")}
+            >
+              <Ionicons
+                name="people-circle-outline"
+                size={20}
+                color={theme.textSecondary}
+              />
+              <View style={styles.menuRowCopy}>
+                <Text style={styles.menuRowTitle}>Guardian link reviews</Text>
+                <Text style={styles.menuRowValue}>
+                  Approve or decline pending guardian submissions
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={theme.textMuted}
+              />
+            </Pressable>
+          </View>
+        )}
+
+        {/* Guardian link — parents see "Verify my link" so they can
+            replay the tutorial video and record their declaration. */}
+        {user?.role === "parent" && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={20}
+                color={theme.text}
+              />
+              <Text style={styles.sectionTitle}>Guardian link</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.menuRow,
+                styles.menuRowLast,
+                pressed && styles.menuRowPressed,
+              ]}
+              onPress={() => router.push("/guardian-link")}
+            >
+              <Ionicons
+                name="videocam-outline"
+                size={20}
+                color={theme.textSecondary}
+              />
+              <View style={styles.menuRowCopy}>
+                <Text style={styles.menuRowTitle}>Verify my link</Text>
+                <Text style={styles.menuRowValue}>
+                  Watch the tutorial and record your declaration video
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={theme.textMuted}
+              />
+            </Pressable>
+          </View>
+        )}
+
+        {/* Guardians — only shown to athletes. */}
+        {user?.role === "athlete" && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <Ionicons name="people-outline" size={20} color={theme.text} />
+              <Text style={styles.sectionTitle}>Guardians</Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.menuRow,
+                styles.menuRowLast,
+                pressed && styles.menuRowPressed,
+              ]}
+              onPress={() => router.push("/link-guardian")}
+            >
+              <Ionicons
+                name="qr-code-outline"
+                size={20}
+                color={theme.textSecondary}
+              />
+              <View style={styles.menuRowCopy}>
+                <Text style={styles.menuRowTitle}>Link a guardian</Text>
+                <Text style={styles.menuRowValue}>
+                  Generate a QR code for a parent or guardian
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={theme.textMuted}
+              />
+            </Pressable>
+          </View>
+        )}
 
         {/* Account */}
         <View style={styles.section}>
