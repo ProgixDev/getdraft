@@ -228,10 +228,34 @@ export class DiscoverService {
       throw new BadRequestException((e as Error).message);
     }
 
-    await this.prisma.$executeRawUnsafe(
-      'select public.increment_swipes_used($1::uuid)',
-      user.id,
-    );
+    // Spend daily quota first; if it's exhausted, dip into bonus_swipes.
+    const subForSpend = await this.prisma.subscriptions.findUnique({
+      where: { user_id: user.id },
+      select: {
+        daily_swipe_limit: true,
+        swipes_used_today: true,
+        bonus_swipes: true,
+      },
+    });
+    const dailyLeft = subForSpend
+      ? subForSpend.daily_swipe_limit === -1
+        ? 999
+        : Math.max(
+            0,
+            subForSpend.daily_swipe_limit - (subForSpend.swipes_used_today ?? 0),
+          )
+      : 0;
+    if (dailyLeft > 0) {
+      await this.prisma.$executeRawUnsafe(
+        'select public.increment_swipes_used($1::uuid)',
+        user.id,
+      );
+    } else if (subForSpend && subForSpend.bonus_swipes > 0) {
+      await this.prisma.subscriptions.update({
+        where: { user_id: user.id },
+        data: { bonus_swipes: { decrement: 1 } },
+      });
+    }
 
     let matched = false;
     let matchId: string | null = null;
@@ -440,6 +464,7 @@ export class DiscoverService {
         daily_swipe_limit: true,
         swipes_used_today: true,
         swipes_reset_at: true,
+        bonus_swipes: true,
       },
     });
 
@@ -450,15 +475,19 @@ export class DiscoverService {
       ? sub.swipes_reset_at.toISOString().split('T')[0]
       : null;
 
+    const bonus = sub.bonus_swipes ?? 0;
     if (resetAtStr !== todayStr) {
       await this.prisma.subscriptions.update({
         where: { user_id: userId },
         data: { swipes_used_today: 0, swipes_reset_at: new Date(todayStr) },
       });
-      return sub.daily_swipe_limit === -1 ? 999 : sub.daily_swipe_limit;
+      const daily = sub.daily_swipe_limit === -1 ? 999 : sub.daily_swipe_limit;
+      return daily + bonus;
     }
 
-    if (sub.daily_swipe_limit === -1) return 999;
-    return Math.max(0, sub.daily_swipe_limit - (sub.swipes_used_today ?? 0));
+    if (sub.daily_swipe_limit === -1) return 999 + bonus;
+    return (
+      Math.max(0, sub.daily_swipe_limit - (sub.swipes_used_today ?? 0)) + bonus
+    );
   }
 }

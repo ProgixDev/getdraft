@@ -14,6 +14,20 @@ type StripeWebhookEvent = {
   data: { object: any };
 };
 
+/**
+ * One-off swipe top-ups. Sized so a swipe averages out cheaper as
+ * the pack gets bigger — gives users a nudge to buy the larger pack.
+ * Amount is in the smallest unit (cents) since that's what Stripe wants.
+ */
+export const SWIPE_PACKS: Record<
+  string,
+  { swipes: number; amountCents: number; label: string }
+> = {
+  small: { swipes: 10, amountCents: 100, label: '10 swipes' },
+  medium: { swipes: 50, amountCents: 400, label: '50 swipes' },
+  large: { swipes: 100, amountCents: 700, label: '100 swipes' },
+};
+
 @Injectable()
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
@@ -27,7 +41,107 @@ export class SubscriptionsService {
     this.priceMap = {
       [PlanId.STARTER]: this.configService.get('STRIPE_PRICE_STARTER') || '',
       [PlanId.PRO]: this.configService.get('STRIPE_PRICE_PRO') || '',
-      [PlanId.PREMIUM]: this.configService.get('STRIPE_PRICE_PREMIUM') || '',
+    };
+  }
+
+  /**
+   * Mobile Payment Sheet flow. Creates (or reuses) the Stripe customer,
+   * starts a Subscription with `payment_behavior: 'default_incomplete'`
+   * so the first payment is owed via the returned PaymentIntent, and
+   * returns the client secret along with an ephemeral key the mobile
+   * SDK needs to display saved payment methods.
+   *
+   * The mobile client takes the returned bundle, calls
+   * initPaymentSheet(...) and then presentPaymentSheet() — Stripe's
+   * native UI collects the card, confirms the PaymentIntent, and the
+   * customer.subscription.created webhook flips our subscriptions row
+   * to active.
+   */
+  async createPaymentSheet(userId: string, email: string, planId: PlanId) {
+    if (planId === PlanId.BASIC) {
+      throw new BadRequestException('Basic plan is free, no payment needed.');
+    }
+    const stripe = this.stripeService.getClient();
+    const priceId = this.priceMap[planId];
+    if (!priceId) {
+      throw new BadRequestException(`Stripe price not configured for plan ${planId}.`);
+    }
+
+    const supabase = this.supabaseService.getAdminClient();
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    let customerId = userRow?.stripe_customer_id as string | null;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: email || undefined,
+        metadata: { user_id: userId },
+      });
+      customerId = customer.id;
+      await supabase
+        .from('users')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId);
+    }
+
+    // Ephemeral key is required by the mobile SDK so the device can
+    // talk to Stripe on the customer's behalf without exposing the
+    // secret key. Tie its API version to the latest stable.
+    const ephemeralKey = await stripe.ephemeralKeys.create(
+      { customer: customerId },
+      { apiVersion: '2026-04-22.dahlia' as any },
+    );
+
+    const subscription = (await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      payment_behavior: 'default_incomplete',
+      payment_settings: { save_default_payment_method: 'on_subscription' },
+      // Stripe API 2026-04-22.dahlia replaced `latest_invoice.payment_intent`
+      // with `latest_invoice.confirmation_secret`. Expand both so the
+      // service tolerates either response shape across API versions.
+      expand: [
+        'latest_invoice.confirmation_secret',
+        'latest_invoice.payment_intent',
+      ],
+      metadata: { user_id: userId, plan_id: planId },
+    })) as any;
+
+    const invoice = subscription.latest_invoice;
+    // New API path (dahlia+): confirmation_secret.client_secret
+    // Legacy path:            payment_intent.client_secret
+    const clientSecret: string | undefined =
+      invoice?.confirmation_secret?.client_secret ??
+      invoice?.payment_intent?.client_secret;
+
+    if (!clientSecret) {
+      this.logger.error(
+        `Subscription created but no client_secret on latest_invoice (sub=${subscription.id})`,
+      );
+      throw new BadRequestException('Could not initialize payment.');
+    }
+
+    // Persist just the link to Stripe's subscription id. We DO NOT
+    // pre-flip plan_id or status — payment may still fail/cancel.
+    // The webhook (or the second leg of getMySubscription) does the
+    // final source-of-truth update once Stripe confirms the charge.
+    await supabase
+      .from('subscriptions')
+      .update({
+        stripe_subscription_id: subscription.id,
+        stripe_price_id: priceId,
+      })
+      .eq('user_id', userId);
+
+    return {
+      paymentIntentClientSecret: clientSecret,
+      ephemeralKeySecret: ephemeralKey.secret as string,
+      customerId,
+      publishableKey: this.configService.get<string>('STRIPE_PUBLISHABLE_KEY') ?? '',
+      subscriptionId: subscription.id as string,
     };
   }
 
@@ -57,6 +171,32 @@ export class SubscriptionsService {
         .eq('user_id', userId);
       data.swipes_used_today = 0;
       data.swipes_reset_at = today;
+    }
+
+    // We don't store cancel_at_period_end in the DB (no column for it),
+    // so for paid subs we ask Stripe for the live value. Cheap enough to
+    // do on demand — the subscription screen isn't a hot path.
+    if (data.stripe_subscription_id) {
+      try {
+        const stripe = this.stripeService.getClient();
+        const sub = (await stripe.subscriptions.retrieve(
+          data.stripe_subscription_id,
+        )) as any;
+        data.cancel_at_period_end = !!sub.cancel_at_period_end;
+        data.cancel_at = this.toIso(sub.cancel_at);
+        // If Stripe's period_end is newer than our cached one (e.g. the
+        // webhook hasn't fired yet) prefer the live value so the UI's
+        // "Cancels on {date}" line is accurate.
+        const item = sub.items?.data?.[0];
+        const livePeriodEnd = this.toIso(
+          sub.current_period_end ?? item?.current_period_end,
+        );
+        if (livePeriodEnd) data.current_period_end = livePeriodEnd;
+      } catch (err: any) {
+        this.logger.warn(
+          `Could not fetch Stripe sub ${data.stripe_subscription_id}: ${err?.message}`,
+        );
+      }
     }
 
     return data;
@@ -101,6 +241,172 @@ export class SubscriptionsService {
     });
 
     return { checkoutUrl: session.url };
+  }
+
+  /**
+   * Cancel the user's active Stripe subscription. By default Stripe
+   * marks it cancel_at_period_end so the user keeps the plan until
+   * their next renewal date; pass `immediate=true` to terminate now.
+   * On the next webhook (customer.subscription.deleted or updated)
+   * our public.subscriptions row flips back to Basic.
+   */
+  async cancelSubscription(userId: string, immediate = false) {
+    const stripe = this.stripeService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: row } = await supabase
+      .from('subscriptions')
+      .select('stripe_subscription_id, status, plan_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!row?.stripe_subscription_id) {
+      // Already on Basic / nothing to cancel.
+      return { canceled: false, message: 'No active subscription.' };
+    }
+
+    if (immediate) {
+      const sub = (await stripe.subscriptions.cancel(
+        row.stripe_subscription_id,
+      )) as any;
+      // Optimistically reflect immediately so the UI updates without
+      // waiting for the webhook.
+      await supabase
+        .from('subscriptions')
+        .update({
+          plan_id: PlanId.BASIC,
+          status: 'canceled',
+          daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
+          stripe_subscription_id: null,
+          stripe_price_id: null,
+        })
+        .eq('user_id', userId);
+      await supabase
+        .from('users')
+        .update({ plan_id: PlanId.BASIC, stripe_subscription_id: null })
+        .eq('id', userId);
+      return { canceled: true, status: sub.status, atPeriodEnd: false };
+    }
+
+    const sub = (await stripe.subscriptions.update(
+      row.stripe_subscription_id,
+      { cancel_at_period_end: true },
+    )) as any;
+    return {
+      canceled: true,
+      status: sub.status,
+      atPeriodEnd: true,
+      cancelAt: this.toIso(sub.cancel_at),
+    };
+  }
+
+  /**
+   * Reactivate a subscription that was set to cancel_at_period_end.
+   * No-op if the subscription is already active and not scheduled to
+   * cancel.
+   */
+  async resumeSubscription(userId: string) {
+    const stripe = this.stripeService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
+    const { data: row } = await supabase
+      .from('subscriptions')
+      .select('stripe_subscription_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!row?.stripe_subscription_id) {
+      throw new BadRequestException('No subscription to resume.');
+    }
+    const sub = (await stripe.subscriptions.update(
+      row.stripe_subscription_id,
+      { cancel_at_period_end: false },
+    )) as any;
+    return { resumed: true, status: sub.status };
+  }
+
+  /**
+   * One-off swipe-pack purchase via a PaymentIntent (NOT a Subscription).
+   * Mirrors the Payment Sheet bundle shape so the mobile client can
+   * reuse the same initPaymentSheet flow. On success the
+   * payment_intent.succeeded webhook credits bonus_swipes.
+   */
+  async createSwipePackSheet(userId: string, email: string, packId: string) {
+    const pack = SWIPE_PACKS[packId];
+    if (!pack) {
+      throw new BadRequestException(`Unknown swipe pack "${packId}".`);
+    }
+    const stripe = this.stripeService.getClient();
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    let customerId = userRow?.stripe_customer_id as string | null;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: email || undefined,
+        metadata: { user_id: userId },
+      });
+      customerId = customer.id;
+      await supabase
+        .from('users')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId);
+    }
+
+    const ephemeralKey = await stripe.ephemeralKeys.create(
+      { customer: customerId },
+      { apiVersion: '2026-04-22.dahlia' as any },
+    );
+
+    const intent = await stripe.paymentIntents.create({
+      amount: pack.amountCents,
+      currency: 'usd',
+      customer: customerId,
+      // Don't auto-attach as default — this is a one-off, not a card on file.
+      setup_future_usage: undefined,
+      // Lets PaymentSheet pick the best method (card, Apple Pay, etc.)
+      automatic_payment_methods: { enabled: true },
+      description: `GetDraft ${pack.label} pack`,
+      metadata: {
+        user_id: userId,
+        pack_id: packId,
+        type: 'swipe_pack',
+        swipes: String(pack.swipes),
+      },
+    });
+
+    // Audit row — `status: pending` until the webhook lands. We use
+    // payment_intent.id as the idempotency key so duplicate webhook
+    // fires don't double-credit.
+    await supabase.from('swipe_pack_purchases').insert({
+      user_id: userId,
+      stripe_payment_intent_id: intent.id,
+      pack_id: packId,
+      swipes_granted: pack.swipes,
+      amount_cents: pack.amountCents,
+      currency: 'usd',
+      status: 'pending',
+    });
+
+    if (!intent.client_secret) {
+      throw new BadRequestException('Could not initialize swipe pack payment.');
+    }
+
+    return {
+      paymentIntentClientSecret: intent.client_secret,
+      ephemeralKeySecret: ephemeralKey.secret as string,
+      customerId,
+      publishableKey: this.configService.get<string>('STRIPE_PUBLISHABLE_KEY') ?? '',
+      pack: { id: packId, ...pack },
+    };
+  }
+
+  /** Public list of available packs so the mobile screen stays in sync. */
+  getSwipePacks() {
+    return Object.entries(SWIPE_PACKS).map(([id, p]) => ({ id, ...p }));
   }
 
   async createPortalSession(userId: string) {
@@ -241,6 +547,156 @@ export class SubscriptionsService {
             .update({ status: 'past_due' })
             .eq('stripe_subscription_id', subId);
         }
+        break;
+      }
+
+      case 'invoice.payment_succeeded':
+      case 'invoice.paid':
+      case 'customer.subscription.created': {
+        // First payment of the PaymentSheet flow lands here. Pull the
+        // subscription, persist period + price + plan, mark active.
+        const obj = event.data.object;
+        const subId =
+          event.type === 'customer.subscription.created'
+            ? obj.id
+            : obj.subscription;
+        if (!subId) break;
+        try {
+          const stripe = this.stripeService.getClient();
+          const sub = (await stripe.subscriptions.retrieve(subId, {
+            expand: ['items.data.price'],
+          })) as any;
+          const item = sub.items?.data?.[0];
+          const priceId = item?.price?.id ?? null;
+          const userId = sub.metadata?.user_id as string | undefined;
+          const planId = sub.metadata?.plan_id as PlanId | undefined;
+          if (!userId || !planId) {
+            this.logger.warn(
+              `${event.type} for ${sub.id} missing metadata (user_id=${userId} plan_id=${planId})`,
+            );
+            break;
+          }
+          const swipeLimit = PLAN_SWIPE_LIMITS[planId] ?? 10;
+          // Stripe moved current_period_* off subscription onto the item
+          // in newer API versions; we accept either.
+          const periodStart = this.toIso(
+            sub.current_period_start ?? item?.current_period_start,
+          );
+          const periodEnd = this.toIso(
+            sub.current_period_end ?? item?.current_period_end,
+          );
+          const status =
+            sub.status === 'active' || sub.status === 'trialing'
+              ? 'active'
+              : sub.status === 'past_due'
+                ? 'past_due'
+                : 'active';
+
+          // Match by user_id — this works even if /payment-sheet's
+          // initial link write was rolled back, or if the user has
+          // multiple Stripe subscriptions across upgrade attempts.
+          await supabase
+            .from('subscriptions')
+            .update({
+              plan_id: planId,
+              stripe_subscription_id: sub.id,
+              stripe_price_id: priceId,
+              status,
+              daily_swipe_limit: swipeLimit,
+              current_period_start: periodStart,
+              current_period_end: periodEnd,
+            })
+            .eq('user_id', userId);
+
+          await supabase
+            .from('users')
+            .update({
+              plan_id: planId,
+              stripe_subscription_id: sub.id,
+            })
+            .eq('id', userId);
+
+          this.logger.log(
+            `[stripe] user ${userId} → plan ${planId} via ${event.type}`,
+          );
+        } catch (err: any) {
+          this.logger.warn(
+            `payment_succeeded handler failed for ${subId}: ${err?.message}`,
+          );
+        }
+        break;
+      }
+
+      case 'payment_intent.succeeded': {
+        // One-off purchases land here. We only care about swipe-pack
+        // intents (subscription payments come in via invoice.* events).
+        const intent = event.data.object;
+        const meta = intent.metadata ?? {};
+        if (meta.type !== 'swipe_pack') break;
+
+        const userId = meta.user_id as string | undefined;
+        const packId = meta.pack_id as string | undefined;
+        const swipes = Number(meta.swipes ?? 0);
+        if (!userId || !packId || !Number.isFinite(swipes) || swipes <= 0) {
+          this.logger.warn(
+            `swipe_pack intent ${intent.id} missing metadata (user=${userId} pack=${packId} swipes=${swipes})`,
+          );
+          break;
+        }
+
+        // Idempotency: mark the audit row succeeded, but only flip
+        // pending → succeeded once. If a duplicate webhook fires the
+        // row is already 'succeeded' and the update affects 0 rows,
+        // so we skip the credit.
+        const { data: claimed, error: claimErr } = await supabase
+          .from('swipe_pack_purchases')
+          .update({ status: 'succeeded', granted_at: new Date().toISOString() })
+          .eq('stripe_payment_intent_id', intent.id)
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle();
+
+        if (claimErr) {
+          this.logger.error(
+            `swipe_pack audit update failed for ${intent.id}: ${claimErr.message}`,
+          );
+          break;
+        }
+        if (!claimed) {
+          this.logger.log(
+            `swipe_pack intent ${intent.id} already credited — skipping.`,
+          );
+          break;
+        }
+
+        // Credit the swipes. We add to bonus_swipes (carries across
+        // days, does NOT reset). If the row doesn't exist yet we
+        // create it as Basic with the bonus.
+        const { data: sub } = await supabase
+          .from('subscriptions')
+          .select('bonus_swipes')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!sub) {
+          await supabase.from('subscriptions').insert({
+            user_id: userId,
+            plan_id: PlanId.BASIC,
+            status: 'active',
+            daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
+            bonus_swipes: swipes,
+          });
+        } else {
+          const next = (sub.bonus_swipes ?? 0) + swipes;
+          await supabase
+            .from('subscriptions')
+            .update({ bonus_swipes: next })
+            .eq('user_id', userId);
+        }
+
+        this.logger.log(
+          `[stripe] user ${userId} bought ${swipes}-swipe pack (${intent.id})`,
+        );
         break;
       }
 

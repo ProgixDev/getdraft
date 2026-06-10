@@ -35,4 +35,63 @@ export class SubscriptionsController {
   createPortal(@CurrentUser('id') userId: string) {
     return this.subscriptionsService.createPortalSession(userId);
   }
+
+  @Post('payment-sheet')
+  @ApiOperation({
+    summary:
+      'Mobile Payment Sheet: returns { paymentIntent, ephemeralKey, customer, publishableKey } for @stripe/stripe-react-native.',
+  })
+  createPaymentSheet(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateCheckoutDto,
+  ) {
+    return this.subscriptionsService.createPaymentSheet(
+      user.id,
+      user.email,
+      dto.planId,
+    );
+  }
+
+  @Post('cancel')
+  @ApiOperation({
+    summary:
+      "Cancel the user's active subscription. Body: { immediate?: boolean }. Defaults to cancel-at-period-end.",
+  })
+  cancel(
+    @CurrentUser('id') userId: string,
+    @Body() body: { immediate?: boolean },
+  ) {
+    return this.subscriptionsService.cancelSubscription(
+      userId,
+      !!body?.immediate,
+    );
+  }
+
+  @Post('resume')
+  @ApiOperation({ summary: 'Undo a pending cancel_at_period_end.' })
+  resume(@CurrentUser('id') userId: string) {
+    return this.subscriptionsService.resumeSubscription(userId);
+  }
+
+  @Get('swipe-packs')
+  @ApiOperation({ summary: 'List available swipe-pack top-ups.' })
+  listSwipePacks() {
+    return this.subscriptionsService.getSwipePacks();
+  }
+
+  @Post('swipe-pack')
+  @ApiOperation({
+    summary:
+      'Mobile Payment Sheet bundle for a one-off swipe-pack purchase. Body: { packId }.',
+  })
+  buySwipePack(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: { packId: string },
+  ) {
+    return this.subscriptionsService.createSwipePackSheet(
+      user.id,
+      user.email,
+      body.packId,
+    );
+  }
 }

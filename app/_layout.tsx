@@ -9,6 +9,8 @@ import { StatusBar } from "expo-status-bar";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
+import Constants from "expo-constants";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -168,6 +170,7 @@ function RootLayoutContent() {
         <Stack.Screen name="new-message" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
+        <Stack.Screen name="buy-swipes" options={{ headerShown: false }} />
         <Stack.Screen name="help-center" options={{ headerShown: false }} />
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
@@ -188,13 +191,24 @@ function RootLayoutContent() {
   );
 }
 
+const stripePublishableKey =
+  (Constants.expoConfig?.extra as { stripePublishableKey?: string } | undefined)
+    ?.stripePublishableKey ?? "";
+
 export default function RootLayout() {
   return (
     <ErrorBoundary>
       <Provider store={store}>
-        <GestureHandlerRootView style={styles.container}>
-          <RootLayoutContent />
-        </GestureHandlerRootView>
+        <StripeProvider
+          publishableKey={stripePublishableKey}
+          // merchantIdentifier intentionally omitted while signing with a
+          // free personal Apple team — Apple Pay capability requires a
+          // paid Developer Program membership. Add it back when we join.
+        >
+          <GestureHandlerRootView style={styles.container}>
+            <RootLayoutContent />
+          </GestureHandlerRootView>
+        </StripeProvider>
       </Provider>
     </ErrorBoundary>
   );
