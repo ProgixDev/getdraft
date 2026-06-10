@@ -8,8 +8,9 @@ import {
     ActivityIndicator,
     Alert,
     TextInput,
+    RefreshControl,
 } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -78,6 +79,9 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
     const [micPerm, requestMicPerm] = useMicrophonePermissions();
 
     const [step, setStep] = useState<Step>('scan');
+    const [resuming, setResuming] = useState(true);
+    const [resumeError, setResumeError] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [busy, setBusy] = useState(false);
     const [scannedToken, setScannedToken] = useState<string | null>(null);
     const [relationship, setRelationship] = useState<GuardianRelationship | null>(null);
@@ -93,18 +97,56 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
 
     // Resume: if a parent reloads mid-flow, /guardian-links/me tells us
     // how far they got so we don't re-show the scan step.
-    useEffect(() => {
+    const routeFromLink = useCallback((existing: GuardianLink) => {
+        setLink(existing);
+        setRelationship(existing.relationship);
+        if (existing.status === 'pending_video') setStep('video-explain');
+        else if (
+            existing.status === 'pending_admin' ||
+            existing.status === 'approved' ||
+            existing.status === 'declined'
+        ) {
+            setStep('submitted');
+        }
+    }, []);
+
+    const resume = useCallback(() => {
+        setResuming(true);
+        setResumeError(false);
         guardianLinksService.getMyLink()
             .then((existing) => {
-                if (!existing) return;
-                setLink(existing);
-                setRelationship(existing.relationship);
-                if (existing.status === 'pending_video') setStep('video-explain');
-                else if (existing.status === 'pending_admin' || existing.status === 'approved') {
-                    setStep('submitted');
-                }
+                if (existing) routeFromLink(existing);
             })
-            .catch(() => {});
+            .catch(() => setResumeError(true))
+            .finally(() => setResuming(false));
+    }, [routeFromLink]);
+
+    useEffect(() => { resume(); }, [resume]);
+
+    // Pull-to-refresh on the status step — a parent waiting on admin
+    // approval needs a way to re-check without killing the app.
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            const existing = await guardianLinksService.getMyLink();
+            if (existing) routeFromLink(existing);
+        } catch {
+            // keep showing the last known state
+        } finally {
+            setRefreshing(false);
+        }
+    }, [routeFromLink]);
+
+    // Declined links: let the parent re-run the whole flow from scratch.
+    const handleStartOver = useCallback(() => {
+        setLink(null);
+        setScannedToken(null);
+        setRelationship(null);
+        setAthleteFullName('');
+        setLivesWith(null);
+        setConsent(false);
+        setRecordedUri(null);
+        setStep('scan');
     }, []);
 
     // ─── Step 1: QR scan ───────────────────────────────────────────────
@@ -248,6 +290,49 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
 
     if (!fontsLoaded) return null;
 
+    // Hold a neutral loading shell until /guardian-links/me resolves —
+    // otherwise the scan step flashes for returning parents before the
+    // resume logic jumps them to their real step.
+    if (resuming) {
+        return (
+            <LinearGradient
+                colors={[brand.primary, '#0a4d8f', brand.primary]}
+                style={[styles.container, { alignItems: 'center', justifyContent: 'center' }]}
+            >
+                <ActivityIndicator size="large" color={brand.white} />
+            </LinearGradient>
+        );
+    }
+
+    // If the status check itself failed we can't know where the parent
+    // left off — never guess "scan" (that reads as "your submission is
+    // gone"). Show the failure and let them retry.
+    if (resumeError) {
+        return (
+            <LinearGradient
+                colors={[brand.primary, '#0a4d8f', brand.primary]}
+                style={[styles.container, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }]}
+            >
+                <View style={styles.iconCircle}>
+                    <Ionicons name="cloud-offline-outline" size={32} color={brand.white} />
+                </View>
+                <Text style={styles.title}>Can't check your status</Text>
+                <Text style={[styles.subtitle, { marginBottom: 20 }]}>
+                    We couldn't reach GetDraft. Check your connection and try again.
+                </Text>
+                <Pressable
+                    style={[styles.cta, { alignSelf: 'stretch' }]}
+                    onPress={resume}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try again"
+                >
+                    <Text style={styles.ctaText}>Try again</Text>
+                    <Ionicons name="refresh" size={18} color={brand.primary} />
+                </Pressable>
+            </LinearGradient>
+        );
+    }
+
     // Fullscreen-only steps render outside the gradient/scroll shell so
     // the example player and camera fill the screen edge-to-edge.
     if (step === 'video-example') {
@@ -285,10 +370,27 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                refreshControl={
+                    step === 'submitted' ? (
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={brand.white}
+                            colors={[semantic.success]}
+                            progressBackgroundColor={brand.white}
+                        />
+                    ) : undefined
+                }
             >
                 <View style={styles.topBar}>
                     {step === 'scan' || step === 'submitted' ? (
-                        <Pressable style={styles.iconButton} onPress={onBack} disabled={busy}>
+                        <Pressable
+                            style={styles.iconButton}
+                            onPress={onBack}
+                            disabled={busy}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
+                        >
                             <Ionicons name="arrow-back" size={22} color={brand.white} />
                         </Pressable>
                     ) : (
@@ -299,6 +401,8 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                                 else if (step === 'video-explain') setStep('questions');
                             }}
                             disabled={busy}
+                            accessibilityRole="button"
+                            accessibilityLabel="Go back"
                         >
                             <Ionicons name="arrow-back" size={22} color={brand.white} />
                         </Pressable>
@@ -348,7 +452,9 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                 {step === 'submitted' && (
                     <SubmittedStep
                         status={link?.status ?? 'pending_admin'}
+                        link={link}
                         onContinue={onComplete}
+                        onStartOver={handleStartOver}
                     />
                 )}
             </ScrollView>
@@ -612,6 +718,8 @@ function VideoExampleStep(props: { onContinue: () => void; onBack: () => void })
                 style={[styles.fullscreenCloseAbsolute, { top: insets.top + 8 }]}
                 onPress={props.onBack}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
             >
                 <Ionicons name="close" size={22} color={brand.white} />
             </Pressable>
@@ -686,6 +794,8 @@ function VideoRecordStep(props: {
                 onPress={props.onBack}
                 disabled={props.isRecording}
                 hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
             >
                 <Ionicons name="close" size={22} color={brand.white} />
             </Pressable>
@@ -713,7 +823,12 @@ function VideoRecordStep(props: {
 
                 {!props.recordedUri ? (
                     props.isRecording ? (
-                        <Pressable style={styles.recordCircleStop} onPress={props.onStop}>
+                        <Pressable
+                            style={styles.recordCircleStop}
+                            onPress={props.onStop}
+                            accessibilityRole="button"
+                            accessibilityLabel="Stop recording"
+                        >
                             <View style={styles.recordStopInner} />
                         </Pressable>
                     ) : (
@@ -721,6 +836,8 @@ function VideoRecordStep(props: {
                             style={[styles.recordCircle, !props.permission && { opacity: 0.5 }]}
                             onPress={props.onStart}
                             disabled={!props.permission || props.busy}
+                            accessibilityRole="button"
+                            accessibilityLabel="Start recording"
                         >
                             <View style={styles.recordInner} />
                         </Pressable>
@@ -756,32 +873,177 @@ function VideoRecordStep(props: {
     );
 }
 
-function SubmittedStep(props: { status: string; onContinue: () => void }) {
+function SubmittedStep(props: {
+    status: string;
+    link: GuardianLink | null;
+    onContinue: () => void;
+    onStartOver: () => void;
+}) {
     const approved = props.status === 'approved';
-    return (
-        <Animated.View entering={FadeIn.duration(400)}>
-            <View style={styles.header}>
-                <View style={[styles.iconCircle, { backgroundColor: approved ? 'rgba(0,184,148,0.25)' : 'rgba(255,255,255,0.16)' }]}>
-                    <Ionicons
-                        name={approved ? 'checkmark-circle' : 'hourglass'}
-                        size={36}
-                        color={approved ? semantic.successLight : brand.white}
-                    />
+    const athleteName = props.link?.athlete?.name ?? 'your athlete';
+    const relationshipLabel =
+        RELATIONSHIPS.find((r) => r.id === props.link?.relationship)?.label ?? 'Guardian';
+
+    if (props.status === 'declined') {
+        return (
+            <Animated.View entering={FadeIn.duration(400)}>
+                <View style={styles.header}>
+                    <View style={[styles.iconCircle, { backgroundColor: 'rgba(231,76,60,0.22)' }]}>
+                        <Ionicons name="close-circle" size={36} color={semantic.errorLight} />
+                    </View>
+                    <Text style={styles.title}>Link declined</Text>
+                    <Text style={styles.subtitle}>
+                        Admin couldn't verify your link with {athleteName}. Review the
+                        note below, then start a fresh submission.
+                    </Text>
                 </View>
-                <Text style={styles.title}>
-                    {approved ? 'You\'re linked!' : 'Submitted for review'}
-                </Text>
-                <Text style={styles.subtitle}>
-                    {approved
-                        ? 'Admin has confirmed your link with the athlete.'
-                        : "We've sent your submission to admin. We'll notify you when it's reviewed — usually within 24 hours."}
-                </Text>
+                {!!props.link?.admin_notes && (
+                    <View style={styles.unlockCard}>
+                        <Text style={styles.unlockOverline}>NOTE FROM ADMIN</Text>
+                        <Text style={styles.adminNoteText}>{props.link.admin_notes}</Text>
+                    </View>
+                )}
+                <Pressable
+                    style={styles.cta}
+                    onPress={props.onStartOver}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start over"
+                >
+                    <Text style={styles.ctaText}>Start over</Text>
+                    <Ionicons name="refresh" size={18} color={brand.primary} />
+                </Pressable>
+            </Animated.View>
+        );
+    }
+
+    if (!approved) {
+        return (
+            <Animated.View entering={FadeIn.duration(400)}>
+                <View style={styles.header}>
+                    <View style={styles.iconCircle}>
+                        <Ionicons name="hourglass" size={36} color={brand.white} />
+                    </View>
+                    <Text style={styles.title}>Submitted for review</Text>
+                    <Text style={styles.subtitle}>
+                        We've sent your submission to admin. We'll notify you when it's
+                        reviewed — usually within 24 hours.
+                    </Text>
+                    <View style={styles.refreshHint}>
+                        <Ionicons name="arrow-down" size={12} color="rgba(255,255,255,0.6)" />
+                        <Text style={styles.refreshHintText}>Pull down to check again</Text>
+                    </View>
+                </View>
+                <Pressable style={styles.cta} onPress={props.onContinue}>
+                    <Text style={styles.ctaText}>Continue</Text>
+                    <Ionicons name="arrow-forward" size={18} color={brand.primary} />
+                </Pressable>
+            </Animated.View>
+        );
+    }
+
+    const approvedDate = props.link?.decided_at
+        ? new Date(props.link.decided_at).toLocaleDateString(undefined, {
+              year: 'numeric', month: 'long', day: 'numeric',
+          })
+        : null;
+    const initials = athleteName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0].toUpperCase())
+        .join('') || 'A';
+
+    return (
+        <View>
+            {/* Verification seal — concentric rings, springs in first */}
+            <View style={styles.header}>
+                <Animated.View entering={ZoomIn.duration(500).springify()} style={styles.sealOuter}>
+                    <View style={styles.sealInner}>
+                        <Ionicons name="checkmark" size={38} color={semantic.successLight} />
+                    </View>
+                </Animated.View>
+                <Animated.View entering={FadeInDown.delay(120).duration(400)} style={styles.verifiedPill}>
+                    <Ionicons name="shield-checkmark" size={12} color={semantic.successLight} />
+                    <Text style={styles.verifiedPillText}>VERIFIED GUARDIAN</Text>
+                </Animated.View>
+                <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+                    <Text style={styles.title}>You're linked!</Text>
+                    <Text style={styles.subtitle}>
+                        Admin has confirmed you as {athleteName}'s {relationshipLabel.toLowerCase()}.
+                    </Text>
+                </Animated.View>
             </View>
-            <Pressable style={styles.cta} onPress={props.onContinue}>
-                <Text style={styles.ctaText}>Continue</Text>
-                <Ionicons name="arrow-forward" size={18} color={brand.primary} />
-            </Pressable>
-        </Animated.View>
+
+            {/* Credential card — dark glass, reads like an ID badge */}
+            <Animated.View entering={FadeInDown.delay(320).duration(450)} style={styles.credCard}>
+                <View style={styles.credIdentityRow}>
+                    <View style={styles.credAvatar}>
+                        <Text style={styles.credAvatarText}>{initials}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.credOverline}>ATHLETE</Text>
+                        <Text style={styles.credName} numberOfLines={1}>{athleteName}</Text>
+                    </View>
+                    <Ionicons name="shield-checkmark" size={22} color={semantic.successLight} />
+                </View>
+                <View style={styles.credDivider} />
+                <View style={styles.credMetaRow}>
+                    <Text style={styles.credMetaLabel}>Relationship</Text>
+                    <Text style={styles.credMetaValue}>{relationshipLabel}</Text>
+                </View>
+                {approvedDate && (
+                    <View style={styles.credMetaRow}>
+                        <Text style={styles.credMetaLabel}>Approved on</Text>
+                        <Text style={styles.credMetaValue}>{approvedDate}</Text>
+                    </View>
+                )}
+            </Animated.View>
+
+            {/* What this unlocks */}
+            <Animated.View entering={FadeInDown.delay(440).duration(450)} style={styles.unlockCard}>
+                <Text style={styles.unlockOverline}>WHAT'S UNLOCKED</Text>
+                <UnlockRow
+                    icon="trophy-outline"
+                    title="Follow the journey"
+                    body={`Track ${athleteName}'s recruiting activity from your Draft Board.`}
+                />
+                <UnlockRow
+                    icon="eye-outline"
+                    title="See who's scouting"
+                    body={`Know which coaches and recruiters draft ${athleteName}.`}
+                />
+                <UnlockRow
+                    icon="chatbubbles-outline"
+                    title="Talk to recruiters"
+                    body="Message coaches and recruiters directly from the app."
+                />
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.delay(560).duration(450)}>
+                <Pressable style={styles.cta} onPress={props.onContinue}>
+                    <Text style={styles.ctaText}>Continue</Text>
+                    <Ionicons name="arrow-forward" size={18} color={brand.primary} />
+                </Pressable>
+            </Animated.View>
+        </View>
+    );
+}
+
+function UnlockRow({ icon, title, body }: {
+    icon: keyof typeof Ionicons.glyphMap;
+    title: string;
+    body: string;
+}) {
+    return (
+        <View style={styles.unlockRow}>
+            <View style={styles.unlockIconCircle}>
+                <Ionicons name={icon} size={16} color={semantic.successLight} />
+            </View>
+            <View style={{ flex: 1 }}>
+                <Text style={styles.unlockTitle}>{title}</Text>
+                <Text style={styles.unlockBody}>{body}</Text>
+            </View>
+        </View>
     );
 }
 
@@ -946,6 +1208,103 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.4)',
     },
     devSkipText: { fontSize: 11, fontFamily: 'Poppins_500Medium', color: 'rgba(255,255,255,0.7)' },
+
+    // ── Approved state — verification seal ─────────────────────────
+    sealOuter: {
+        width: 96, height: 96, borderRadius: 48,
+        backgroundColor: 'rgba(0,184,148,0.14)',
+        borderWidth: 1, borderColor: 'rgba(85,239,196,0.35)',
+        alignItems: 'center', justifyContent: 'center',
+        marginBottom: 14,
+    },
+    sealInner: {
+        width: 66, height: 66, borderRadius: 33,
+        backgroundColor: 'rgba(0,184,148,0.28)',
+        alignItems: 'center', justifyContent: 'center',
+    },
+    verifiedPill: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: 'rgba(0,184,148,0.16)',
+        borderWidth: 1, borderColor: 'rgba(85,239,196,0.4)',
+        paddingHorizontal: 12, paddingVertical: 5,
+        borderRadius: 999, marginBottom: 12,
+    },
+    verifiedPillText: {
+        fontSize: 10, fontFamily: 'Poppins_700Bold',
+        color: semantic.successLight, letterSpacing: 1.5,
+    },
+
+    // ── Approved state — credential card ───────────────────────────
+    credCard: {
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+        borderRadius: 18, padding: 16, marginBottom: 12,
+    },
+    credIdentityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    credAvatar: {
+        width: 52, height: 52, borderRadius: 26,
+        backgroundColor: 'rgba(0,184,148,0.2)',
+        borderWidth: 1.5, borderColor: semantic.successLight,
+        alignItems: 'center', justifyContent: 'center',
+    },
+    credAvatarText: {
+        fontSize: 18, fontFamily: 'Poppins_800ExtraBold', color: brand.white,
+    },
+    credOverline: {
+        fontSize: 9, fontFamily: 'Poppins_700Bold',
+        color: 'rgba(255,255,255,0.5)', letterSpacing: 2, marginBottom: 1,
+    },
+    credName: { fontSize: 17, fontFamily: 'Poppins_700Bold', color: brand.white },
+    credDivider: {
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: 'rgba(255,255,255,0.16)',
+        marginVertical: 12,
+    },
+    credMetaRow: {
+        flexDirection: 'row', alignItems: 'center',
+        justifyContent: 'space-between', paddingVertical: 4,
+    },
+    credMetaLabel: {
+        fontSize: 12, fontFamily: 'Poppins_500Medium',
+        color: 'rgba(255,255,255,0.55)',
+    },
+    credMetaValue: { fontSize: 13, fontFamily: 'Poppins_700Bold', color: brand.white },
+
+    // ── Approved state — unlock card ───────────────────────────────
+    unlockCard: {
+        backgroundColor: 'rgba(255,255,255,0.07)',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+        borderRadius: 18, padding: 16, marginBottom: 12,
+    },
+    unlockOverline: {
+        fontSize: 10, fontFamily: 'Poppins_700Bold',
+        color: 'rgba(255,255,255,0.5)', letterSpacing: 2, marginBottom: 4,
+    },
+    unlockRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 12 },
+    unlockIconCircle: {
+        width: 32, height: 32, borderRadius: 16,
+        backgroundColor: 'rgba(0,184,148,0.16)',
+        alignItems: 'center', justifyContent: 'center',
+    },
+    unlockTitle: {
+        fontSize: 13.5, fontFamily: 'Poppins_700Bold',
+        color: brand.white, marginBottom: 1,
+    },
+    unlockBody: {
+        fontSize: 12, fontFamily: 'Poppins_400Regular',
+        color: 'rgba(255,255,255,0.65)', lineHeight: 17,
+    },
+    adminNoteText: {
+        fontSize: 13, fontFamily: 'Poppins_500Medium',
+        color: 'rgba(255,255,255,0.85)', lineHeight: 19, marginTop: 4,
+    },
+    refreshHint: {
+        flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12,
+    },
+    refreshHintText: {
+        fontSize: 11, fontFamily: 'Poppins_500Medium',
+        color: 'rgba(255,255,255,0.6)',
+    },
 
     // ── Step 1 explainer rows ──────────────────────────────────────
     explainRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 12 },
