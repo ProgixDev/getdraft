@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -7,7 +7,7 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { WebView } from "react-native-webview";
+import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -27,6 +27,7 @@ import { useFocusEffect } from "expo-router";
 import { theme } from "@/config/colors";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import { discoverService, type MapPoint } from "@/services/discover";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -70,8 +71,17 @@ const DEFAULT_CONTINENTS = [
   },
 ];
 
-// ── Interactive Three.js Globe HTML ──
-const globeHtml = `<!DOCTYPE html>
+// ── Interactive Three.js globe HTML ──
+// Renders the real, role-targeted candidates as point meshes that the
+// user can TAP to bridge a "{type:'point', id}" message back to RN.
+// Drag still rotates the globe — taps are discriminated by elapsed
+// time + total movement on touchend.
+function buildGlobeHtml(points: { id: string; lat: number; lng: number; role: string }[]): string {
+  // The points payload must be safe to embed inline. JSON.stringify
+  // gives us a JS literal that can't break out of the script tag and
+  // is bounded by what the backend returns (no untrusted markup).
+  const ptsJson = JSON.stringify(points);
+  return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
@@ -84,6 +94,8 @@ body{overflow:hidden;background:transparent;touch-action:none}
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>
 <script src="https://unpkg.com/three-globe@2.45.0/dist/three-globe.min.js"><\/script>
 <script>
+var PTS=${ptsJson};
+// Decorative arcs — static feel of a network. Not tied to any data.
 var arcs=[
 {startLat:39.8,startLng:-98.6,endLat:51.2,endLng:10.5},
 {startLat:39.8,startLng:-98.6,endLat:-14.2,endLng:-51.9},
@@ -92,28 +104,16 @@ var arcs=[
 {startLat:46.2,startLng:2.2,endLat:9.1,endLng:8.7},
 {startLat:20.6,startLng:79,endLat:35.9,endLng:127.8},
 {startLat:-30.6,startLng:22.9,endLat:40.5,endLng:-3.7},
-{startLat:23.6,startLng:-102.6,endLat:56.1,endLng:-106.3},
-{startLat:36.2,startLng:138.3,endLat:-25.3,endLng:133.8},
-{startLat:9.1,startLng:8.7,endLat:-30.6,endLng:22.9}
+{startLat:23.6,startLng:-102.6,endLat:56.1,endLng:-106.3}
 ];
-var pts=[
-{lat:39.8,lng:-98.6,size:0.8},{lat:56.1,lng:-106.3,size:0.6},
-{lat:55.4,lng:-3.4,size:0.7},{lat:46.2,lng:2.2,size:0.6},
-{lat:51.2,lng:10.5,size:0.5},{lat:-14.2,lng:-51.9,size:0.5},
-{lat:36.2,lng:138.3,size:0.6},{lat:-25.3,lng:133.8,size:0.4},
-{lat:9.1,lng:8.7,size:0.5},{lat:20.6,lng:79,size:0.6},
-{lat:-30.6,lng:22.9,size:0.4},{lat:35.9,lng:127.8,size:0.5},
-{lat:23.6,lng:-102.6,size:0.5},{lat:40.5,lng:-3.7,size:0.5},
-{lat:-34.6,lng:-58.4,size:0.4},{lat:1.3,lng:103.8,size:0.4},
-{lat:31.2,lng:121.5,size:0.5},{lat:19.4,lng:-99.1,size:0.5}
-];
+// Visible point markers (athletes green, recruiters/coaches orange).
+function colorFor(d){return d.role==='athlete'?'#00B894':'#FDA63A'}
 var G=new ThreeGlobe()
 .globeImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg')
 .bumpImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png')
 .arcsData(arcs).arcColor(function(){return['rgba(0,184,148,0.6)','rgba(116,185,255,0.6)']})
 .arcStroke(0.5).arcDashLength(0.4).arcDashGap(0.2).arcDashAnimateTime(2500)
-.pointsData(pts).pointColor(function(){return'#00B894'}).pointAltitude(0.01)
-.pointRadius(function(d){return d.size||0.4});
+.pointsData(PTS).pointColor(colorFor).pointAltitude(0.012).pointRadius(0.55);
 var r=new THREE.WebGLRenderer({alpha:true,antialias:true});
 r.setPixelRatio(Math.min(window.devicePixelRatio,2));
 r.setSize(window.innerWidth,window.innerHeight);
@@ -121,18 +121,80 @@ document.getElementById('g').appendChild(r.domElement);
 var s=new THREE.Scene();s.add(G);
 s.add(new THREE.AmbientLight(0xffffff,1.2));
 var dl=new THREE.DirectionalLight(0xffffff,0.8);dl.position.set(6,3,5);s.add(dl);
+// Soft atmosphere shell.
 var ag=new THREE.SphereGeometry(101,32,32);
 var am=new THREE.MeshBasicMaterial({color:0x4488ff,transparent:true,opacity:0.08,side:THREE.BackSide});
 s.add(new THREE.Mesh(ag,am));
 var c=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,1000);
 c.position.z=260;
-var autoRotate=true;var isDragging=false;var prevX=0;var prevY=0;
+
+// Invisible click targets — three-globe's own point meshes are not
+// easy to raycast against directly, so we add sibling spheres at the
+// same lat/lng and parent them to the globe so they rotate together.
+// G.getCoords() is the public projection three-globe uses for its own
+// .pointsData markers, so the targets line up exactly with the dots.
+// Slightly larger than the visible dot so tapping is forgiving.
+var targets=[];
+var targetGeom=new THREE.SphereGeometry(2.2,8,8);
+var targetMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0});
+for(var i=0;i<PTS.length;i++){
+  var p=PTS[i];
+  var m=new THREE.Mesh(targetGeom,targetMat);
+  var v=G.getCoords(p.lat,p.lng,0.015); // matches pointAltitude(0.012)
+  m.position.set(v.x,v.y,v.z);
+  m.userData={id:p.id};
+  G.add(m);
+  targets.push(m);
+}
+
+// Touch handling — drag rotates, tap raycasts.
+var autoRotate=true;var isDragging=false;
+var prevX=0;var prevY=0;var startX=0;var startY=0;var startT=0;var totalMove=0;
 var rotX=0;var rotY=0;
-document.addEventListener('touchstart',function(e){isDragging=true;autoRotate=false;prevX=e.touches[0].clientX;prevY=e.touches[0].clientY});
-document.addEventListener('touchmove',function(e){if(!isDragging)return;var dx=e.touches[0].clientX-prevX;var dy=e.touches[0].clientY-prevY;rotY+=dx*0.005;rotX+=dy*0.003;rotX=Math.max(-1,Math.min(1,rotX));prevX=e.touches[0].clientX;prevY=e.touches[0].clientY});
-document.addEventListener('touchend',function(){isDragging=false;setTimeout(function(){if(!isDragging)autoRotate=true},3000)});
-function a(){if(autoRotate)rotY+=0.003;G.rotation.y=rotY;G.rotation.x=rotX;r.render(s,c);requestAnimationFrame(a)}a();
+var raycaster=new THREE.Raycaster();
+function handleTap(x,y){
+  var ndc=new THREE.Vector2(
+    (x/window.innerWidth)*2-1,
+    -(y/window.innerHeight)*2+1
+  );
+  raycaster.setFromCamera(ndc,c);
+  var hits=raycaster.intersectObjects(targets,false);
+  if(hits.length>0){
+    var id=hits[0].object.userData.id;
+    if(window.ReactNativeWebView){
+      window.ReactNativeWebView.postMessage(JSON.stringify({type:'point',id:id}));
+    }
+  }
+}
+document.addEventListener('touchstart',function(e){
+  isDragging=true;autoRotate=false;
+  prevX=e.touches[0].clientX;prevY=e.touches[0].clientY;
+  startX=prevX;startY=prevY;startT=Date.now();totalMove=0;
+});
+document.addEventListener('touchmove',function(e){
+  if(!isDragging)return;
+  var dx=e.touches[0].clientX-prevX;var dy=e.touches[0].clientY-prevY;
+  totalMove+=Math.abs(dx)+Math.abs(dy);
+  rotY+=dx*0.005;rotX+=dy*0.003;
+  rotX=Math.max(-1,Math.min(1,rotX));
+  prevX=e.touches[0].clientX;prevY=e.touches[0].clientY;
+});
+document.addEventListener('touchend',function(e){
+  isDragging=false;
+  var elapsed=Date.now()-startT;
+  // Tap: short, with negligible movement.
+  if(elapsed<280&&totalMove<10){handleTap(startX,startY);}
+  setTimeout(function(){if(!isDragging)autoRotate=true},3000);
+});
+function a(){
+  if(autoRotate)rotY+=0.003;
+  G.rotation.y=rotY;G.rotation.x=rotX;
+  r.render(s,c);
+  requestAnimationFrame(a);
+}
+a();
 <\/script></body></html>`;
+}
 
 function ContinentCard({
   continent,
@@ -195,6 +257,7 @@ export default function GlobeTab() {
   const [showStats, setShowStats] = useState(false);
   const webviewRef = useRef<WebView>(null);
   const [CONTINENTS, setContinents] = useState(DEFAULT_CONTINENTS);
+  const [points, setPoints] = useState<MapPoint[]>([]);
 
   // Fetch globe stats from API
   useEffect(() => {
@@ -213,12 +276,62 @@ export default function GlobeTab() {
       .catch(() => {});
   }, []);
 
+  // Refresh the role-targeted map candidates on every focus, mirroring
+  // how the home rank chip refreshes. Service has a null-safe → mock
+  // fallback so this never hangs the WebView.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      discoverService.getMapPoints().then((rows) => {
+        if (!cancelled) setPoints(rows);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
   // Lazy load: only render WebView when tab is focused
   useFocusEffect(
     useCallback(() => {
       setIsActive(true);
       return () => setIsActive(false);
     }, []),
+  );
+
+  // Minimal payload the WebView needs to plot + raycast. Re-built on
+  // any points change so the WebView remounts with fresh data.
+  const globeHtml = useMemo(
+    () =>
+      buildGlobeHtml(
+        points.map((p) => ({
+          id: p.id,
+          lat: p.lat,
+          lng: p.lng,
+          role: p.role,
+        })),
+      ),
+    [points],
+  );
+
+  // Tap-bridge handler: the HTML posts { type:'point', id } when a point
+  // is tapped (raycast hit). A3 will use this id to surface a card.
+  const handleWebMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      try {
+        const msg = JSON.parse(event.nativeEvent.data) as {
+          type?: string;
+          id?: string;
+        };
+        if (msg.type !== "point" || !msg.id) return;
+        const hit = points.find((p) => p.id === msg.id);
+        if (!hit) return;
+        // A3 lands here — overlay the mini card. Stubbed for this commit.
+      } catch {
+        // Malformed payload — ignore.
+      }
+    },
+    [points],
   );
 
   if (redirecting) return null;
@@ -229,6 +342,10 @@ export default function GlobeTab() {
       <View style={styles.globeContainer}>
         {isActive ? (
           <WebView
+            // Re-key on the points fingerprint so a fresh fetch fully
+            // remounts the WebView (and the inline three-globe state)
+            // instead of relying on source-prop diffing.
+            key={`globe-${points.length}-${points[0]?.id ?? "empty"}`}
             ref={webviewRef}
             source={{ html: globeHtml }}
             style={styles.webview}
@@ -236,6 +353,7 @@ export default function GlobeTab() {
             bounces={false}
             javaScriptEnabled
             domStorageEnabled
+            onMessage={handleWebMessage}
           />
         ) : (
           <View style={styles.globePlaceholder}>
