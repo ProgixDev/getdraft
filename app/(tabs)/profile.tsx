@@ -224,16 +224,11 @@ export default function ProfileScreen() {
       }
       setUploading(kind);
       try {
-        const newUrls = await pickAndUploadMedia(
-          kind === "videos" ? "video" : "image",
-          kind,
-          {
-            allowsMultipleSelection: kind === "photos",
-            selectionLimit: kind === "photos" ? 6 : 1,
-          },
-        );
-        if (newUrls.length === 0) return;
-
+        // Validate the profile FIRST. Previously pickAndUploadMedia
+        // (gallery picker + storage upload) ran before this check, so a
+        // user without a complete profile saw "Set up your profile" only
+        // after their files were already in storage with no owning row
+        // to claim them — orphaned bytes, no cleanup path.
         let current: any = {};
         try {
           current = isAthlete
@@ -259,6 +254,16 @@ export default function ProfileScreen() {
           );
           return;
         }
+
+        const newUrls = await pickAndUploadMedia(
+          kind === "videos" ? "video" : "image",
+          kind,
+          {
+            allowsMultipleSelection: kind === "photos",
+            selectionLimit: kind === "photos" ? 6 : 1,
+          },
+        );
+        if (newUrls.length === 0) return;
         const merged = pickFields(
           current,
           isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
