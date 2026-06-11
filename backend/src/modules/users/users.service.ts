@@ -39,6 +39,32 @@ export class UsersService {
     // recruiter gets 403 on /outreach, and an OAuth parent isn't blocked
     // from /discover/swipe. The public.users column is the authoritative
     // app value; user_metadata is the JWT view of it.
+    // preferences is a SHARED jsonb blob written by independent writers:
+    // settings.tsx (5 toggle keys), OnboardingQuestionsScreen
+    // (preferences.onboarding — "feeds the matching algorithm"), and
+    // GuardianLinkScreen (preferences.dev). A plain column update would
+    // overwrite the others' keys. Read-modify-write to merge top-level
+    // keys; deeper nesting is the writer's responsibility (each writer
+    // namespaces under a unique key today).
+    let mergedDto: Record<string, any> = dto;
+    if (dto.preferences) {
+      const { data: existing, error: readErr } = await supabase
+        .from('users')
+        .select('preferences')
+        .eq('id', user.id)
+        .single();
+      if (readErr) {
+        throw new BadRequestException(readErr.message);
+      }
+      mergedDto = {
+        ...dto,
+        preferences: {
+          ...(existing?.preferences ?? {}),
+          ...dto.preferences,
+        },
+      };
+    }
+
     if (dto.role) {
       const { data: authUser, error: readErr } =
         await supabase.auth.admin.getUserById(user.id);
@@ -65,7 +91,7 @@ export class UsersService {
 
     const { data, error } = await supabase
       .from('users')
-      .update(dto)
+      .update(mergedDto)
       .eq('id', user.id)
       .select()
       .single();
