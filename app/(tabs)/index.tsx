@@ -931,6 +931,20 @@ export default function DiscoverScreen() {
           <Text style={styles.title}>{discoverTitle}</Text>
         </View>
         <View style={styles.headerActions}>
+          {isRecruiter && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.topProspectsChip,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => router.push("/rankings")}
+              accessibilityRole="button"
+              accessibilityLabel="Open top prospects rankings"
+            >
+              <Ionicons name="trophy" size={14} color={semantic.warning} />
+              <Text style={styles.topProspectsText}>Top Prospects</Text>
+            </Pressable>
+          )}
           {myRank &&
             (myRank.division === "CA" || myRank.division === "US") && (
               <Pressable
@@ -1331,6 +1345,23 @@ const styles = StyleSheet.create({
   rankChipStars: {
     flexDirection: "row",
     gap: 1,
+  },
+  topProspectsChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(253,203,110,0.45)",
+  },
+  topProspectsText: {
+    fontSize: 12,
+    fontFamily: "Poppins_700Bold",
+    color: brand.white,
+    letterSpacing: 0.2,
   },
   searchRow: {
     flexDirection: "row",
