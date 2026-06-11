@@ -549,7 +549,15 @@ export class SubscriptionsService {
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object;
-        const subId = invoice.subscription;
+        // Same dual-location read as the payment_succeeded branch — the
+        // dahlia API moved invoice.subscription to
+        // invoice.parent.subscription_details.subscription. Without this
+        // a failed renewal silently didn't flip status to past_due,
+        // leaving the user on their old paid limits.
+        const subId =
+          invoice.subscription ??
+          invoice.parent?.subscription_details?.subscription ??
+          null;
         if (subId) {
           await supabase
             .from('subscriptions')
@@ -579,7 +587,13 @@ export class SubscriptionsService {
           event.type === 'customer.subscription.created' ||
           event.type === 'customer.subscription.updated'
             ? obj.id
-            : obj.subscription;
+            : // Stripe API 2026-04-22.dahlia moved Invoice.subscription
+              // off the top-level into invoice.parent.subscription_details.
+              // Read both so the handler works on either API version the
+              // endpoint is configured for.
+              obj.subscription ??
+              obj.parent?.subscription_details?.subscription ??
+              null;
         if (!subId) break;
         try {
           const stripe = this.stripeService.getClient();
