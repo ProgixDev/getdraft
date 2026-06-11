@@ -126,6 +126,7 @@ export class ChatGateway
             senderName ? `New message from ${senderName}` : 'New message',
             data.text.length > 120 ? data.text.slice(0, 117) + '…' : data.text,
             { type: 'new_message', matchId: data.matchId },
+            'messageNotifications',
           );
         }
       }

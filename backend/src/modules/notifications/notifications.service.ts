@@ -46,13 +46,40 @@ export class NotificationsService {
     return { message: 'Token removed' };
   }
 
+  /**
+   * Categories map to the toggles on the Settings screen
+   * (users.preferences.{matchAlerts,messageNotifications,recruiterActivity}).
+   * A falsy preference value suppresses the push. Categories the user
+   * cannot toggle off (account/security/billing in the future) pass
+   * undefined and always send.
+   *
+   * Default-true (silent absence) is intentional: a new user with no
+   * preferences yet should receive notifications.
+   */
   async sendPushToUser(
     userId: string,
     title: string,
     body: string,
     data?: Record<string, any>,
+    category?: 'matchAlerts' | 'messageNotifications' | 'recruiterActivity',
   ) {
     const supabase = this.supabaseService.getAdminClient();
+
+    if (category) {
+      const { data: row } = await supabase
+        .from('users')
+        .select('preferences')
+        .eq('id', userId)
+        .maybeSingle();
+      const prefs = (row?.preferences ?? {}) as Record<string, unknown>;
+      // Explicit `false` = opted out. `undefined` / `null` = default on.
+      if (prefs[category] === false) {
+        this.logger.log(
+          `[push] suppressed ${category} for user ${userId} (preference off)`,
+        );
+        return;
+      }
+    }
 
     const { data: tokens } = await supabase
       .from('push_tokens')

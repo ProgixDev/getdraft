@@ -342,12 +342,14 @@ export class DiscoverService {
             'Game On! 🤝',
             `You matched with ${nameOf(user.id)}`,
             data,
+            'matchAlerts',
           ),
           this.notificationsService.sendPushToUser(
             user.id,
             'Game On! 🤝',
             `You matched with ${nameOf(dto.targetUserId)}`,
             data,
+            'matchAlerts',
           ),
         ]);
       }

@@ -97,6 +97,7 @@ export class OutreachService {
       `${senderName} is interested in your athlete`,
       dto.message.length > 120 ? dto.message.slice(0, 117) + '…' : dto.message,
       { type: 'outreach', outreachId: outreach.id },
+      'recruiterActivity',
     );
 
     return outreach;
