@@ -6,6 +6,8 @@ import {
   Pressable,
   Dimensions,
   ActivityIndicator,
+  Image,
+  Modal,
 } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Animated, {
@@ -258,6 +260,12 @@ export default function GlobeTab() {
   const webviewRef = useRef<WebView>(null);
   const [CONTINENTS, setContinents] = useState(DEFAULT_CONTINENTS);
   const [points, setPoints] = useState<MapPoint[]>([]);
+  // Mini card sits over the globe on point tap; tapping the mini opens
+  // the big-card modal with Draft / Pass.
+  const [selected, setSelected] = useState<MapPoint | null>(null);
+  const [bigOpen, setBigOpen] = useState(false);
+  const [swiping, setSwiping] = useState(false);
+  const [matchMsg, setMatchMsg] = useState<string | null>(null);
 
   // Fetch globe stats from API
   useEffect(() => {
@@ -315,7 +323,7 @@ export default function GlobeTab() {
   );
 
   // Tap-bridge handler: the HTML posts { type:'point', id } when a point
-  // is tapped (raycast hit). A3 will use this id to surface a card.
+  // is tapped (raycast hit).
   const handleWebMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
@@ -326,12 +334,53 @@ export default function GlobeTab() {
         if (msg.type !== "point" || !msg.id) return;
         const hit = points.find((p) => p.id === msg.id);
         if (!hit) return;
-        // A3 lands here — overlay the mini card. Stubbed for this commit.
+        setMatchMsg(null);
+        setBigOpen(false);
+        setSelected(hit);
       } catch {
         // Malformed payload — ignore.
       }
     },
     [points],
+  );
+
+  const dismissAll = useCallback(() => {
+    setSelected(null);
+    setBigOpen(false);
+    setMatchMsg(null);
+  }, []);
+
+  const openBigCard = useCallback(() => {
+    if (selected) setBigOpen(true);
+  }, [selected]);
+
+  const handleSwipe = useCallback(
+    async (direction: "draft" | "pass") => {
+      if (!selected || swiping) return;
+      const targetId = selected.id;
+      const targetName = selected.name ?? "this profile";
+      setSwiping(true);
+      try {
+        const res = await discoverService.swipe(targetId, direction);
+        // Whatever the outcome, remove the point from the globe so the
+        // user can't act on it again without a refresh.
+        setPoints((prev) => prev.filter((p) => p.id !== targetId));
+        if (direction === "draft" && res.matched) {
+          setBigOpen(false);
+          setSelected(null);
+          setMatchMsg(`Game On! You matched with ${targetName}.`);
+        } else {
+          dismissAll();
+        }
+      } catch {
+        // Backend rejected (out of swipes, banned, etc) — still hide
+        // the card; surfacing details is the swipe deck's job.
+        dismissAll();
+      } finally {
+        setSwiping(false);
+      }
+    },
+    [selected, swiping, dismissAll],
   );
 
   if (redirecting) return null;
@@ -396,18 +445,170 @@ export default function GlobeTab() {
       </View>
 
       {/* Instruction hint — centered above bottom panel */}
-      {!showStats && (
+      {!showStats && !selected && !matchMsg && (
         <View style={styles.hint}>
           <Ionicons
             name="hand-left-outline"
             size={14}
             color="rgba(255,255,255,0.4)"
           />
-          <Text style={styles.hintText}>Drag to rotate the globe</Text>
+          <Text style={styles.hintText}>Drag to rotate · Tap a point</Text>
         </View>
       )}
+
+      {/* Match toast — replaces the mini card after a mutual draft. */}
+      {matchMsg && (
+        <Pressable
+          style={styles.matchToast}
+          onPress={() => setMatchMsg(null)}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss match"
+        >
+          <Ionicons name="trophy" size={18} color="#FDA63A" />
+          <Text style={styles.matchToastText} numberOfLines={2}>
+            {matchMsg}
+          </Text>
+        </Pressable>
+      )}
+
+      {/* Mini card — bottom-center over the globe on point tap. */}
+      {selected && !bigOpen && (
+        <Pressable
+          style={styles.miniCard}
+          onPress={openBigCard}
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${selected.name ?? "profile"}`}
+        >
+          <View style={styles.miniAvatar}>
+            {selected.avatar_url ? (
+              <Image
+                source={{ uri: selected.avatar_url }}
+                style={styles.miniAvatarImg}
+              />
+            ) : (
+              <Ionicons
+                name={selected.role === "athlete" ? "person" : "briefcase"}
+                size={20}
+                color="rgba(255,255,255,0.85)"
+              />
+            )}
+          </View>
+          <View style={styles.miniInfo}>
+            <View style={styles.miniNameRow}>
+              <Text style={styles.miniName} numberOfLines={1}>
+                {selected.name ?? "Athlete"}
+              </Text>
+              {selected.verified && (
+                <Ionicons name="checkmark-circle" size={14} color="#00B894" />
+              )}
+            </View>
+            <Text style={styles.miniMeta} numberOfLines={1}>
+              {[selected.sport, selected.position]
+                .filter(Boolean)
+                .join(" · ") || roleLabel(selected.role)}
+            </Text>
+          </View>
+          <Pressable
+            hitSlop={10}
+            onPress={dismissAll}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            style={styles.miniClose}
+          >
+            <Ionicons name="close" size={18} color="rgba(255,255,255,0.7)" />
+          </Pressable>
+        </Pressable>
+      )}
+
+      {/* Big card — full draft/pass modal. */}
+      <Modal
+        visible={bigOpen && !!selected}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissAll}
+      >
+        <Pressable style={styles.bigBackdrop} onPress={dismissAll}>
+          {selected && (
+            <Pressable style={styles.bigCard} onPress={() => {}}>
+              <View style={styles.bigAvatar}>
+                {selected.avatar_url ? (
+                  <Image
+                    source={{ uri: selected.avatar_url }}
+                    style={styles.bigAvatarImg}
+                  />
+                ) : (
+                  <Ionicons
+                    name={selected.role === "athlete" ? "person" : "briefcase"}
+                    size={48}
+                    color="rgba(255,255,255,0.85)"
+                  />
+                )}
+              </View>
+              <View style={styles.bigNameRow}>
+                <Text style={styles.bigName} numberOfLines={1}>
+                  {selected.name ?? "Profile"}
+                </Text>
+                {selected.verified && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color="#00B894"
+                  />
+                )}
+              </View>
+              <Text style={styles.bigRole}>{roleLabel(selected.role)}</Text>
+              {selected.sport && (
+                <Text style={styles.bigSport}>
+                  {[selected.sport, selected.position]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Text>
+              )}
+
+              <View style={styles.bigActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.bigBtn,
+                    styles.passBtn,
+                    pressed && { opacity: 0.85 },
+                    swiping && { opacity: 0.5 },
+                  ]}
+                  onPress={() => handleSwipe("pass")}
+                  disabled={swiping}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pass on ${selected.name ?? "profile"}`}
+                >
+                  <Ionicons name="close" size={20} color="#FFFFFF" />
+                  <Text style={styles.bigBtnText}>Pass</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.bigBtn,
+                    styles.draftBtn,
+                    pressed && { opacity: 0.85 },
+                    swiping && { opacity: 0.5 },
+                  ]}
+                  onPress={() => handleSwipe("draft")}
+                  disabled={swiping}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Draft ${selected.name ?? "profile"}`}
+                >
+                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                  <Text style={styles.bigBtnText}>Draft</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          )}
+        </Pressable>
+      </Modal>
     </View>
   );
+}
+
+function roleLabel(role: MapPoint["role"]): string {
+  if (role === "athlete") return "Athlete";
+  if (role === "coach") return "Coach";
+  return "Agent / Recruiter";
 }
 
 const styles = StyleSheet.create({
@@ -528,5 +729,156 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Poppins_500Medium",
     color: "rgba(255, 255, 255, 0.4)",
+  },
+  matchToast: {
+    position: "absolute",
+    bottom: 170,
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(253,166,58,0.5)",
+  },
+  matchToastText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#FFFFFF",
+  },
+  miniCard: {
+    position: "absolute",
+    bottom: 170,
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "rgba(15,18,24,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  miniAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  miniAvatarImg: { width: "100%", height: "100%" },
+  miniInfo: { flex: 1 },
+  miniNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  miniName: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
+  },
+  miniMeta: {
+    marginTop: 1,
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.6)",
+  },
+  miniClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  bigBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(0,0,0,0.72)",
+  },
+  bigCard: {
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 22,
+    borderRadius: 24,
+    backgroundColor: "#15171F",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  bigAvatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginBottom: 14,
+  },
+  bigAvatarImg: { width: "100%", height: "100%" },
+  bigNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  bigName: {
+    flexShrink: 1,
+    fontSize: 20,
+    fontFamily: "Poppins_800ExtraBold",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  bigRole: {
+    marginTop: 4,
+    fontSize: 12,
+    fontFamily: "Poppins_600SemiBold",
+    color: "rgba(255,255,255,0.6)",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  bigSport: {
+    marginTop: 6,
+    fontSize: 14,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.85)",
+  },
+  bigActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 22,
+    width: "100%",
+  },
+  bigBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 28,
+  },
+  passBtn: { backgroundColor: "#E74C3C" },
+  draftBtn: { backgroundColor: "#00B894" },
+  bigBtnText: {
+    fontSize: 15,
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
   },
 });
