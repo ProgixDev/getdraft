@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../config/supabase.config';
+import { UserRole } from '../../common/types';
 
 export type GuardianRelationship =
   | 'parent'
@@ -317,7 +318,13 @@ export class GuardianLinksService {
   // Admin endpoints
   // ───────────────────────────────────────────────────────────────────
 
-  async adminList(status?: GuardianLinkStatus) {
+  async adminList(callerRole: UserRole, status?: GuardianLinkStatus) {
+    // Defence in depth — the controller's @Roles guard already enforces
+    // this, but a service-level check protects us if anything ever calls
+    // adminList directly (cron, internal service, future refactor).
+    if (callerRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin role required.');
+    }
     const supabase = this.supabaseService.getAdminClient();
     let query = supabase
       .from('guardian_links')
@@ -346,11 +353,15 @@ export class GuardianLinksService {
   }
 
   async adminDecide(
+    callerRole: UserRole,
     adminUserId: string,
     linkId: string,
     decision: 'approved' | 'declined',
     notes?: string,
   ) {
+    if (callerRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('Admin role required.');
+    }
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from('guardian_links')

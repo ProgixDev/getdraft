@@ -1,6 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '../../common/types';
 import { GuardianLinksService } from './guardian-links.service';
 import type { GuardianLinkStatus, GuardianRelationship } from './guardian-links.service';
 
@@ -74,33 +76,41 @@ export class GuardianLinksController {
   }
 
   // ──────────── Admin ────────────
+  // Every route below requires the admin role. The decorator is also
+  // repeated per-handler so an accidental @Public() or refactor cannot
+  // silently expose one of them.
 
+  @Roles(UserRole.ADMIN)
   @Get('admin')
   @ApiOperation({ summary: 'Admin: list links, optionally filtered by status.' })
-  adminList(@Query('status') status?: GuardianLinkStatus) {
-    // The global RolesGuard expects @Roles decorator usage; for now we
-    // accept any authenticated user and rely on the AdminModule's own
-    // gate added in 015. TODO: add @Roles('admin') here.
-    return this.service.adminList(status);
+  adminList(
+    @CurrentUser('role') callerRole: UserRole,
+    @Query('status') status?: GuardianLinkStatus,
+  ) {
+    return this.service.adminList(callerRole, status);
   }
 
+  @Roles(UserRole.ADMIN)
   @Post('admin/:id/approve')
   @ApiOperation({ summary: 'Admin: approve a guardian link.' })
   adminApprove(
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') callerRole: UserRole,
     @Param('id') id: string,
     @Body() body: { notes?: string },
   ) {
-    return this.service.adminDecide(userId, id, 'approved', body?.notes);
+    return this.service.adminDecide(callerRole, userId, id, 'approved', body?.notes);
   }
 
+  @Roles(UserRole.ADMIN)
   @Post('admin/:id/decline')
   @ApiOperation({ summary: 'Admin: decline a guardian link.' })
   adminDecline(
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') callerRole: UserRole,
     @Param('id') id: string,
     @Body() body: { notes?: string },
   ) {
-    return this.service.adminDecide(userId, id, 'declined', body?.notes);
+    return this.service.adminDecide(callerRole, userId, id, 'declined', body?.notes);
   }
 }
