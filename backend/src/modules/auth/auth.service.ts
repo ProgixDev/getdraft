@@ -347,10 +347,50 @@ export class AuthService {
           user_metadata: { role: dto.role, name: dto.name ?? null },
         };
 
-    const { data: created, error: createErr } = await admin.auth.admin.createUser(createPayload);
-    if (createErr || !created.user) {
-      this.logger.error(`createUser failed for ${contact}: ${createErr?.message}`);
-      throw new BadRequestException(createErr?.message ?? 'Could not create account.');
+    let created: any = null;
+    {
+      const { data, error } = await admin.auth.admin.createUser(createPayload);
+      created = data;
+
+      // Orphan recovery for phone signups: a prior partial signup may have
+      // left an auth.users row with no public.users row. Our duplicate
+      // check above queries public.users and misses it, but createUser
+      // now collides on the auth phone index — the user is permanently
+      // locked out with no recovery path. Detect "phone exists" + "no
+      // profile row" = orphan, delete it, retry once. We pay listUsers
+      // only here, on the rare collision path.
+      if (!isEmail && error && /already/i.test(error.message ?? '')) {
+        const orphan = await this.findOrphanAuthByPhone(contact);
+        if (orphan) {
+          this.logger.warn(
+            `[orphan-recovery] deleting orphan auth user ${orphan.id} for ${contact}`,
+          );
+          await admin.auth.admin.deleteUser(orphan.id);
+          const retry = await admin.auth.admin.createUser(createPayload);
+          if (retry.error || !retry.data?.user) {
+            this.logger.error(
+              `createUser retry failed for ${contact}: ${retry.error?.message}`,
+            );
+            throw new BadRequestException(
+              retry.error?.message ?? 'Could not create account.',
+            );
+          }
+          created = retry.data;
+        } else {
+          // Real duplicate (auth row WITH profile row) — let it fail.
+          this.logger.error(`createUser failed for ${contact}: ${error.message}`);
+          throw new BadRequestException(
+            error.message ?? 'Could not create account.',
+          );
+        }
+      } else if (error || !created?.user) {
+        this.logger.error(
+          `createUser failed for ${contact}: ${error?.message}`,
+        );
+        throw new BadRequestException(
+          error?.message ?? 'Could not create account.',
+        );
+      }
     }
 
     // Sign them in. For phone signups, use the synthetic email since
@@ -485,6 +525,36 @@ export class AuthService {
       contactType: 'phone',
     });
     return { existingUser: false as const, verificationToken };
+  }
+
+  /**
+   * Find an auth.users row matching `contact` by phone that has NO
+   * corresponding public.users row — i.e. an orphan left by a partial
+   * signup. Only used as the slow-path fallback when createUser collides
+   * during a non-TEST phone signup. listUsers page-1 is acceptable here:
+   * collision is rare AND a real legitimate row whose profile exists
+   * would have been caught by the duplicate check earlier.
+   */
+  private async findOrphanAuthByPhone(contact: string) {
+    const admin = this.supabaseService.getAdminClient();
+    const wantDigits = contact.replace(/\D/g, '');
+    const { data } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    const candidates = (data?.users ?? []).filter((u) => {
+      const d = (u.phone ?? '').replace(/\D/g, '');
+      return d.length > 0 && d === wantDigits;
+    });
+    for (const candidate of candidates) {
+      const { data: profile } = await admin
+        .from('users')
+        .select('id')
+        .eq('id', candidate.id)
+        .maybeSingle();
+      if (!profile) return candidate;
+    }
+    return null;
   }
 
   /**
