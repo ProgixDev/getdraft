@@ -100,6 +100,8 @@ export default function MatchesScreen() {
   });
 
   const isParent = user?.role === "parent";
+  const isRecruiter =
+    user?.role === "recruiter" || user?.role === "coach";
 
   const [view, setView] = useState<DraftBoardView>(
     isParent ? "matches" : "received",
@@ -390,7 +392,11 @@ export default function MatchesScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.title}>
-          {isParent ? "Recruiter Outreach" : "Draft Board"}
+          {isParent
+            ? "Recruiter Outreach"
+            : isRecruiter
+              ? "Scout Board"
+              : "Draft Board"}
         </Text>
         {view === "matches" && !isParent && totalUnread > 0 && (
           <View style={styles.headerBadge}>
@@ -435,23 +441,26 @@ export default function MatchesScreen() {
           </>
         ) : (
           <>
+            {/* Recruiter framing reads "interested in me / I'm scouting"
+                instead of the athlete-first download/send metaphor. The
+                data model is identical — only labels + icons change. */}
             <TabPill
-              icon="download-outline"
-              label="Received"
+              icon={isRecruiter ? "eye-outline" : "download-outline"}
+              label={isRecruiter ? "Interested" : "Received"}
               active={view === "received"}
               onPress={() => setView("received")}
               badge={received.length}
             />
             <TabPill
-              icon="send-outline"
-              label="Sent"
+              icon={isRecruiter ? "search-outline" : "send-outline"}
+              label={isRecruiter ? "Scouting" : "Sent"}
               active={view === "sent"}
               onPress={() => setView("sent")}
               badge={sentPending.length}
             />
             <TabPill
               icon="trophy"
-              label="Matches"
+              label={isRecruiter ? "Roster" : "Matches"}
               active={view === "matches"}
               onPress={() => setView("matches")}
             />

@@ -68,6 +68,17 @@ export default function PostCreateScreen() {
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Posting is an athlete affordance only. Recruiters/coaches/parents/admins
+  // who somehow land here (stale deep link, history) bounce back to their
+  // home — the Feed tab is already hidden from their tab bar.
+  React.useEffect(() => {
+    if (!user?.role) return;
+    if (user.role === "athlete") return;
+    if (user.role === "admin") router.replace("/(tabs)/dashboard");
+    else if (user.role === "parent") router.replace("/(tabs)/home");
+    else router.replace("/(tabs)");
+  }, [user?.role, router]);
+
   const videoPlayer = useVideoPlayer(
     asset?.kind === "reel" ? asset.uri : "",
     (p) => {
