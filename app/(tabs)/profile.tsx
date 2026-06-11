@@ -28,9 +28,8 @@ import type { MediaSource } from "@/constants/discoverData";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
 import { matchesService } from "@/services/matches";
-import { uploadsService, UploadBucket } from "@/services/uploads";
-import { pickAndUploadMedia } from "@/services/media";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import { postsService, type PostItem } from "@/services/posts";
 
 const { width } = Dimensions.get("window");
 const PHOTO_SIZE = (width - 48) / 3 - 8;
@@ -41,53 +40,47 @@ function comingSoon(feature: string) {
   Alert.alert(feature, "This feature is coming soon!", [{ text: "OK" }]);
 }
 
-function pathFromPublicUrl(url: string, bucket: UploadBucket): string | null {
-  const marker = `/${bucket}/`;
-  const idx = url.indexOf(marker);
-  if (idx === -1) return null;
-  try {
-    return decodeURIComponent(url.slice(idx + marker.length));
-  } catch {
-    return null;
-  }
-}
+// Demo seed for the IG grid — surfaces a populated grid in offline /
+// pre-seed environments. Real data always wins; this only kicks in when
+// the API errors. (Empty success = "you haven't posted yet" empty state.)
+const MOCK_GRID_PHOTOS: PostItem[] = [
+  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600",
+  "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?w=600",
+  "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=600",
+  "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=600",
+  "https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600",
+  "https://images.unsplash.com/photo-1487466365202-1afdb86c764e?w=600",
+].map((url, i) => ({
+  id: `mock-post-${i}`,
+  kind: "post",
+  mediaUrl: url,
+  mediaType: "image",
+  thumbnailUrl: null,
+  caption: null,
+  likesCount: 0,
+  commentsCount: 0,
+  likedByMe: false,
+  createdAt: new Date().toISOString(),
+  author: null,
+}));
 
-const ATHLETE_DTO_FIELDS = [
-  "sport",
-  "position",
-  "level",
-  "bio",
-  "class_year",
-  "gpa",
-  "height",
-  "weight",
-  "forty_yard_dash",
-  "awards",
-  "photos",
-  "videos",
-] as const;
-
-const RECRUITER_DTO_FIELDS = [
-  "organization",
-  "sport",
-  "role_type",
-  "tags",
-  "bio",
-  "photos",
-  "videos",
-] as const;
-
-function pickFields<T extends string>(
-  src: any,
-  keys: readonly T[],
-): Record<string, any> {
-  const out: Record<string, any> = {};
-  for (const k of keys) {
-    const v = src?.[k];
-    if (v != null) out[k] = v;
-  }
-  return out;
-}
+const MOCK_GRID_REELS: PostItem[] = [
+  "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=600",
+  "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600",
+  "https://images.unsplash.com/photo-1502035818146-acab10b2ee21?w=600",
+].map((url, i) => ({
+  id: `mock-reel-${i}`,
+  kind: "reel",
+  mediaUrl: url,
+  mediaType: "video",
+  thumbnailUrl: url,
+  caption: null,
+  likesCount: 0,
+  commentsCount: 0,
+  likedByMe: false,
+  createdAt: new Date().toISOString(),
+  author: null,
+}));
 
 type NormalizedAthleteProfile = {
   sport?: string;
@@ -179,8 +172,18 @@ export default function ProfileScreen() {
   const [childRaw, setChildRaw] = useState<any | null>(null);
   const [matchesCount, setMatchesCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<null | "photos" | "videos">(null);
-  const [reloadKey, setReloadKey] = useState(0);
+
+  // Instagram-style grid below the profile header (athletes only —
+  // see hasIgGrid). Reels = video posts, Saved = bookmarks (D2).
+  // Each tab lazy-fetches once per focus; mock fallback only kicks
+  // in on API errors so an empty success keeps the empty state.
+  type GridTab = "posts" | "reels" | "saved";
+  const [gridTab, setGridTab] = useState<GridTab>("posts");
+  const [myPosts, setMyPosts] = useState<PostItem[] | null>(null);
+  const [myReels, setMyReels] = useState<PostItem[] | null>(null);
+  const [savedPosts, setSavedPosts] = useState<PostItem[] | null>(null);
+  // Wired in D4 — the press handler is shared between D3 and D4.
+  const [openedPost, setOpenedPost] = useState<PostItem | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -224,151 +227,35 @@ export default function ProfileScreen() {
       return () => {
         cancelled = true;
       };
-    }, [isAthlete, isRecruiter, isParent, reloadKey]),
+    }, [isAthlete, isRecruiter, isParent]),
   );
 
-  const handleAddMedia = useCallback(
-    async (kind: "photos" | "videos") => {
-      if (uploading) return;
-      if (!isAthlete && !isRecruiter) {
-        comingSoon("Add Media");
-        return;
-      }
-      setUploading(kind);
-      try {
-        // Validate the profile FIRST. Previously pickAndUploadMedia
-        // (gallery picker + storage upload) ran before this check, so a
-        // user without a complete profile saw "Set up your profile" only
-        // after their files were already in storage with no owning row
-        // to claim them — orphaned bytes, no cleanup path.
-        let current: any = {};
-        try {
-          current = isAthlete
-            ? await profilesService.getAthleteProfile()
-            : await profilesService.getRecruiterProfile();
-        } catch {
-          /* 404 = no profile yet */
-        }
-        if (isAthlete && !current?.sport) {
-          Alert.alert(
-            "Set up your profile first",
-            "Add your sport and position before uploading media. Tap the pencil to edit your profile.",
-          );
-          return;
-        }
-        if (
-          isRecruiter &&
-          (!current?.organization || !current?.sport || !current?.role_type)
-        ) {
-          Alert.alert(
-            "Set up your profile first",
-            "Add your organization, sport, and role before uploading media. Tap the pencil to edit your profile.",
-          );
-          return;
-        }
-
-        const newUrls = await pickAndUploadMedia(
-          kind === "videos" ? "video" : "image",
-          kind,
-          {
-            allowsMultipleSelection: kind === "photos",
-            selectionLimit: kind === "photos" ? 6 : 1,
-          },
-        );
-        if (newUrls.length === 0) return;
-        const merged = pickFields(
-          current,
-          isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
-        );
-        const existing: string[] = Array.isArray(current[kind])
-          ? current[kind]
-          : [];
-        merged[kind] = [...existing, ...newUrls];
-        if (isAthlete) {
-          await profilesService.upsertAthleteProfile(merged);
-        } else {
-          await profilesService.upsertRecruiterProfile(merged);
-        }
-        setReloadKey((k) => k + 1);
-      } catch (err: any) {
-        Alert.alert(
-          "Upload failed",
-          err?.message ?? "Something went wrong while uploading.",
-        );
-      } finally {
-        setUploading(null);
-      }
-    },
-    [uploading, isAthlete, isRecruiter],
-  );
-
-  const handleDeleteMedia = useCallback(
-    (kind: "photos" | "videos", url: string) => {
-      if (uploading) return;
-      if (!isAthlete && !isRecruiter) return;
-      Alert.alert(
-        kind === "videos" ? "Delete this video?" : "Delete this photo?",
-        "This cannot be undone.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              setUploading(kind);
-              try {
-                let current: any = {};
-                try {
-                  current = isAthlete
-                    ? await profilesService.getAthleteProfile()
-                    : await profilesService.getRecruiterProfile();
-                } catch {
-                  /* 404 — nothing to delete from */
-                  return;
-                }
-                const existing: string[] = Array.isArray(current[kind])
-                  ? current[kind]
-                  : [];
-                const next = existing.filter((u: string) => u !== url);
-                if (next.length === existing.length) {
-                  // URL wasn't in the array (e.g. mock data). Skip.
-                  return;
-                }
-
-                const bucket: UploadBucket =
-                  kind === "videos" ? "videos" : "photos";
-                const path = pathFromPublicUrl(url, bucket);
-                if (path) {
-                  await uploadsService.deleteFile(bucket, path).catch(() => {
-                    // If storage delete fails (already gone, race), still strip from profile
-                  });
-                }
-
-                const merged = pickFields(
-                  current,
-                  isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
-                );
-                merged[kind] = next;
-                if (isAthlete) {
-                  await profilesService.upsertAthleteProfile(merged);
-                } else {
-                  await profilesService.upsertRecruiterProfile(merged);
-                }
-                setReloadKey((k) => k + 1);
-              } catch (err: any) {
-                Alert.alert(
-                  "Could not delete",
-                  err?.message ?? "Try again in a moment.",
-                );
-              } finally {
-                setUploading(null);
-              }
-            },
-          },
-        ],
-      );
-    },
-    [uploading, isAthlete, isRecruiter],
+  // Fetch the three grid tabs on profile focus. Run in parallel for
+  // speed; each promise has its own try/catch → mock fallback so a
+  // single failure (e.g. backend offline) only swaps THAT tab to mocks
+  // and doesn't blank the rest. Athletes-only — the only role that
+  // posts to the feed has the only IG-style grid.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAthlete || !user?.id) return;
+      let cancelled = false;
+      const userId = user.id;
+      postsService
+        .getUserPosts(userId, "post")
+        .then((r) => !cancelled && setMyPosts(r.posts))
+        .catch(() => !cancelled && setMyPosts(MOCK_GRID_PHOTOS));
+      postsService
+        .getUserPosts(userId, "reel")
+        .then((r) => !cancelled && setMyReels(r.posts))
+        .catch(() => !cancelled && setMyReels(MOCK_GRID_REELS));
+      postsService
+        .getSavedPosts()
+        .then((r) => !cancelled && setSavedPosts(r.posts))
+        .catch(() => !cancelled && setSavedPosts([]));
+      return () => {
+        cancelled = true;
+      };
+    }, [isAthlete, user?.id]),
   );
 
   const athleteProfile = useMemo<NormalizedAthleteProfile | null>(() => {
@@ -727,155 +614,257 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Photos */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {isParent ? "Child's Photos" : "Photos"}
-            </Text>
-            <Pressable
-              onPress={() => handleAddMedia("photos")}
-              disabled={uploading !== null}
-            >
-              {uploading === "photos" ? (
-                <ActivityIndicator size="small" color={theme.text} />
-              ) : (
-                <Text style={styles.addText}>+ Add</Text>
-              )}
-            </Pressable>
+        {/* Athletes: Posts / Reels / Saved IG-style grid. The grid is
+            athlete-only because athletes are the only role that posts to
+            the social feed — recruiters and parents don't, so an empty
+            Posts/Reels for them would read as broken. */}
+        {isAthlete && (
+          <View style={styles.gridSection}>
+            <View style={styles.gridTabs}>
+              {(["posts", "reels", "saved"] as const).map((tab) => {
+                const active = tab === gridTab;
+                const icon =
+                  tab === "posts"
+                    ? active
+                      ? "grid"
+                      : "grid-outline"
+                    : tab === "reels"
+                      ? active
+                        ? "play-circle"
+                        : "play-circle-outline"
+                      : active
+                        ? "bookmark"
+                        : "bookmark-outline";
+                return (
+                  <Pressable
+                    key={tab}
+                    style={[styles.gridTab, active && styles.gridTabActive]}
+                    onPress={() => setGridTab(tab)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Ionicons
+                      name={icon as any}
+                      size={20}
+                      color={active ? theme.text : theme.textMuted}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <GridContent
+              tab={gridTab}
+              posts={
+                gridTab === "posts"
+                  ? myPosts
+                  : gridTab === "reels"
+                    ? myReels
+                    : savedPosts
+              }
+              onTilePress={setOpenedPost}
+            />
           </View>
-          <View style={styles.photoGrid}>
-            {photos.length > 0 ? (
-              photos.map((photo, i) => (
-                <Pressable
-                  key={i}
-                  style={styles.photoItem}
-                  onLongPress={() => {
-                    if (typeof photo === "string") {
-                      handleDeleteMedia("photos", photo);
-                    }
-                  }}
-                  delayLongPress={400}
-                >
+        )}
+
+        {/* Recruiters: keep a small read-only thumbnail strip of their
+            showcase photos if they have any. Editing now lives in
+            edit-profile (the pencil up top), so this is display only. */}
+        {isRecruiter && photos.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Photos</Text>
+            </View>
+            <View style={styles.photoGrid}>
+              {photos.map((photo, i) => (
+                <View key={i} style={styles.photoItem}>
                   <Image
                     source={typeof photo === "string" ? { uri: photo } : photo}
                     style={styles.photoImage}
                     resizeMode="cover"
                   />
-                </Pressable>
-              ))
-            ) : (
-              <View style={styles.emptyMedia}>
-                <Ionicons
-                  name="images-outline"
-                  size={40}
-                  color={theme.textMuted}
-                />
-                <Text style={styles.emptyMediaText}>
-                  {isParent
-                    ? "Child athlete hasn't added photos yet"
-                    : "Add photos to your profile"}
-                </Text>
-                <Pressable
-                  style={styles.addMediaButton}
-                  onPress={() =>
-                    isParent
-                      ? comingSoon("Request Uploads")
-                      : handleAddMedia("photos")
-                  }
-                  disabled={uploading !== null}
-                >
-                  <Text style={styles.addMediaButtonText}>
-                    {isParent ? "Request Uploads" : "Add Photos"}
-                  </Text>
-                </Pressable>
-              </View>
-            )}
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
-        {/* Videos */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {isParent ? "Child's Videos" : "Videos"}
-            </Text>
-            <Pressable
-              onPress={() => handleAddMedia("videos")}
-              disabled={uploading !== null}
-            >
-              {uploading === "videos" ? (
-                <ActivityIndicator size="small" color={theme.text} />
-              ) : (
-                <Text style={styles.addText}>+ Add</Text>
-              )}
-            </Pressable>
-          </View>
-          <View style={styles.videoSection}>
-            {videos.length > 0 ? (
-              videos.map((video, i) => (
-                <Pressable
-                  key={i}
-                  style={styles.videoItem}
-                  onPress={() => {
-                    if (typeof video === "string") {
-                      router.push({
-                        pathname: "/video",
-                        params: { url: video, title: `Highlight Reel ${i + 1}` },
-                      });
-                    } else {
-                      comingSoon("Video Player");
-                    }
-                  }}
-                  onLongPress={() => {
-                    if (typeof video === "string") {
-                      handleDeleteMedia("videos", video);
-                    }
-                  }}
-                  delayLongPress={400}
-                >
-                  <View style={styles.videoPlaceholder}>
+        {/* Parents: unchanged view of their child's media plus the
+            Request Uploads stub. Parents can't post; this is the
+            window onto their athlete's profile. */}
+        {isParent && (
+          <>
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Child&apos;s Photos</Text>
+              </View>
+              <View style={styles.photoGrid}>
+                {photos.length > 0 ? (
+                  photos.map((photo, i) => (
+                    <View key={i} style={styles.photoItem}>
+                      <Image
+                        source={
+                          typeof photo === "string" ? { uri: photo } : photo
+                        }
+                        style={styles.photoImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyMedia}>
                     <Ionicons
-                      name="play-circle"
-                      size={48}
-                      color={brand.white}
+                      name="images-outline"
+                      size={40}
+                      color={theme.textMuted}
                     />
-                    <Text style={styles.videoLabel}>
-                      Highlight Reel {i + 1}
+                    <Text style={styles.emptyMediaText}>
+                      Child athlete hasn&apos;t added photos yet
                     </Text>
+                    <Pressable
+                      style={styles.addMediaButton}
+                      onPress={() => comingSoon("Request Uploads")}
+                    >
+                      <Text style={styles.addMediaButtonText}>
+                        Request Uploads
+                      </Text>
+                    </Pressable>
                   </View>
-                </Pressable>
-              ))
-            ) : (
-              <View style={styles.emptyMedia}>
-                <Ionicons
-                  name="videocam-outline"
-                  size={40}
-                  color={theme.textMuted}
-                />
-                <Text style={styles.emptyMediaText}>
-                  {isParent
-                    ? "Child athlete hasn't added highlight videos"
-                    : "Add highlight videos"}
-                </Text>
-                <Pressable
-                  style={styles.addMediaButton}
-                  onPress={() =>
-                    isParent
-                      ? comingSoon("Request Uploads")
-                      : handleAddMedia("videos")
-                  }
-                  disabled={uploading !== null}
-                >
-                  <Text style={styles.addMediaButtonText}>
-                    {isParent ? "Request Uploads" : "Add Videos"}
-                  </Text>
-                </Pressable>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Child&apos;s Videos</Text>
+              </View>
+              <View style={styles.videoSection}>
+                {videos.length > 0 ? (
+                  videos.map((video, i) => (
+                    <Pressable
+                      key={i}
+                      style={styles.videoItem}
+                      onPress={() => {
+                        if (typeof video === "string") {
+                          router.push({
+                            pathname: "/video",
+                            params: {
+                              url: video,
+                              title: `Highlight Reel ${i + 1}`,
+                            },
+                          });
+                        } else {
+                          comingSoon("Video Player");
+                        }
+                      }}
+                    >
+                      <View style={styles.videoPlaceholder}>
+                        <Ionicons
+                          name="play-circle"
+                          size={48}
+                          color={brand.white}
+                        />
+                        <Text style={styles.videoLabel}>
+                          Highlight Reel {i + 1}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))
+                ) : (
+                  <View style={styles.emptyMedia}>
+                    <Ionicons
+                      name="videocam-outline"
+                      size={40}
+                      color={theme.textMuted}
+                    />
+                    <Text style={styles.emptyMediaText}>
+                      Child athlete hasn&apos;t added highlight videos
+                    </Text>
+                    <Pressable
+                      style={styles.addMediaButton}
+                      onPress={() => comingSoon("Request Uploads")}
+                    >
+                      <Text style={styles.addMediaButtonText}>
+                        Request Uploads
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+// 3-column thumbnail grid for the athlete IG section. Lives outside
+// the screen body to keep the component flat — the screen is already
+// long. Press-handler is passed in so D4 can wire the detail modal.
+function GridContent({
+  tab,
+  posts,
+  onTilePress,
+}: {
+  tab: "posts" | "reels" | "saved";
+  posts: PostItem[] | null;
+  onTilePress: (post: PostItem) => void;
+}) {
+  if (posts === null) {
+    return (
+      <View style={styles.gridLoading}>
+        <ActivityIndicator size="small" color={theme.text} />
+      </View>
+    );
+  }
+  if (posts.length === 0) {
+    const copy =
+      tab === "posts"
+        ? "Share your first post from the Feed tab."
+        : tab === "reels"
+          ? "Post a highlight reel and it'll show up here."
+          : "Bookmark posts and reels to find them again here.";
+    const icon =
+      tab === "posts"
+        ? "grid-outline"
+        : tab === "reels"
+          ? "play-circle-outline"
+          : "bookmark-outline";
+    return (
+      <View style={styles.gridEmpty}>
+        <Ionicons name={icon as any} size={40} color={theme.textMuted} />
+        <Text style={styles.gridEmptyText}>{copy}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.gridTiles}>
+      {posts.map((p) => {
+        const thumb = p.thumbnailUrl ?? p.mediaUrl;
+        return (
+          <Pressable
+            key={p.id}
+            style={styles.gridTile}
+            onPress={() => onTilePress(p)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              p.kind === "reel" ? "Open reel" : "Open post"
+            }
+          >
+            <Image
+              source={{ uri: thumb }}
+              style={styles.gridTileImage}
+              resizeMode="cover"
+            />
+            {p.kind === "reel" && (
+              <View style={styles.gridTileReelBadge}>
+                <Ionicons name="play" size={14} color={brand.white} />
               </View>
             )}
-          </View>
-        </View>
-      </ScrollView>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -1189,5 +1178,67 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
+  },
+  gridSection: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  gridTabs: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  gridTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 14,
+  },
+  gridTabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: theme.text,
+  },
+  gridLoading: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  gridEmpty: {
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 30,
+    gap: 10,
+  },
+  gridEmptyText: {
+    fontSize: 13,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  gridTiles: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  gridTile: {
+    width: "33.3333%",
+    aspectRatio: 1,
+    padding: 1,
+    backgroundColor: theme.surface,
+    position: "relative",
+  },
+  gridTileImage: {
+    flex: 1,
+    backgroundColor: theme.surface,
+  },
+  gridTileReelBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
   },
 });
