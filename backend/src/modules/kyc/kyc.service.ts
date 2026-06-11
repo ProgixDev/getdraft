@@ -231,9 +231,30 @@ export class KycService {
       })
       .eq('id', row.id);
 
-    // Mirror to users.
+    // Mirror to users — BUT never regress an already-approved user.
+    // A delayed Abandoned/Expired/Declined webhook for an OLD session
+    // (the user retried and was approved on a later one) would otherwise
+    // set their users.kyc_status back to none/declined and lock them out.
+    // The kyc_sessions row itself stays up-to-date above for audit; we
+    // just refuse to overwrite the user-level flag if it's already
+    // approved AND the incoming decision isn't itself an approval.
     const userStatus: KycStatus =
       compact === 'expired' ? 'none' : (compact as KycStatus);
+
+    if (userStatus !== 'approved') {
+      const { data: currentUser } = await admin
+        .from('users')
+        .select('kyc_status')
+        .eq('id', row.user_id)
+        .maybeSingle();
+      if (currentUser?.kyc_status === 'approved') {
+        this.logger.log(
+          `[kyc] ignoring late ${compact} decision for user ${row.user_id} — already approved`,
+        );
+        return;
+      }
+    }
+
     await admin
       .from('users')
       .update({
