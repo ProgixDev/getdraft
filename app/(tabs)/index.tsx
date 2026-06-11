@@ -18,7 +18,7 @@ import {
   BackHandler,
   ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -64,6 +64,12 @@ import {
   type SwipeTrigger,
 } from "@/hooks/useCarouselGesture";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import {
+  rankingsService,
+  starsForRank,
+  DIVISION_LABEL,
+  type RankingRow,
+} from "@/services/rankings";
 import type { SharedValue } from "react-native-reanimated";
 import { Easing, withRepeat } from "react-native-reanimated";
 
@@ -511,6 +517,10 @@ export default function DiscoverScreen() {
     message: "",
     canUndo: false,
   });
+  // Athlete's own ranking row, surfaced as a chip in the header. Recruiters and
+  // coaches share this screen but the backend returns null for them, so the
+  // chip auto-hides — no role gate needed here.
+  const [myRank, setMyRank] = useState<RankingRow | null>(null);
   const reducedMotion = useReducedMotion();
   const carouselTranslateX = useSharedValue(0);
   const focusedIndexSV = useSharedValue(0);
@@ -522,6 +532,21 @@ export default function DiscoverScreen() {
   useEffect(() => {
     Asset.loadAsync(SPORT_IMAGES).catch(() => {});
   }, []);
+
+  // Pull the caller's own ranking row whenever this screen comes into focus.
+  // Service has a graceful try/catch → null fallback, so a failure or non-
+  // athlete role just hides the chip without disturbing the swipe deck.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      rankingsService.getMyRank().then((row) => {
+        if (!cancelled) setMyRank(row);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -906,6 +931,41 @@ export default function DiscoverScreen() {
           <Text style={styles.title}>{discoverTitle}</Text>
         </View>
         <View style={styles.headerActions}>
+          {myRank &&
+            (myRank.division === "CA" || myRank.division === "US") && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.rankChip,
+                  pressed && styles.pressed,
+                ]}
+                onPress={() => router.push("/rankings")}
+                accessibilityRole="button"
+                accessibilityLabel={`Your rank: number ${myRank.division_rank} in ${DIVISION_LABEL[myRank.division]} ${myRank.sport}. Open rankings.`}
+              >
+                <Text style={styles.rankChipHash}>
+                  #{myRank.division_rank}
+                </Text>
+                <Text style={styles.rankChipMeta} numberOfLines={1}>
+                  {DIVISION_LABEL[myRank.division]} · {myRank.sport}
+                </Text>
+                <View style={styles.rankChipStars}>
+                  {(() => {
+                    const filled = starsForRank(
+                      myRank.division_rank,
+                      myRank.cohort_size,
+                    );
+                    return [1, 2, 3, 4, 5].map((i) => (
+                      <Ionicons
+                        key={i}
+                        name={i <= filled ? "star" : "star-outline"}
+                        size={10}
+                        color={i <= filled ? semantic.warning : theme.textMuted}
+                      />
+                    ));
+                  })()}
+                </View>
+              </Pressable>
+            )}
           <Pressable
             style={styles.notifyButton}
             onPress={() =>
@@ -1243,6 +1303,34 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
+  },
+  rankChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: 200,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  rankChipHash: {
+    fontSize: 12,
+    fontFamily: "Poppins_800ExtraBold",
+    color: semantic.warning,
+    letterSpacing: 0.2,
+  },
+  rankChipMeta: {
+    flexShrink: 1,
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.85)",
+  },
+  rankChipStars: {
+    flexDirection: "row",
+    gap: 1,
   },
   searchRow: {
     flexDirection: "row",
