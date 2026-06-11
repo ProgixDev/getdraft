@@ -168,6 +168,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      backBehavior="initialRoute"
       initialRouteName={initialRouteForRole(role)}
       screenOptions={{
         tabBarActiveTintColor: theme.accent,

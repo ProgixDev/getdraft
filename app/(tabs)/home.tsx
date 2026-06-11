@@ -126,6 +126,8 @@ export default function GuardianHomeScreen() {
     }, [user?.role, load, router]),
   );
 
+  const recentOutreach = useMemo(() => outreach.slice(0, 4), [outreach]);
+
   if (!fontsLoaded) return null;
 
   const approved = link?.status === "approved";
@@ -140,7 +142,6 @@ export default function GuardianHomeScreen() {
     : "Guardian";
   const greetingFirstName = me?.name?.split(" ")[0] ?? "there";
 
-  const recentOutreach = useMemo(() => outreach.slice(0, 4), [outreach]);
   const totalUnread = outreach.reduce(
     (acc, o) => acc + (o.unreadCount || 0),
     0,
