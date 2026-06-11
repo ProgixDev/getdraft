@@ -473,23 +473,25 @@ export default function GlobeTab() {
         </Pressable>
       )}
 
-      {/* Mini card — bottom-center over the globe on point tap. */}
+      {/* Mini card — bottom-center over the globe on point tap. Photo
+          first; falls back to athlete_profiles.photos[0] (`photo`) and
+          finally to a person glyph for athletes with no media at all. */}
       {selected && !bigOpen && (
         <Pressable
           style={styles.miniCard}
           onPress={openBigCard}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${selected.name ?? "profile"}`}
+          accessibilityLabel={`Open ${selected.name ?? "athlete"}`}
         >
           <View style={styles.miniAvatar}>
-            {selected.avatar_url ? (
+            {selected.avatar_url || selected.photo ? (
               <Image
-                source={{ uri: selected.avatar_url }}
+                source={{ uri: (selected.avatar_url ?? selected.photo)! }}
                 style={styles.miniAvatarImg}
               />
             ) : (
               <Ionicons
-                name={selected.role === "athlete" ? "person" : "briefcase"}
+                name="person"
                 size={20}
                 color="rgba(255,255,255,0.85)"
               />
@@ -507,7 +509,7 @@ export default function GlobeTab() {
             <Text style={styles.miniMeta} numberOfLines={1}>
               {[selected.sport, selected.position]
                 .filter(Boolean)
-                .join(" · ") || roleLabel(selected.role)}
+                .join(" · ") || "Athlete"}
             </Text>
           </View>
           <Pressable
@@ -522,7 +524,7 @@ export default function GlobeTab() {
         </Pressable>
       )}
 
-      {/* Big card — full draft/pass modal. */}
+      {/* Big card — full draft/pass modal with hero image + details. */}
       <Modal
         visible={bigOpen && !!selected}
         transparent
@@ -532,72 +534,89 @@ export default function GlobeTab() {
         <Pressable style={styles.bigBackdrop} onPress={dismissAll}>
           {selected && (
             <Pressable style={styles.bigCard} onPress={() => {}}>
-              <View style={styles.bigAvatar}>
-                {selected.avatar_url ? (
+              <View style={styles.bigHero}>
+                {selected.avatar_url || selected.photo ? (
                   <Image
-                    source={{ uri: selected.avatar_url }}
-                    style={styles.bigAvatarImg}
+                    source={{
+                      uri: (selected.avatar_url ?? selected.photo)!,
+                    }}
+                    style={styles.bigHeroImage}
+                    resizeMode="cover"
                   />
                 ) : (
-                  <Ionicons
-                    name={selected.role === "athlete" ? "person" : "briefcase"}
-                    size={48}
-                    color="rgba(255,255,255,0.85)"
-                  />
+                  <View style={styles.bigHeroFallback}>
+                    <Ionicons
+                      name="person"
+                      size={64}
+                      color="rgba(255,255,255,0.55)"
+                    />
+                  </View>
                 )}
               </View>
-              <View style={styles.bigNameRow}>
-                <Text style={styles.bigName} numberOfLines={1}>
-                  {selected.name ?? "Profile"}
-                </Text>
-                {selected.verified && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={20}
-                    color="#00B894"
-                  />
-                )}
-              </View>
-              <Text style={styles.bigRole}>{roleLabel(selected.role)}</Text>
-              {selected.sport && (
-                <Text style={styles.bigSport}>
-                  {[selected.sport, selected.position]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </Text>
-              )}
 
-              <View style={styles.bigActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.bigBtn,
-                    styles.passBtn,
-                    pressed && { opacity: 0.85 },
-                    swiping && { opacity: 0.5 },
-                  ]}
-                  onPress={() => handleSwipe("pass")}
-                  disabled={swiping}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Pass on ${selected.name ?? "profile"}`}
-                >
-                  <Ionicons name="close" size={20} color="#FFFFFF" />
-                  <Text style={styles.bigBtnText}>Pass</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.bigBtn,
-                    styles.draftBtn,
-                    pressed && { opacity: 0.85 },
-                    swiping && { opacity: 0.5 },
-                  ]}
-                  onPress={() => handleSwipe("draft")}
-                  disabled={swiping}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Draft ${selected.name ?? "profile"}`}
-                >
-                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                  <Text style={styles.bigBtnText}>Draft</Text>
-                </Pressable>
+              <View style={styles.bigBody}>
+                <View style={styles.bigNameRow}>
+                  <Text style={styles.bigName} numberOfLines={1}>
+                    {selected.name ?? "Athlete"}
+                  </Text>
+                  {selected.verified && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#00B894"
+                    />
+                  )}
+                </View>
+
+                <View style={styles.bigDetails}>
+                  <PlayerDetail label="Sport" value={selected.sport} />
+                  <PlayerDetail label="Position" value={selected.position} />
+                  <PlayerDetail label="Level" value={selected.level} />
+                  <PlayerDetail
+                    label="Class year"
+                    value={selected.class_year}
+                  />
+                  <PlayerDetail label="Height" value={selected.height} />
+                  <PlayerDetail
+                    label="GPA"
+                    value={
+                      selected.gpa != null ? selected.gpa.toFixed(1) : null
+                    }
+                  />
+                </View>
+
+                <View style={styles.bigActions}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.bigBtn,
+                      styles.passBtn,
+                      pressed && { opacity: 0.85 },
+                      swiping && { opacity: 0.5 },
+                    ]}
+                    onPress={() => handleSwipe("pass")}
+                    disabled={swiping}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pass on ${selected.name ?? "athlete"}`}
+                  >
+                    <Ionicons name="close" size={20} color="#FFFFFF" />
+                    <Text style={styles.bigBtnText}>Pass</Text>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.bigBtn,
+                      styles.draftBtn,
+                      pressed && { opacity: 0.85 },
+                      swiping && { opacity: 0.5 },
+                    ]}
+                    onPress={() => handleSwipe("draft")}
+                    disabled={swiping}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Draft ${selected.name ?? "athlete"}`}
+                  >
+                    <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                    <Text style={styles.bigBtnText}>Draft</Text>
+                  </Pressable>
+                </View>
               </View>
             </Pressable>
           )}
@@ -607,10 +626,25 @@ export default function GlobeTab() {
   );
 }
 
-function roleLabel(role: MapPoint["role"]): string {
-  if (role === "athlete") return "Athlete";
-  if (role === "coach") return "Coach";
-  return "Agent / Recruiter";
+// A single label/value row in the big card's details list. Rendered as
+// null when value is missing so the list only shows fields the athlete
+// actually has — no "Position: —" placeholder noise.
+function PlayerDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue} numberOfLines={1}>
+        {String(value)}
+      </Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -814,26 +848,28 @@ const styles = StyleSheet.create({
   bigCard: {
     width: "100%",
     maxWidth: 360,
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 22,
+    overflow: "hidden",
     borderRadius: 24,
     backgroundColor: "#15171F",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
   },
-  bigAvatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    overflow: "hidden",
+  bigHero: {
+    width: "100%",
+    aspectRatio: 1,
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  bigHeroImage: { width: "100%", height: "100%" },
+  bigHeroFallback: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    marginBottom: 14,
   },
-  bigAvatarImg: { width: "100%", height: "100%" },
+  bigBody: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 18,
+  },
   bigNameRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -841,24 +877,32 @@ const styles = StyleSheet.create({
   },
   bigName: {
     flexShrink: 1,
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: "Poppins_800ExtraBold",
     color: "#FFFFFF",
-    textAlign: "center",
   },
-  bigRole: {
-    marginTop: 4,
+  bigDetails: {
+    marginTop: 14,
+    gap: 6,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 10,
+  },
+  detailLabel: {
+    width: 86,
     fontSize: 12,
     fontFamily: "Poppins_600SemiBold",
-    color: "rgba(255,255,255,0.6)",
-    letterSpacing: 0.5,
+    color: "rgba(255,255,255,0.55)",
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  bigSport: {
-    marginTop: 6,
+  detailValue: {
+    flex: 1,
     fontSize: 14,
     fontFamily: "Poppins_500Medium",
-    color: "rgba(255,255,255,0.85)",
+    color: "#FFFFFF",
   },
   bigActions: {
     flexDirection: "row",
