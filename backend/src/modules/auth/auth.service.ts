@@ -295,7 +295,14 @@ export class AuthService {
     // earlier failed signup may have left an orphan auth row without
     // a matching public.users record — and that's exactly the
     // "phone already registered" case Supabase complains about.
-    if (!isEmail && this.testPhones().has(contact)) {
+    //
+    // HARD GATE: the purge is permanently disabled in production, even
+    // if TEST_PHONES is misconfigured there. The Render checklist says to
+    // leave TEST_PHONES empty, but this is the second line of defence:
+    // a CASCADE wipe of a real user account must never happen because
+    // an env var slipped through. Matches the dev-only 000000 OTP bypass.
+    const isProduction = this.configService.get('NODE_ENV') === 'production';
+    if (!isEmail && !isProduction && this.testPhones().has(contact)) {
       await this.purgeAuthUsersByPhone(contact);
     } else {
       // Normal path: refuse duplicates.
