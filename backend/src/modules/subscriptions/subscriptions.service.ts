@@ -522,24 +522,10 @@ export class SubscriptionsService {
         break;
       }
 
-      case 'customer.subscription.updated': {
-        const sub = event.data.object;
-        const item = sub.items?.data?.[0];
-        const priceId = item?.price?.id ?? null;
-        const periodStart = this.toIso(item?.current_period_start);
-        const periodEnd = this.toIso(item?.current_period_end);
-
-        await supabase
-          .from('subscriptions')
-          .update({
-            status: sub.status === 'active' ? 'active' : sub.status,
-            stripe_price_id: priceId,
-            current_period_start: periodStart,
-            current_period_end: periodEnd,
-          })
-          .eq('stripe_subscription_id', sub.id);
-        break;
-      }
+      // `customer.subscription.updated` is folded into the paid-status
+      // branch below — that branch gates on active|trialing and writes
+      // plan_id/period/price atomically. past_due is owned by
+      // invoice.payment_failed; canceled by customer.subscription.deleted.
 
       case 'customer.subscription.deleted': {
         const sub = event.data.object;
@@ -575,12 +561,23 @@ export class SubscriptionsService {
 
       case 'invoice.payment_succeeded':
       case 'invoice.paid':
-      case 'customer.subscription.created': {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
         // First payment of the PaymentSheet flow lands here. Pull the
         // subscription, persist period + price + plan, mark active.
+        //
+        // GATE: Stripe fires `customer.subscription.created` the instant
+        // our `default_incomplete` subscription is created — BEFORE the
+        // card is charged. If we activated the paid plan on `incomplete`,
+        // any user could open the plan screen, dismiss the Payment Sheet,
+        // and walk away with Pro. Only the paid statuses below are
+        // allowed to flip plan_id + daily_swipe_limit. `incomplete`,
+        // `incomplete_expired`, `unpaid`, `canceled` are no-ops here;
+        // the dedicated branches in this switch handle them separately.
         const obj = event.data.object;
         const subId =
-          event.type === 'customer.subscription.created'
+          event.type === 'customer.subscription.created' ||
+          event.type === 'customer.subscription.updated'
             ? obj.id
             : obj.subscription;
         if (!subId) break;
@@ -589,6 +586,14 @@ export class SubscriptionsService {
           const sub = (await stripe.subscriptions.retrieve(subId, {
             expand: ['items.data.price'],
           })) as any;
+
+          if (sub.status !== 'active' && sub.status !== 'trialing') {
+            this.logger.log(
+              `[stripe] ignoring ${event.type} for ${sub.id} — status=${sub.status} (not paid yet)`,
+            );
+            break;
+          }
+
           const item = sub.items?.data?.[0];
           const priceId = item?.price?.id ?? null;
           const userId = sub.metadata?.user_id as string | undefined;
@@ -608,12 +613,8 @@ export class SubscriptionsService {
           const periodEnd = this.toIso(
             sub.current_period_end ?? item?.current_period_end,
           );
-          const status =
-            sub.status === 'active' || sub.status === 'trialing'
-              ? 'active'
-              : sub.status === 'past_due'
-                ? 'past_due'
-                : 'active';
+          // Past the gate above, sub.status is necessarily active|trialing.
+          const status = 'active';
 
           // Match by user_id — this works even if /payment-sheet's
           // initial link write was rolled back, or if the user has
