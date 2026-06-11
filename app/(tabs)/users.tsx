@@ -115,7 +115,12 @@ export default function AdminUsersTab() {
       );
       let rows = page.users;
       if (f === "kyc_pending") {
-        rows = rows.filter((u) => u.kyc_status === "pending");
+        // KYC has TWO active statuses: 'pending' (session created locally)
+        // and 'in_review' (Didit is processing it). Both belong in the
+        // queue an admin should triage.
+        rows = rows.filter(
+          (u) => u.kyc_status === "pending" || u.kyc_status === "in_review",
+        );
       } else if (f === "kyc_declined") {
         rows = rows.filter((u) => u.kyc_status === "declined");
       } else if (f === "banned") {
@@ -274,9 +279,11 @@ function UserRow({ row }: { row: AdminUserRow }) {
       ? semantic.success
       : kyc === "pending"
         ? semantic.warning
-        : kyc === "declined"
-          ? semantic.error
-          : theme.textMuted;
+        : kyc === "in_review"
+          ? semantic.info
+          : kyc === "declined"
+            ? semantic.error
+            : theme.textMuted;
 
   return (
     <Pressable

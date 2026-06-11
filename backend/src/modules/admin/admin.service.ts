@@ -130,10 +130,14 @@ export class AdminService {
         .from('guardian_links')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending_admin'),
+      // KYC pipeline writes both 'pending' (session created locally) and
+      // 'in_review' (Didit accepted the upload and is processing it).
+      // kyc.service treats them as one active set; the dashboard count
+      // must match or in-review users vanish from the queue.
       supabase
         .from('users')
         .select('*', { count: 'exact', head: true })
-        .eq('kyc_status', 'pending'),
+        .in('kyc_status', ['pending', 'in_review']),
       supabase
         .from('users')
         .select('*', { count: 'exact', head: true })

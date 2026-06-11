@@ -27,7 +27,13 @@ export interface AdminUserRow {
   phone: string | null;
   name: string | null;
   role: "athlete" | "coach" | "recruiter" | "parent" | "admin";
-  kyc_status?: "none" | "pending" | "approved" | "declined" | null;
+  kyc_status?:
+    | "none"
+    | "pending"
+    | "in_review"
+    | "approved"
+    | "declined"
+    | null;
   is_banned?: boolean;
   is_onboarded?: boolean;
   created_at: string;
