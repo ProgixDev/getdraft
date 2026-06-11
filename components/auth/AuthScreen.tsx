@@ -670,7 +670,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         return (
           <ProfileSetupScreen
             role={role}
-            onComplete={handleTutorialComplete}
             onPayment={handleProfilePayment}
             onBack={() =>
               // Parents skipped location, so "back" from

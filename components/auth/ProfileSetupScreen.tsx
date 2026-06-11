@@ -45,7 +45,8 @@ const { width } = Dimensions.get("window");
 
 interface ProfileSetupScreenProps {
   role: string;
-  onComplete: () => void;
+  /** Sole exit — routes into the KYC gate. There is intentionally no
+   *  onComplete/skip exit: every signup must pass KYC before plan. */
   onPayment: () => void;
   onBack: () => void;
 }
@@ -141,7 +142,6 @@ const steps = [
 
 export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   role,
-  onComplete,
   onPayment,
   onBack,
 }) => {
