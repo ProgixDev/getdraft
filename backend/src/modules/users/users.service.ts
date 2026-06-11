@@ -3,11 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
-import { CurrentUserPayload } from '../../common/types';
+import { CurrentUserPayload, UserRole } from '../../common/types';
 
 @Injectable()
 export class UsersService {
@@ -66,6 +67,13 @@ export class UsersService {
     }
 
     if (dto.role) {
+      // The admin role is provisioned out-of-band (DB only) and must never
+      // be self-assignable through this self-service endpoint — otherwise any
+      // authenticated user could promote themselves and reach the admin
+      // console. Onboarding only ever sets athlete/parent/coach/recruiter.
+      if (dto.role === UserRole.ADMIN) {
+        throw new ForbiddenException('The admin role cannot be self-assigned.');
+      }
       const { data: authUser, error: readErr } =
         await supabase.auth.admin.getUserById(user.id);
       if (readErr || !authUser?.user) {
