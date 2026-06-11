@@ -93,11 +93,9 @@ export default function MoreScreen() {
 
   const menuItems = isAdmin
     ? [
-        {
-          icon: "person-outline",
-          label: "My Profile",
-          onPress: () => router.push("/(tabs)/profile"),
-        },
+        // No "My Profile" for admin: there is no admin profile editor, and
+        // /(tabs)/profile redirects admins straight back to the dashboard.
+        // The user card above already shows their name/email/role badge.
         {
           icon: "settings-outline",
           label: "Settings",
@@ -187,9 +185,13 @@ export default function MoreScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.userCard,
-            pressed && styles.menuItemPressed,
+            !isAdmin && pressed && styles.menuItemPressed,
           ]}
-          onPress={() => router.push("/(tabs)/profile")}
+          // Admin has no dedicated profile screen — their identity is shown
+          // right here and logout is below, so the card is a static info
+          // panel for them instead of a link that would only bounce back to
+          // the dashboard.
+          onPress={isAdmin ? undefined : () => router.push("/(tabs)/profile")}
         >
           <View style={styles.userAvatar}>
             {avatarUrl ? (
@@ -209,7 +211,9 @@ export default function MoreScreen() {
               <Text style={styles.userRoleText}>{roleLabel}</Text>
             </View>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+          {!isAdmin && (
+            <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+          )}
         </Pressable>
       )}
 
