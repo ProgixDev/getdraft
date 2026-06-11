@@ -31,6 +31,12 @@ export class DiscoverController {
     return this.discoverService.getFeed(user, query);
   }
 
+  @Get('map')
+  @ApiOperation({ summary: 'Minimal feed candidates with coordinates for the globe' })
+  getMapPoints(@CurrentUser() user: CurrentUserPayload) {
+    return this.discoverService.getMapPoints(user);
+  }
+
   @Post('swipe')
   @ApiOperation({ summary: 'Swipe draft or pass on a profile' })
   swipe(@CurrentUser() user: CurrentUserPayload, @Body() dto: SwipeDto) {

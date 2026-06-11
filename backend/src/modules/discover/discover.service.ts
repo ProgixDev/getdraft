@@ -167,6 +167,75 @@ export class DiscoverService {
     return { cards, hasMore: users.length === limit, swipesRemaining };
   }
 
+  // Minimal candidate set with coordinates, used by the globe map. Same
+  // not-yet-swiped, non-blocked, lat/lng-present filtering as the feed,
+  // but role-targeted: athletes see coaches/recruiters, coaches/recruiters
+  // see athletes. (The feed shows everyone; the globe is specifically the
+  // map of who you can draft.)
+  async getMapPoints(user: CurrentUserPayload) {
+    if (user.role === UserRole.PARENT) {
+      throw new ForbiddenException('Parents do not have a discover feed');
+    }
+
+    const targetRoles =
+      user.role === UserRole.ATHLETE ? ['coach', 'recruiter'] : ['athlete'];
+
+    const excluded = await this.excludedUserIds(user.id);
+
+    const users = await this.prisma.public_users.findMany({
+      where: {
+        role: { in: targetRoles },
+        is_banned: false,
+        id: { notIn: [...excluded, user.id] },
+        // Coordinates are required to plot on the globe.
+        latitude: { not: null },
+        longitude: { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        avatar_url: true,
+        role: true,
+        latitude: true,
+        longitude: true,
+        athlete_profiles: {
+          select: { sport: true, position: true },
+        },
+        recruiter_profiles: {
+          select: { sport: true, role_type: true, verified: true },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: 200,
+    });
+
+    return users
+      .map((u) => {
+        const lat = u.latitude !== null ? Number(u.latitude) : NaN;
+        const lng = u.longitude !== null ? Number(u.longitude) : NaN;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        const isAthlete = u.role === 'athlete' && u.athlete_profiles;
+        const isRecruiter =
+          (u.role === 'coach' || u.role === 'recruiter') && u.recruiter_profiles;
+        if (!isAthlete && !isRecruiter) return null;
+        return {
+          id: u.id,
+          name: u.name,
+          lat,
+          lng,
+          avatar_url: u.avatar_url,
+          role: u.role,
+          sport: isAthlete
+            ? u.athlete_profiles!.sport
+            : u.recruiter_profiles!.sport,
+          position: isAthlete ? u.athlete_profiles!.position : null,
+          recruiterType: isRecruiter ? u.recruiter_profiles!.role_type : null,
+          verified: isRecruiter ? !!u.recruiter_profiles!.verified : false,
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+  }
+
   private async excludedUserIds(userId: string): Promise<string[]> {
     const [swiped, blocked, blockedBy] = await Promise.all([
       this.prisma.swipes.findMany({
