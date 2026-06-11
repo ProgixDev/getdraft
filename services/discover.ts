@@ -26,21 +26,31 @@ export interface SwipeResponse {
   swipesRemaining: number;
 }
 
+// Globe is a TALENT MAP of athletes — everyone sees athletes,
+// recruiters/coaches draft them. So role is narrowed and the per-card
+// athlete fields the new player card needs sit on the same object.
 export interface MapPoint {
   id: string;
   name: string | null;
   lat: number;
   lng: number;
   avatar_url: string | null;
-  role: "athlete" | "coach" | "recruiter";
+  role: "athlete";
   sport: string | null;
   position: string | null;
-  recruiterType: "agent" | "coach" | null;
+  level: string | null;
+  class_year: string | null;
+  height: string | null;
+  gpa: number | null;
+  // First gallery photo from athlete_profiles.photos[0]. The globe card
+  // falls back to this when avatar_url is missing.
+  photo: string | null;
   verified: boolean;
 }
 
 // Small geo-spread demo set so the globe is never blank when the backend
-// is unreachable or hasn't yet been seeded with users that have lat/lng.
+// is unreachable or hasn't yet been seeded with athletes that have
+// lat/lng. Task 3 replaces this with a richer photo-bearing set.
 const MOCK_MAP_POINTS: MapPoint[] = [
   {
     id: "mock-globe-toronto",
@@ -51,7 +61,11 @@ const MOCK_MAP_POINTS: MapPoint[] = [
     role: "athlete",
     sport: "Hockey",
     position: "Center",
-    recruiterType: null,
+    level: null,
+    class_year: null,
+    height: null,
+    gpa: null,
+    photo: null,
     verified: false,
   },
   {
@@ -63,20 +77,12 @@ const MOCK_MAP_POINTS: MapPoint[] = [
     role: "athlete",
     sport: "Basketball",
     position: "Guard",
-    recruiterType: null,
+    level: null,
+    class_year: null,
+    height: null,
+    gpa: null,
+    photo: null,
     verified: false,
-  },
-  {
-    id: "mock-globe-austin",
-    name: "Marcus Johnson",
-    lat: 30.2672,
-    lng: -97.7431,
-    avatar_url: null,
-    role: "recruiter",
-    sport: "Football",
-    position: null,
-    recruiterType: "agent",
-    verified: true,
   },
   {
     id: "mock-globe-la",
@@ -87,19 +93,11 @@ const MOCK_MAP_POINTS: MapPoint[] = [
     role: "athlete",
     sport: "Basketball",
     position: "Guard",
-    recruiterType: null,
-    verified: false,
-  },
-  {
-    id: "mock-globe-nyc",
-    name: "Coach Reed",
-    lat: 40.7128,
-    lng: -74.006,
-    avatar_url: null,
-    role: "coach",
-    sport: "Soccer",
-    position: null,
-    recruiterType: "coach",
+    level: null,
+    class_year: null,
+    height: null,
+    gpa: null,
+    photo: null,
     verified: false,
   },
 ];
