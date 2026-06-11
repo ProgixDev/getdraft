@@ -22,13 +22,15 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
-import { authService } from '@/services/auth';
+import { authService, AuthResponse } from '@/services/auth';
 
 interface PhoneVerificationScreenProps {
   phone: string;
   channel: 'sms' | 'whatsapp';
-  /** Called with the signed verification token returned by /auth/phone/verify-otp. */
+  /** New phone — called with the signup verification token. */
   onVerified: (verificationToken: string) => void;
+  /** Existing account — called with the freshly minted session (login). */
+  onExistingUser: (result: AuthResponse) => void;
   onBack: () => void;
 }
 
@@ -36,6 +38,7 @@ export const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = (
   phone,
   channel,
   onVerified,
+  onExistingUser,
   onBack,
 }) => {
   const [fontsLoaded] = useFonts({
@@ -88,9 +91,13 @@ export const PhoneVerificationScreen: React.FC<PhoneVerificationScreenProps> = (
     }
     setIsLoading(true);
     try {
-      const { verificationToken } = await authService.verifyPhoneOtp(phone, entered);
+      const result = await authService.verifyPhoneOtp(phone, entered);
       setIsLoading(false);
-      onVerified(verificationToken);
+      if (result.existingUser) {
+        onExistingUser(result);
+      } else {
+        onVerified(result.verificationToken);
+      }
     } catch (err: any) {
       setIsLoading(false);
       const message =

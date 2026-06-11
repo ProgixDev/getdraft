@@ -390,19 +390,10 @@ export class AuthService {
     const normalized = phone.trim();
     const isTest = this.testPhones().has(normalized);
 
-    // Anti-enumeration — same shape as request-email-otp. Test phones
-    // bypass the "already taken" silent-no-op so we can retry signups.
-    if (!isTest) {
-      const admin = this.supabaseService.getAdminClient();
-      const { data: existing } = await admin
-        .from('users')
-        .select('id')
-        .eq('phone', normalized)
-        .maybeSingle();
-      if (existing) {
-        return { message: 'If this number is unused, a code has been sent.' };
-      }
-    }
+    // Existing-user phones receive the OTP too — verifyPhoneOtp signs
+    // them straight in (login mode). The response message is identical
+    // either way, so the endpoint still doesn't leak which numbers are
+    // registered.
 
     // Dev bypass for TEST_PHONES: skip Twilio entirely (no trial-account
     // verified-caller-id needed). verifyPhoneOtp accepts the fixed code
@@ -411,14 +402,22 @@ export class AuthService {
       this.logger.log(
         `[test-phone] Twilio bypassed for ${normalized} — use code 000000`,
       );
-      return { message: 'If this number is unused, a code has been sent.' };
+      return { message: 'A code has been sent.' };
     }
 
     await this.twilioService.startVerification(normalized, channel);
-    return { message: 'If this number is unused, a code has been sent.' };
+    return { message: 'A code has been sent.' };
   }
 
-  async verifyPhoneOtp(phone: string, code: string): Promise<{ verificationToken: string }> {
+  /**
+   * Verify the phone OTP. Two outcomes:
+   *  - LOGIN: the phone already belongs to an account → mint a real
+   *    session server-side and return it. Nothing is ever purged or
+   *    recreated on this path — existing accounts are safe.
+   *  - SIGNUP: unknown phone → return a signup verification token for
+   *    the role/password handoff, exactly as before.
+   */
+  async verifyPhoneOtp(phone: string, code: string) {
     const normalized = phone.trim();
     const isTest = this.testPhones().has(normalized);
 
@@ -433,10 +432,133 @@ export class AuthService {
         throw new BadRequestException('Incorrect or expired code.');
       }
     }
+
+    const authUser = await this.findAuthUserByPhone(normalized);
+    if (authUser) {
+      const admin = this.supabaseService.getAdminClient();
+      const { data: profile } = await admin
+        .from('users')
+        .select('id, email, name, role, is_onboarded')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (profile) {
+        const session = await this.mintSessionForAuthUser(
+          authUser.id,
+          authUser.email ?? null,
+          normalized,
+        );
+        this.logger.log(
+          `[phone-login] ${normalized} → existing user ${authUser.id} signed in`,
+        );
+        return {
+          existingUser: true as const,
+          user: {
+            id: profile.id,
+            email: profile.email ?? null,
+            phone: normalized,
+            role: profile.role,
+            name: profile.name ?? null,
+          },
+          isOnboarded: !!profile.is_onboarded,
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token,
+        };
+      }
+      // Orphan auth row without a profile — fall through to the signup
+      // path; completeSignup's duplicate check / TEST_PHONES purge deals
+      // with it exactly as before.
+      this.logger.warn(
+        `[phone-login] auth user ${authUser.id} has no public.users row — treating as signup`,
+      );
+    }
+
     const verificationToken = this.verificationTokenService.sign({
       contact: normalized,
       contactType: 'phone',
     });
-    return { verificationToken };
+    return { existingUser: false as const, verificationToken };
+  }
+
+  /**
+   * Newest auth.users row whose phone matches (digits-only compare, same
+   * normalisation as purgeAuthUsersByPhone).
+   */
+  private async findAuthUserByPhone(contact: string) {
+    const admin = this.supabaseService.getAdminClient();
+    const wantDigits = contact.replace(/\D/g, '');
+    const { data, error } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (error || !data) {
+      this.logger.warn(
+        `[phone-login] listUsers failed: ${error?.message ?? '(no data)'}`,
+      );
+      return null;
+    }
+    const matches = data.users
+      .filter((u) => {
+        const userDigits = (u.phone ?? '').replace(/\D/g, '');
+        return userDigits.length > 0 && userDigits === wantDigits;
+      })
+      .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
+    return matches[0] ?? null;
+  }
+
+  /**
+   * Mint a session for an existing user without knowing their password:
+   * generate a magic-link token via the admin API and exchange its
+   * token_hash for a session. Phone signups always carry a synthetic
+   * email (completeSignup attaches it); legacy rows without one are
+   * healed here with the same convention.
+   */
+  private async mintSessionForAuthUser(
+    userId: string,
+    email: string | null,
+    phone: string,
+  ) {
+    const admin = this.supabaseService.getAdminClient();
+    const anon = this.supabaseService.getClient();
+
+    let authEmail = email;
+    if (!authEmail) {
+      authEmail = `phone-${phone.replace(/\D/g, '')}@phone.getdraft.local`;
+      const { error: updErr } = await admin.auth.admin.updateUserById(userId, {
+        email: authEmail,
+        email_confirm: true,
+      });
+      if (updErr) {
+        this.logger.error(
+          `[phone-login] could not attach synthetic email to ${userId}: ${updErr.message}`,
+        );
+        throw new BadRequestException('Could not sign you in. Please try again.');
+      }
+    }
+
+    const { data: linkData, error: linkErr } =
+      await admin.auth.admin.generateLink({
+        type: 'magiclink',
+        email: authEmail,
+      });
+    const tokenHash = (linkData as any)?.properties?.hashed_token;
+    if (linkErr || !tokenHash) {
+      this.logger.error(
+        `[phone-login] generateLink failed for ${userId}: ${linkErr?.message ?? 'no token_hash'}`,
+      );
+      throw new BadRequestException('Could not sign you in. Please try again.');
+    }
+
+    const { data: verified, error: verifyErr } = await anon.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'email',
+    });
+    if (verifyErr || !verified.session) {
+      this.logger.error(
+        `[phone-login] token exchange failed for ${userId}: ${verifyErr?.message}`,
+      );
+      throw new BadRequestException('Could not sign you in. Please try again.');
+    }
+    return verified.session;
   }
 }

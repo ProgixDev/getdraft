@@ -103,12 +103,27 @@ export const authService = {
     await api.post("/auth/phone/request-otp", { phone, channel });
   },
 
+  /**
+   * Two outcomes: an existing account gets a real session back (login —
+   * tokens are persisted here), a new phone gets a verificationToken for
+   * the role/password signup handoff.
+   */
   async verifyPhoneOtp(
     phone: string,
     code: string,
-  ): Promise<{ verificationToken: string }> {
+  ): Promise<
+    | ({ existingUser: true } & AuthResponse)
+    | { existingUser: false; verificationToken: string }
+  > {
     const { data } = await api.post("/auth/phone/verify-otp", { phone, code });
-    return data.data;
+    const result = data.data;
+    if (result.existingUser) {
+      await saveTokens({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+      });
+    }
+    return result;
   },
 
   // --- OAuth via Supabase (Apple, Google) ---

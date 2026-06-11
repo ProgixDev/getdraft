@@ -110,7 +110,10 @@ export class AuthController {
 
   @Public()
   @Post('phone/verify-otp')
-  @ApiOperation({ summary: 'Verify the phone OTP and receive a verification token' })
+  @ApiOperation({
+    summary:
+      'Verify the phone OTP — returns a session for existing accounts (login) or a verification token for new signups',
+  })
   verifyPhoneOtp(@Body() dto: VerifyPhoneOtpDto) {
     return this.authService.verifyPhoneOtp(dto.phone, dto.code);
   }

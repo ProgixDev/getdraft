@@ -25,7 +25,7 @@ import { login } from '@/store/slices/authSlice';
 import { brand } from '@/config/colors';
 import { images } from '@/config/assets';
 import { GrainyGradient } from '@/components/welcome';
-import { authService } from '@/services/auth';
+import { authService, AuthResponse } from '@/services/auth';
 import { AuthScreen } from './AuthScreen';
 import { PhoneInputScreen } from './PhoneInputScreen';
 import { PhoneVerificationScreen } from './PhoneVerificationScreen';
@@ -78,6 +78,22 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
     setState('phone-onboarding');
   }, []);
 
+  // Existing account verified by phone OTP — same shape as the OAuth
+  // returning-user path. Onboarded users go straight into the app;
+  // mid-onboarding users land on AuthScreen, whose resume logic routes
+  // them to the exact signup step they left off at.
+  const handlePhoneExistingUser = useCallback(
+    (result: AuthResponse) => {
+      dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
+      if (result.isOnboarded) {
+        onLogin?.();
+      } else {
+        setState('email');
+      }
+    },
+    [dispatch, onLogin],
+  );
+
   const handleOAuth = useCallback(
     async (provider: OAuthProvider) => {
       if (pendingOauth) return;
@@ -128,6 +144,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
         phone={phone}
         channel={channel}
         onVerified={handlePhoneVerified}
+        onExistingUser={handlePhoneExistingUser}
         onBack={() => setState('phone-input')}
       />
     );
