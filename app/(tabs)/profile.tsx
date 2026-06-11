@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -9,7 +9,9 @@ import {
   Dimensions,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
+import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -30,6 +32,7 @@ import { usersService } from "@/services/users";
 import { matchesService } from "@/services/matches";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { postsService, type PostItem } from "@/services/posts";
+import CommentsSheet from "@/components/posts/CommentsSheet";
 
 const { width } = Dimensions.get("window");
 const PHOTO_SIZE = (width - 48) / 3 - 8;
@@ -184,6 +187,14 @@ export default function ProfileScreen() {
   const [savedPosts, setSavedPosts] = useState<PostItem[] | null>(null);
   // Wired in D4 — the press handler is shared between D3 and D4.
   const [openedPost, setOpenedPost] = useState<PostItem | null>(null);
+  // Live state for the detail modal. Initialised from openedPost on open
+  // and kept in sync with the underlying posts/reels/saved arrays so the
+  // grid tiles reflect the latest like/save state after the modal closes.
+  const [detailLiked, setDetailLiked] = useState(false);
+  const [detailLikeCount, setDetailLikeCount] = useState(0);
+  const [detailSaved, setDetailSaved] = useState(false);
+  const [detailCommentCount, setDetailCommentCount] = useState(0);
+  const [commentsVisible, setCommentsVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -257,6 +268,106 @@ export default function ProfileScreen() {
       };
     }, [isAthlete, user?.id]),
   );
+
+  // Hydrate detail-modal state from the tapped post. Saved-by-me is
+  // derived by intersecting with the Saved tab's array (the only
+  // saved-state source we have client-side) — good enough for the
+  // profile context, the only place this modal opens from.
+  useEffect(() => {
+    if (!openedPost) return;
+    setDetailLiked(openedPost.likedByMe);
+    setDetailLikeCount(openedPost.likesCount);
+    setDetailCommentCount(openedPost.commentsCount);
+    const isSaved =
+      savedPosts?.some((p) => p.id === openedPost.id) ?? false;
+    setDetailSaved(isSaved);
+  }, [openedPost, savedPosts]);
+
+  // Apply a delta to whichever grid arrays contain this post so the
+  // tiles reflect the new state when the modal closes. Used for both
+  // like and save toggles below.
+  const updatePostInGrids = useCallback(
+    (postId: string, patch: Partial<PostItem>) => {
+      const apply = (list: PostItem[] | null) =>
+        list ? list.map((p) => (p.id === postId ? { ...p, ...patch } : p)) : list;
+      setMyPosts((prev) => apply(prev));
+      setMyReels((prev) => apply(prev));
+      setSavedPosts((prev) => apply(prev));
+    },
+    [],
+  );
+
+  const handleDetailLike = useCallback(async () => {
+    if (!openedPost) return;
+    const willLike = !detailLiked;
+    setDetailLiked(willLike);
+    setDetailLikeCount((c) => Math.max(0, c + (willLike ? 1 : -1)));
+    updatePostInGrids(openedPost.id, {
+      likedByMe: willLike,
+      likesCount: Math.max(
+        0,
+        openedPost.likesCount + (willLike ? 1 : -1),
+      ),
+    });
+    try {
+      if (willLike) await postsService.likePost(openedPost.id);
+      else await postsService.unlikePost(openedPost.id);
+    } catch {
+      // Roll back on failure.
+      setDetailLiked(!willLike);
+      setDetailLikeCount((c) => Math.max(0, c + (willLike ? -1 : 1)));
+      updatePostInGrids(openedPost.id, {
+        likedByMe: openedPost.likedByMe,
+        likesCount: openedPost.likesCount,
+      });
+    }
+  }, [openedPost, detailLiked, updatePostInGrids]);
+
+  const handleDetailSave = useCallback(async () => {
+    if (!openedPost) return;
+    const willSave = !detailSaved;
+    setDetailSaved(willSave);
+    try {
+      const res = willSave
+        ? await postsService.savePost(openedPost.id)
+        : await postsService.unsavePost(openedPost.id);
+      if (res === null) {
+        // Service-level failure already swallowed; roll back so the
+        // bookmark icon matches reality.
+        setDetailSaved(!willSave);
+        return;
+      }
+      // Update the Saved tab so the bookmark survives until next refresh.
+      if (willSave) {
+        setSavedPosts((prev) =>
+          prev && !prev.some((p) => p.id === openedPost.id)
+            ? [openedPost, ...prev]
+            : prev,
+        );
+      } else {
+        setSavedPosts((prev) =>
+          prev ? prev.filter((p) => p.id !== openedPost.id) : prev,
+        );
+      }
+    } catch {
+      setDetailSaved(!willSave);
+    }
+  }, [openedPost, detailSaved]);
+
+  const handleDetailCommentCount = useCallback(
+    (n: number) => {
+      setDetailCommentCount(n);
+      if (openedPost) {
+        updatePostInGrids(openedPost.id, { commentsCount: n });
+      }
+    },
+    [openedPost, updatePostInGrids],
+  );
+
+  const closeDetail = useCallback(() => {
+    setCommentsVisible(false);
+    setOpenedPost(null);
+  }, []);
 
   const athleteProfile = useMemo<NormalizedAthleteProfile | null>(() => {
     if (!isAthlete || !profileRaw) return null;
@@ -795,6 +906,164 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Post / reel detail. Uses the same like + comment + save
+          contract as the feed; the CommentsSheet itself is the
+          existing component (a Modal of its own, stacks on top).
+          Closing the outer modal also dismisses comments via
+          closeDetail so we don't leak the second-layer open state. */}
+      <Modal
+        visible={openedPost !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeDetail}
+      >
+        {openedPost && (
+          <DetailModalContents
+            post={openedPost}
+            liked={detailLiked}
+            likeCount={detailLikeCount}
+            saved={detailSaved}
+            commentCount={detailCommentCount}
+            onLike={handleDetailLike}
+            onSave={handleDetailSave}
+            onComments={() => setCommentsVisible(true)}
+            onClose={closeDetail}
+          />
+        )}
+        <CommentsSheet
+          postId={openedPost?.id ?? null}
+          visible={commentsVisible}
+          onClose={() => setCommentsVisible(false)}
+          onCountChange={handleDetailCommentCount}
+        />
+      </Modal>
+    </View>
+  );
+}
+
+// Detail modal body — kept outside ProfileScreen so the useVideoPlayer
+// hook only mounts when a post is actually opened. Otherwise we'd be
+// creating an idle player for every render of the profile.
+function DetailModalContents({
+  post,
+  liked,
+  likeCount,
+  saved,
+  commentCount,
+  onLike,
+  onSave,
+  onComments,
+  onClose,
+}: {
+  post: PostItem;
+  liked: boolean;
+  likeCount: number;
+  saved: boolean;
+  commentCount: number;
+  onLike: () => void;
+  onSave: () => void;
+  onComments: () => void;
+  onClose: () => void;
+}) {
+  const isReel = post.kind === "reel";
+  // Hooks rule: useVideoPlayer must run unconditionally each render.
+  // For photo posts we pass a never-played URL — cheap, no playback.
+  const player = useVideoPlayer(post.mediaUrl, (p) => {
+    p.loop = true;
+    p.muted = true;
+  });
+  useEffect(() => {
+    if (!isReel || !player) return;
+    player.play();
+    return () => {
+      player.pause();
+    };
+  }, [isReel, player]);
+  return (
+    <View style={styles.detailContainer}>
+      <View style={styles.detailHeader}>
+        <Pressable
+          onPress={onClose}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <Ionicons name="chevron-down" size={26} color={theme.text} />
+        </Pressable>
+        <Text style={styles.detailTitle}>
+          {isReel ? "Reel" : "Post"}
+        </Text>
+        <View style={{ width: 26 }} />
+      </View>
+
+      <View style={styles.detailMediaWrap}>
+        {isReel ? (
+          <VideoView
+            player={player}
+            style={styles.detailMedia}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        ) : (
+          <Image
+            source={{ uri: post.mediaUrl }}
+            style={styles.detailMedia}
+            resizeMode="cover"
+          />
+        )}
+      </View>
+
+      <View style={styles.detailActions}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.detailActionBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={onLike}
+          accessibilityRole="button"
+          accessibilityLabel={liked ? "Unlike" : "Like"}
+        >
+          <Ionicons
+            name={liked ? "heart" : "heart-outline"}
+            size={26}
+            color={liked ? "#FF4D6D" : theme.text}
+          />
+          <Text style={styles.detailActionCount}>{likeCount}</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.detailActionBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={onComments}
+          accessibilityRole="button"
+          accessibilityLabel="Open comments"
+        >
+          <Ionicons name="chatbubble-outline" size={24} color={theme.text} />
+          <Text style={styles.detailActionCount}>{commentCount}</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          style={({ pressed }) => [
+            styles.detailActionBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={onSave}
+          accessibilityRole="button"
+          accessibilityLabel={saved ? "Remove bookmark" : "Save"}
+        >
+          <Ionicons
+            name={saved ? "bookmark" : "bookmark-outline"}
+            size={24}
+            color={saved ? brand.primary : theme.text}
+          />
+        </Pressable>
+      </View>
+
+      {post.caption ? (
+        <Text style={styles.detailCaption}>{post.caption}</Text>
+      ) : null}
     </View>
   );
 }
@@ -1240,5 +1509,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  detailContainer: {
+    flex: 1,
+    backgroundColor: theme.bg,
+  },
+  detailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  detailTitle: {
+    fontSize: 16,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  detailMediaWrap: {
+    width: "100%",
+    aspectRatio: 1,
+    backgroundColor: theme.surface,
+  },
+  detailMedia: {
+    flex: 1,
+    width: "100%",
+  },
+  detailActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  detailActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  detailActionCount: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  detailCaption: {
+    paddingHorizontal: 16,
+    fontSize: 14,
+    fontFamily: "Poppins_400Regular",
+    color: theme.text,
+    lineHeight: 22,
   },
 });
