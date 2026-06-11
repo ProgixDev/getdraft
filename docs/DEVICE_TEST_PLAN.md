@@ -154,6 +154,121 @@ so forward events locally:
 
 ---
 
+## 11. Per-role walkthroughs (role-based experiences from 2026-06-11)
+
+Each role gets a tailored tab set, home screen, and More menu. Walk all
+four (or skip what you can't reach) and confirm the role boundaries.
+
+### 11a — Athlete (Akram)
+
+- [ ] **Tab bar** shows exactly 5 tabs L→R: **Discover · Draft Board ·
+  (center Play "+") · Globe · More**.
+- [ ] **Discover** opens to the swipe feed (recruiter cards). Swiping up
+  drafts; swiping down passes.
+- [ ] **Draft Board** title reads "Draft Board" with pills:
+  **Received · Sent · Matches · Messages**.
+- [ ] **Feed** centre "+" opens post-create; you can post a Reel.
+- [ ] **Globe** loads the Three.js globe.
+- [ ] **More** lists: My Profile, **Who Drafted You**, Settings,
+  **My Subscription**, Help, Invite, About.
+- [ ] **My Subscription** shows **Starter / 30 swipes/day**.
+- [ ] **Profile** opens the athlete editor (sport, position, photos, videos).
+
+### 11b — Coach / Recruiter
+
+A recruiter or coach account is needed. If you don't have one seeded,
+sign up a fresh phone signup as **Coach** or **Recruiter** through the
+role picker.
+
+- [ ] **Tab bar** shows exactly 3 tabs L→R: **Discover · Draft Board · More**.
+  Feed and Globe are GONE.
+- [ ] **Discover** opens to the swipe feed showing **athletes** (not
+  recruiters) — the backend already role-filters the feed.
+- [ ] **Draft Board** title now reads **"Scout Board"**. Tab pills are
+  **Interested (eye icon) · Scouting (search icon) · Roster · Messages**.
+- [ ] **More** does NOT show "Who Drafted You" (athlete-only). Still has
+  My Subscription.
+- [ ] Try deep-linking `/post-create` — should redirect to /(tabs) (no
+  posting allowed for recruiters).
+- [ ] **Profile** opens the recruiter org profile (organization, sport,
+  role_type). Photo grid section says "Photos" not "Highlight reel".
+
+### 11c — Parent / Guardian (Moncef)
+
+- [ ] **Tab bar** shows exactly 3 tabs L→R: **Home (shield icon) ·
+  Messages (chat icon) · More**. No Discover, no Feed, no Globe.
+- [ ] **Home** (the new Guardian Dashboard):
+   - Eyebrow "GUARDIAN", greeting "Hi, {first name}.", subhead mentions
+     the linked athlete name.
+   - **Approved status hero**: gradient card with the spring-in green
+     seal, "VERIFIED GUARDIAN" pill, "You're linked!" title, credential
+     card showing **Achraf Benamrane / Parent / Approved on {date}**.
+   - **Verification chips**: Identity = "Verified" (green), Guardian
+     link = "Approved" (green).
+   - **Who's scouting your athlete**: empty state if no outreach yet
+     ("Coaches and recruiters who reach out to {athlete} will appear
+     here"), or top 4 outreach rows w/ unread counts + "See all".
+   - **Quick actions**: Replay declaration · Link details · My profile ·
+     Settings.
+   - **Pull-to-refresh** at the top reloads all four sources.
+- [ ] **Messages** tab title reads "Recruiter Outreach" with the
+  Matches/Messages pills (the existing parent matches branch).
+- [ ] **More** does NOT show **My Subscription** (billing is athlete-side
+  for parents). Does show **Verify your guardian link**.
+- [ ] **Profile** opens the parent profile (relationship + linked
+  athlete). No sport/position editor.
+- [ ] Deep-link any of `/(tabs)/index`, `/(tabs)/feed`, `/(tabs)/globe`,
+  `/post-create`, `/buy-swipes`, `/drafts-received` — each should bounce
+  to `/(tabs)/home`.
+
+### 11d — Admin (`admin@getdraft.app`)
+
+- [ ] **Tab bar** shows exactly 4 tabs L→R: **Dashboard · Reviews ·
+  Users · More**. NO Discover/Feed/Globe — the player surface is gone.
+- [ ] **Dashboard** loads:
+   - Eyebrow "GETDRAFT · ADMIN", title "Dashboard".
+   - **Needs attention** grid: 2×2 queue cards (Guardian reviews, KYC
+     pending, KYC declined, Banned) each deep-linking into Reviews or
+     Users with the right filter pre-applied.
+   - **Platform total users** big card with "+N in last 24h" delta.
+   - **By role** 2×2 grid: Athletes / Coaches / Recruiters / Parents.
+   - **Activity**: active matches + messages sent.
+   - Pull-to-refresh reloads both stats and queue counts in parallel.
+- [ ] **Reviews** tab lists guardian links with status pills
+  (In review / Approved / Declined / All); each card shows guardian +
+  athlete identity, the declaration video (native controls), status pill,
+  admin note, and Approve/Decline buttons on pending rows.
+- [ ] **Users** tab loads the read-only directory with search and 8
+  filter pills (All/Athletes/Coaches/Recruiters/Parents/KYC pending/KYC
+  declined/Banned). Rows deep-link to `/user/[userId]`.
+- [ ] Tap "KYC pending" on Dashboard → lands on Users with that filter
+  pre-applied (URL param `?filter=kyc_pending`).
+- [ ] **More** menu is minimal: My Profile / Settings / Help / About.
+  No Subscription, no Who Drafted You, no Invite.
+- [ ] **Profile** opens — admin has no athletic schema; should land on
+  Dashboard instead (redirect via `useEffect`).
+- [ ] Deep-link any of `/(tabs)/index`, `/(tabs)/feed`, `/(tabs)/globe`,
+  `/(tabs)/profile`, `/post-create`, `/buy-swipes`, `/subscription`,
+  `/drafts-received`, `/guardian-link` — each should bounce to
+  `/(tabs)/dashboard`.
+
+### 11e — Role security spot-checks (any role)
+
+- [ ] **Guardian admin endpoints require admin role:** as a logged-in
+  non-admin (e.g. Akram), call `GET /api/guardian-links/admin` →
+  expect 403 (the fix from `7dbc889`).
+- [ ] **Parent cannot bypass guardian gate:** as a parent, `PUT
+  /api/users/me {"preferences":{"dev":{"guardianSkipped":true}}}` then
+  `PUT /api/users/me/onboarding` → expect 400 "Guardian link required
+  before onboarding can be completed." (the server-side gate from
+  `c117a8b`).
+- [ ] **OAuth role propagates to JWT:** if you can reach Apple/Google
+  sign-in once Supabase OAuth is configured, pick role = recruiter, then
+  call `GET /api/outreach` → expect 200, not 403 (the fix from
+  `7fda142`).
+
+---
+
 ## Known gaps / deliberate decisions (don't file as bugs)
 
 - **Apple/Google sign-in** will fail until Supabase OAuth providers +
@@ -167,3 +282,14 @@ so forward events locally:
   Akram's account is the result — that's expected state, not drift.
 - Old May/early-June test subscriptions in Stripe were left untouched;
   only this session's duplicates were cleaned up.
+- **Admin user list is read-only in v1** — the `PUT /admin/users/:id/verify`
+  and `/ban` endpoints exist but no UI calls them yet. Approve/ban from
+  the row will land in a follow-up.
+- **Recruiters can still upload "Videos" on their profile** — the
+  recruiter profile schema has photos+videos. The brand decision was "no
+  highlight-reel posting *as if they were an athlete*"; the
+  athlete-style posting affordance (Feed center "+") is gone for them,
+  but profile media is org showcase and stays. Not a bug.
+- **`app/admin-guardian-links` standalone route still exists** alongside
+  the new `(tabs)/reviews` tab — kept for backwards-compat with any
+  deep link saved before the move.
