@@ -32,6 +32,37 @@ export class UsersService {
   async updateMe(user: CurrentUserPayload, dto: UpdateUserDto) {
     const supabase = this.supabaseService.getAdminClient();
 
+    // If role is being changed (OAuth signup hits this right after the
+    // provider returns), we MUST mirror it onto auth.users.user_metadata.
+    // JwtAuthGuard reads `user_metadata.role` for every request, and
+    // RolesGuard checks against that — without this mirror an OAuth
+    // recruiter gets 403 on /outreach, and an OAuth parent isn't blocked
+    // from /discover/swipe. The public.users column is the authoritative
+    // app value; user_metadata is the JWT view of it.
+    if (dto.role) {
+      const { data: authUser, error: readErr } =
+        await supabase.auth.admin.getUserById(user.id);
+      if (readErr || !authUser?.user) {
+        throw new BadRequestException(
+          `Could not read auth user: ${readErr?.message ?? 'not found'}`,
+        );
+      }
+      // Merge so we don't clobber other metadata (name set at signup, etc).
+      const mergedMeta = {
+        ...(authUser.user.user_metadata ?? {}),
+        role: dto.role,
+      };
+      const { error: metaErr } = await supabase.auth.admin.updateUserById(
+        user.id,
+        { user_metadata: mergedMeta },
+      );
+      if (metaErr) {
+        throw new BadRequestException(
+          `Could not update auth metadata: ${metaErr.message}`,
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from('users')
       .update(dto)
