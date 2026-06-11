@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from '../../common/types';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -23,8 +25,16 @@ import { FeedQueryDto } from './dto/feed-query.dto';
 export class PostsController {
   constructor(private posts: PostsService) {}
 
+  // Posting (photo Posts + video Reels) is an athlete-only affordance.
+  // The Feed center "+" is already hidden from non-athletes by
+  // app/(tabs)/_layout.tsx, and /post-create redirects them out, but
+  // both are client-side: a recruiter/parent could still replay their
+  // JWT to POST /posts and land a post in the global feed. The
+  // @Roles guard runs server-side via the global APP_GUARD, closing
+  // that hole. Feed reads, likes, and comments stay open to all roles.
   @Post()
-  @ApiOperation({ summary: 'Create a post or reel' })
+  @Roles(UserRole.ATHLETE)
+  @ApiOperation({ summary: 'Create a post or reel (athletes only)' })
   create(
     @CurrentUser('id') userId: string,
     @Body() dto: CreatePostDto,
