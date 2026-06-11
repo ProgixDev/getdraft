@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -52,93 +52,236 @@ interface ProfileSetupScreenProps {
 }
 
 const GENDER_OPTIONS = ["Man", "Woman"];
+const RELATIONSHIP_OPTIONS = ["Mother", "Father", "Guardian", "Other"];
 
-const steps = [
-  {
-    id: 1,
-    title: "Personal Info",
-    fields: [
+type StepField = {
+  id: string;
+  label: string;
+  placeholder: string;
+  icon: string;
+  // Skipped by isStepComplete. The user can still fill it in but the
+  // Next/Complete button doesn't wait on it. Required by default so the
+  // athlete fields below keep their previous "all required" semantics.
+  optional?: boolean;
+};
+type Step = {
+  id: number;
+  title: string;
+  subtitle: string;
+  tip: string;
+  fields: StepField[];
+};
+
+// Each role gets its own step set so coaches don't see jersey numbers
+// and parents don't see sport pickers. The athlete branch is the
+// pre-existing 3-step flow verbatim; the others are new.
+function getStepsForRole(role: string): Step[] {
+  if (role === "coach" || role === "recruiter") {
+    const isAgent = role === "recruiter";
+    const orgStep: Step = {
+      id: 2,
+      title: isAgent ? "Agency & Sport" : "Organization & Sport",
+      subtitle: isAgent
+        ? "Who you scout for"
+        : "Who you coach with",
+      tip: isAgent
+        ? "Athletes look at agency name and sport when deciding to engage"
+        : "Athletes look at program name and sport when deciding to engage",
+      fields: [
+        {
+          id: "organization",
+          label: isAgent ? "Agency Name" : "Organization",
+          placeholder: isAgent ? "Premier Sports Group" : "State University",
+          icon: "briefcase-outline",
+        },
+        {
+          id: "sport",
+          label: "Sport",
+          placeholder: "Football",
+          icon: "football-outline",
+        },
+        {
+          id: "level",
+          label: "Level (optional)",
+          placeholder: "Pick a level",
+          icon: "trending-up-outline",
+          optional: true,
+        },
+        ...(isAgent
+          ? ([
+              {
+                id: "region",
+                label: "Region or Territory (optional)",
+                placeholder: "Northeast US",
+                icon: "earth-outline",
+                optional: true,
+              },
+            ] as StepField[])
+          : []),
+        {
+          id: "bio",
+          label: "Short Bio (optional)",
+          placeholder: "Brief introduction…",
+          icon: "information-circle-outline",
+          optional: true,
+        },
+      ],
+    };
+    return [
       {
-        id: "firstName",
-        label: "First Name",
-        placeholder: "John",
-        icon: "person-outline",
+        id: 1,
+        title: "Personal Info",
+        subtitle: "Tell us your name",
+        tip: "Use your real name to build trust",
+        fields: [
+          {
+            id: "firstName",
+            label: "First Name",
+            placeholder: "John",
+            icon: "person-outline",
+          },
+          {
+            id: "lastName",
+            label: "Last Name",
+            placeholder: "Doe",
+            icon: "person-outline",
+          },
+        ],
       },
+      orgStep,
+    ];
+  }
+  if (role === "parent") {
+    return [
       {
-        id: "lastName",
-        label: "Last Name",
-        placeholder: "Doe",
-        icon: "person-outline",
+        id: 1,
+        title: "Personal Info",
+        subtitle: "Tell us about you",
+        tip: "Your athlete's match notifications come to you",
+        fields: [
+          {
+            id: "firstName",
+            label: "First Name",
+            placeholder: "John",
+            icon: "person-outline",
+          },
+          {
+            id: "lastName",
+            label: "Last Name",
+            placeholder: "Doe",
+            icon: "person-outline",
+          },
+          {
+            id: "relationship",
+            label: "Relationship",
+            placeholder: "Select",
+            icon: "people-outline",
+          },
+          {
+            id: "bio",
+            label: "Short Bio (optional)",
+            placeholder: "Brief introduction…",
+            icon: "information-circle-outline",
+            optional: true,
+          },
+        ],
       },
-      {
-        id: "gender",
-        label: "Gender",
-        placeholder: "Select",
-        icon: "male-female-outline",
-      },
-      {
-        id: "dateOfBirth",
-        label: "Date of Birth",
-        placeholder: "MM/DD/YYYY",
-        icon: "calendar-outline",
-      },
-    ],
-  },
-  {
-    id: 2,
-    title: "Sport Details",
-    fields: [
-      {
-        id: "sport",
-        label: "Primary Sport",
-        placeholder: "Football",
-        icon: "football-outline",
-      },
-      {
-        id: "level",
-        label: "Level",
-        placeholder: "High School",
-        icon: "trending-up-outline",
-      },
-      {
-        id: "position",
-        label: "Position",
-        placeholder: "Quarterback",
-        icon: "trophy-outline",
-      },
-      {
-        id: "experience",
-        label: "Years of Experience",
-        placeholder: "5",
-        icon: "time-outline",
-      },
-    ],
-  },
-  {
-    id: 3,
-    title: "Physical Attributes",
-    fields: [
-      {
-        id: "height",
-        label: "Height",
-        placeholder: "6'2\"",
-        icon: "resize-outline",
-      },
-      {
-        id: "weight",
-        label: "Weight",
-        placeholder: "185",
-        icon: "fitness-outline",
-      },
-      {
-        id: "jerseyNumber",
-        label: "Jersey Number",
-        placeholder: "10",
-        icon: "shirt-outline",
-      },
-    ],
-  },
-];
+    ];
+  }
+  // athlete (default) — unchanged 3-step flow.
+  return [
+    {
+      id: 1,
+      title: "Personal Info",
+      subtitle: "Tell us about yourself",
+      tip: "Use your real name to build trust",
+      fields: [
+        {
+          id: "firstName",
+          label: "First Name",
+          placeholder: "John",
+          icon: "person-outline",
+        },
+        {
+          id: "lastName",
+          label: "Last Name",
+          placeholder: "Doe",
+          icon: "person-outline",
+        },
+        {
+          id: "gender",
+          label: "Gender",
+          placeholder: "Select",
+          icon: "male-female-outline",
+        },
+        {
+          id: "dateOfBirth",
+          label: "Date of Birth",
+          placeholder: "MM/DD/YYYY",
+          icon: "calendar-outline",
+        },
+      ],
+    },
+    {
+      id: 2,
+      title: "Sport Details",
+      subtitle: "Share your athletic background",
+      tip: "Be specific about your position and level",
+      fields: [
+        {
+          id: "sport",
+          label: "Primary Sport",
+          placeholder: "Football",
+          icon: "football-outline",
+        },
+        {
+          id: "level",
+          label: "Level",
+          placeholder: "High School",
+          icon: "trending-up-outline",
+        },
+        {
+          id: "position",
+          label: "Position",
+          placeholder: "Quarterback",
+          icon: "trophy-outline",
+        },
+        {
+          id: "experience",
+          label: "Years of Experience",
+          placeholder: "5",
+          icon: "time-outline",
+        },
+      ],
+    },
+    {
+      id: 3,
+      title: "Physical Attributes",
+      subtitle: "Your physical stats",
+      tip: "Accurate stats help better matches",
+      fields: [
+        {
+          id: "height",
+          label: "Height",
+          placeholder: "6'2\"",
+          icon: "resize-outline",
+        },
+        {
+          id: "weight",
+          label: "Weight",
+          placeholder: "185",
+          icon: "fitness-outline",
+        },
+        {
+          id: "jerseyNumber",
+          label: "Jersey Number",
+          placeholder: "10",
+          icon: "shirt-outline",
+        },
+      ],
+    },
+  ];
+}
 
 export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   role,
@@ -153,6 +296,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     Poppins_800ExtraBold,
   });
 
+  // Role-specific step set — recomputed only when the role prop changes.
+  const steps = useMemo(() => getStepsForRole(role), [role]);
+
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [dateModalVisible, setDateModalVisible] = useState(false);
@@ -160,6 +306,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [positionModalVisible, setPositionModalVisible] = useState(false);
   const [levelModalVisible, setLevelModalVisible] = useState(false);
   const [genderModalVisible, setGenderModalVisible] = useState(false);
+  const [relationshipModalVisible, setRelationshipModalVisible] =
+    useState(false);
   const [dateOfBirth, setDateOfBirth] = useState<Date>(() => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 18);
@@ -314,11 +462,18 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     setGenderModalVisible(false);
   };
 
+  const handleRelationshipSelect = (relationship: string) => {
+    handleFieldChange("relationship", relationship);
+    setRelationshipModalVisible(false);
+  };
+
   React.useEffect(() => {
     progress.value = withTiming(((currentStep + 1) / steps.length) * 100, {
       duration: 300,
     });
-  }, [currentStep]);
+    // steps.length depends on `role` via useMemo; including it keeps the
+    // bar in sync if the role ever changes mid-mount.
+  }, [currentStep, steps.length, progress]);
 
   const progressBarStyle = useAnimatedStyle(() => ({
     width: `${progress.value}%`,
@@ -333,32 +488,60 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
       setCurrentStep((prev) => prev + 1);
     } else {
       try {
-        const fullName = `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
+        const fullName =
+          `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
         if (fullName) {
           try {
             await usersService.updateMe({ name: fullName });
           } catch (e) {
-            console.warn("[ProfileSetup] updateMe(name) failed (non-blocking):", e);
+            console.warn(
+              "[ProfileSetup] updateMe(name) failed (non-blocking):",
+              e,
+            );
           }
         }
 
-        await profilesService.upsertAthleteProfile({
-          sport: formData.sport,
-          position: formData.position,
-          level: formData.level,
-          bio: "",
-          class_year: "",
-          height: formData.height
-            ? `${formData.height}${heightUnit === "in" ? "" : " cm"}`
-            : undefined,
-          weight: formData.weight
-            ? `${formData.weight} ${weightUnit}`
-            : undefined,
-          gender: formData.gender || undefined,
-          date_of_birth: formData.dateOfBirth ? toIsoDate(dateOfBirth) : undefined,
-          experience: formData.experience || undefined,
-          jersey_number: formData.jerseyNumber || undefined,
-        });
+        if (role === "athlete") {
+          await profilesService.upsertAthleteProfile({
+            sport: formData.sport,
+            position: formData.position,
+            level: formData.level,
+            bio: "",
+            class_year: "",
+            height: formData.height
+              ? `${formData.height}${heightUnit === "in" ? "" : " cm"}`
+              : undefined,
+            weight: formData.weight
+              ? `${formData.weight} ${weightUnit}`
+              : undefined,
+            gender: formData.gender || undefined,
+            date_of_birth: formData.dateOfBirth
+              ? toIsoDate(dateOfBirth)
+              : undefined,
+            experience: formData.experience || undefined,
+            jersey_number: formData.jerseyNumber || undefined,
+          });
+        } else if (role === "coach" || role === "recruiter") {
+          // tags carry the optional level + (recruiter-only) region so the
+          // backend doesn't need any new columns to support those fields.
+          const tags: string[] = [];
+          const level = formData.level?.trim();
+          const region = formData.region?.trim();
+          if (level) tags.push(level);
+          if (region) tags.push(region);
+          await profilesService.upsertRecruiterProfile({
+            organization: formData.organization?.trim() ?? "",
+            sport: formData.sport?.trim() ?? "",
+            role_type: role === "coach" ? "coach" : "agent",
+            bio: formData.bio?.trim() || undefined,
+            tags,
+          });
+        } else if (role === "parent") {
+          await profilesService.upsertParentProfile({
+            relationship: formData.relationship?.trim() ?? "",
+            bio: formData.bio?.trim() || undefined,
+          });
+        }
         onPayment();
       } catch (err: any) {
         const message =
@@ -385,18 +568,23 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
   const isStepComplete = () => {
     const currentFields = steps[currentStep].fields;
-    return currentFields.every((field) => formData[field.id]?.trim());
+    return currentFields.every(
+      (field) => field.optional || formData[field.id]?.trim(),
+    );
   };
 
   const getCompletionPercentage = () => {
-    const totalFields = steps.reduce(
-      (sum, step) => sum + step.fields.length,
-      0,
+    // Only required fields count toward the bar — optional fields are
+    // bonuses, not gates, so leaving the bar stuck below 100% when the
+    // user is genuinely done would be misleading.
+    const requiredFields = steps.flatMap((s) =>
+      s.fields.filter((f) => !f.optional),
     );
-    const completedFields = Object.values(formData).filter((value) =>
-      value?.trim(),
+    if (requiredFields.length === 0) return 100;
+    const completed = requiredFields.filter((f) =>
+      formData[f.id]?.trim(),
     ).length;
-    return Math.round((completedFields / totalFields) * 100);
+    return Math.round((completed / requiredFields.length) * 100);
   };
 
   if (!fontsLoaded) return null;
@@ -450,9 +638,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>{currentStepData.title}</Text>
               <Text style={styles.cardSubtitle}>
-                {currentStep === 0 && "Tell us about yourself"}
-                {currentStep === 1 && "Share your athletic background"}
-                {currentStep === 2 && "Your physical stats"}
+                {currentStepData.subtitle}
               </Text>
             </View>
 
@@ -491,6 +677,58 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                           color={neutral.gray400}
                         />
                       </Pressable>
+                    </>
+                  ) : field.id === "relationship" ? (
+                    <>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <Pressable
+                        style={styles.inputContainer}
+                        onPress={() => setRelationshipModalVisible(true)}
+                      >
+                        <Ionicons
+                          name={field.icon as any}
+                          size={20}
+                          color={neutral.gray400}
+                          style={styles.inputIcon}
+                        />
+                        <Text
+                          style={[
+                            styles.input,
+                            !formData[field.id] && styles.inputPlaceholder,
+                          ]}
+                        >
+                          {formData[field.id] || field.placeholder}
+                        </Text>
+                        <Ionicons
+                          name="chevron-down"
+                          size={20}
+                          color={neutral.gray400}
+                        />
+                      </Pressable>
+                    </>
+                  ) : field.id === "bio" ? (
+                    <>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <View style={[styles.inputContainer, styles.bioContainer]}>
+                        <Ionicons
+                          name={field.icon as any}
+                          size={20}
+                          color={neutral.gray400}
+                          style={styles.bioIcon}
+                        />
+                        <TextInput
+                          style={[styles.input, styles.bioInput]}
+                          placeholder={field.placeholder}
+                          placeholderTextColor={neutral.gray400}
+                          value={formData[field.id] || ""}
+                          onChangeText={(value) =>
+                            handleFieldChange(field.id, value)
+                          }
+                          multiline
+                          numberOfLines={4}
+                          textAlignVertical="top"
+                        />
+                      </View>
                     </>
                   ) : field.id === "dateOfBirth" ? (
                     <>
@@ -856,6 +1094,66 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Pressable>
             </Modal>
 
+            {/* Relationship Selection Modal (parent only) */}
+            <Modal
+              visible={relationshipModalVisible}
+              transparent
+              animationType="slide"
+            >
+              <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setRelationshipModalVisible(false)}
+              >
+                <Pressable
+                  style={styles.modalContent}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Relationship</Text>
+                    <Pressable
+                      onPress={() => setRelationshipModalVisible(false)}
+                    >
+                      <Ionicons
+                        name="close"
+                        size={24}
+                        color={neutral.gray600}
+                      />
+                    </Pressable>
+                  </View>
+                  <View style={styles.modalOptionsList}>
+                    {RELATIONSHIP_OPTIONS.map((rel) => (
+                      <Pressable
+                        key={rel}
+                        style={[
+                          styles.modalOption,
+                          formData.relationship === rel &&
+                            styles.modalOptionSelected,
+                        ]}
+                        onPress={() => handleRelationshipSelect(rel)}
+                      >
+                        <Text
+                          style={[
+                            styles.modalOptionText,
+                            formData.relationship === rel &&
+                              styles.modalOptionTextSelected,
+                          ]}
+                        >
+                          {rel}
+                        </Text>
+                        {formData.relationship === rel && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color={brand.primary}
+                          />
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                </Pressable>
+              </Pressable>
+            </Modal>
+
             {/* Sport Selection Modal */}
             <Modal
               visible={sportModalVisible}
@@ -1092,12 +1390,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             {/* Tip */}
             <View style={styles.tipContainer}>
               <Ionicons name="bulb-outline" size={16} color={brand.primary} />
-              <Text style={styles.tipText}>
-                {currentStep === 0 && "Use your real name to build trust"}
-                {currentStep === 1 &&
-                  "Be specific about your position and level"}
-                {currentStep === 2 && "Accurate stats help better matches"}
-              </Text>
+              <Text style={styles.tipText}>{currentStepData.tip}</Text>
             </View>
           </Animated.View>
         </ScrollView>
@@ -1244,6 +1537,18 @@ const styles = StyleSheet.create({
   },
   inputContainerDisabled: {
     opacity: 0.6,
+  },
+  bioContainer: {
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    minHeight: 110,
+  },
+  bioIcon: {
+    marginRight: 10,
+    marginTop: 2,
+  },
+  bioInput: {
+    minHeight: 86,
   },
   modalOverlay: {
     flex: 1,
