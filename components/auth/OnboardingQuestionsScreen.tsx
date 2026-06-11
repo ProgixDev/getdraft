@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -24,6 +24,8 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
 import { usersService } from '@/services/users';
+import { profilesService } from '@/services/profiles';
+import { SPORTS_WITH_POSITIONS } from '@/constants/sportsData';
 
 type Role = 'athlete' | 'parent' | 'coach' | 'recruiter';
 
@@ -42,37 +44,14 @@ interface QuestionDef {
 }
 
 /**
- * 4 questions per role — answers feed the matching algorithm. Keep
- * the shapes consistent (string for single-choice/text, string[] for
- * multi) so the backend doesn't need per-role parsing.
+ * Per-role questions. The athlete set is now BUILT from the athlete's
+ * saved sport (see buildAthleteQuestions): level + position options
+ * come from SPORTS_WITH_POSITIONS so a hockey player sees QMJHL / U
+ * SPORTS instead of generic strings. The graduation-year question has
+ * been removed from every role; no consumer reads
+ * preferences.onboarding.class_year.
  */
-const QUESTIONS_BY_ROLE: Record<Role, QuestionDef[]> = {
-    athlete: [
-        {
-            id: 'sport',
-            prompt: 'What\'s your primary sport?',
-            type: 'choice',
-            options: ['Football', 'Basketball', 'Soccer', 'Baseball', 'Hockey', 'Track', 'Other'],
-        },
-        {
-            id: 'goal',
-            prompt: 'What are you looking for?',
-            type: 'choice',
-            options: ['D1 scholarship', 'D2 / D3 program', 'Pro pathway', 'Just exposure'],
-        },
-        {
-            id: 'class_year',
-            prompt: 'When do you graduate?',
-            type: 'choice',
-            options: ['2026', '2027', '2028', '2029', 'Later'],
-        },
-        {
-            id: 'travel',
-            prompt: 'How far would you go for the right opportunity?',
-            type: 'choice',
-            options: ['Local', 'In-state', 'Nationwide', 'Anywhere'],
-        },
-    ],
+const STATIC_QUESTIONS_BY_ROLE: Record<Exclude<Role, 'athlete'>, QuestionDef[]> = {
     parent: [
         {
             id: 'sport',
@@ -85,12 +64,6 @@ const QUESTIONS_BY_ROLE: Record<Role, QuestionDef[]> = {
             prompt: 'What opportunities are you seeking?',
             type: 'choice',
             options: ['College scholarship', 'Club / showcase exposure', 'Pro pathway', 'Exploring options'],
-        },
-        {
-            id: 'class_year',
-            prompt: 'When does your athlete graduate?',
-            type: 'choice',
-            options: ['2026', '2027', '2028', '2029', 'Later'],
         },
         {
             id: 'budget',
@@ -153,6 +126,83 @@ const QUESTIONS_BY_ROLE: Record<Role, QuestionDef[]> = {
     ],
 };
 
+const ATHLETE_GOAL_OPTIONS = [
+    'Athletic scholarship',
+    'Roster spot / walk-on',
+    'Pro pathway',
+    'Exposure & ranking',
+];
+const ATHLETE_RELOCATION_OPTIONS = [
+    'Stay local',
+    'Within my country',
+    'Anywhere in North America',
+    'Anywhere worldwide',
+];
+
+// When we know the athlete's sport (already chosen on the profile-setup
+// step), drive level + position questions from SPORTS_WITH_POSITIONS so
+// hockey players see QMJHL/U SPORTS and soccer players see MLS/CPL/etc.
+// When the sport lookup fails or comes back empty (e.g. backend down,
+// profile not yet saved), fall back to a sport picker + static questions
+// so the user is never blocked.
+function buildAthleteQuestions(sport: string | null): QuestionDef[] {
+    const sportRow = sport
+        ? SPORTS_WITH_POSITIONS.find((s) => s.name === sport)
+        : undefined;
+    if (sportRow) {
+        return [
+            {
+                id: 'goal',
+                prompt: "What's your main recruiting goal?",
+                type: 'choice',
+                options: ATHLETE_GOAL_OPTIONS,
+            },
+            {
+                id: 'target_level',
+                prompt: 'What level are you aiming for?',
+                type: 'choice',
+                options: sportRow.levels,
+            },
+            {
+                id: 'best_position',
+                prompt: 'Which position best fits your strengths?',
+                type: 'choice',
+                options: sportRow.positions,
+            },
+            {
+                id: 'relocation',
+                prompt: 'How far would you relocate for the right program?',
+                type: 'choice',
+                options: ATHLETE_RELOCATION_OPTIONS,
+            },
+        ];
+    }
+    // Sport unknown — show goal + relocation and a sport picker so the
+    // user can still answer. Position/level skipped (we can't tailor them
+    // without a sport); they'll show up later if the user re-enters with
+    // a saved profile.
+    return [
+        {
+            id: 'sport',
+            prompt: "What's your primary sport?",
+            type: 'choice',
+            options: SPORTS_WITH_POSITIONS.map((s) => s.name),
+        },
+        {
+            id: 'goal',
+            prompt: "What's your main recruiting goal?",
+            type: 'choice',
+            options: ATHLETE_GOAL_OPTIONS,
+        },
+        {
+            id: 'relocation',
+            prompt: 'How far would you relocate for the right program?',
+            type: 'choice',
+            options: ATHLETE_RELOCATION_OPTIONS,
+        },
+    ];
+}
+
 export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps> = ({
     role,
     onComplete,
@@ -166,7 +216,37 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
         Poppins_800ExtraBold,
     });
 
-    const questions = useMemo(() => QUESTIONS_BY_ROLE[role] ?? [], [role]);
+    // Athlete sport — fetched once on mount from the profile saved in
+    // the previous ProfileSetup step. null = still loading, '' = lookup
+    // succeeded but profile has no sport (fall through to the sport-
+    // picker fallback), string = use as the basis for dynamic options.
+    const [athleteSport, setAthleteSport] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (role !== 'athlete') return;
+        let cancelled = false;
+        profilesService
+            .getAthleteProfile()
+            .then((p) => {
+                if (cancelled) return;
+                setAthleteSport(typeof p?.sport === 'string' ? p.sport : '');
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setAthleteSport(''); // empty → fallback question set
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [role]);
+
+    const questions = useMemo<QuestionDef[]>(() => {
+        if (role === 'athlete') {
+            if (athleteSport === null) return []; // still loading
+            return buildAthleteQuestions(athleteSport || null);
+        }
+        return STATIC_QUESTIONS_BY_ROLE[role] ?? [];
+    }, [role, athleteSport]);
 
     // Single-answer or text answers keyed by question id.
     const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -234,7 +314,25 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
                     <Text style={styles.subtitle}>
                         Helps us match you with the right people.
                     </Text>
+                    {role === 'athlete' && athleteSport ? (
+                        <View style={styles.sportChip}>
+                            <Ionicons
+                                name="football-outline"
+                                size={14}
+                                color={brand.primary}
+                            />
+                            <Text style={styles.sportChipText}>
+                                Your sport: {athleteSport}
+                            </Text>
+                        </View>
+                    ) : null}
                 </Animated.View>
+
+                {role === 'athlete' && athleteSport === null ? (
+                    <View style={styles.loadingWrap}>
+                        <ActivityIndicator color={brand.white} />
+                    </View>
+                ) : null}
 
                 {questions.map((q, idx) => (
                     <Animated.View
@@ -329,6 +427,25 @@ const styles = StyleSheet.create({
         fontFamily: 'Poppins_400Regular',
         color: 'rgba(255, 255, 255, 0.85)',
         textAlign: 'center',
+    },
+    sportChip: {
+        marginTop: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: brand.white,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 999,
+    },
+    sportChipText: {
+        fontSize: 12,
+        fontFamily: 'Poppins_600SemiBold',
+        color: brand.primary,
+    },
+    loadingWrap: {
+        paddingVertical: 24,
+        alignItems: 'center',
     },
     card: {
         backgroundColor: brand.white,
