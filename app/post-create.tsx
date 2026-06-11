@@ -30,6 +30,7 @@ import { brand, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { postsService } from "@/services/posts";
 import { uploadsService } from "@/services/uploads";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 type PickedKind = "post" | "reel";
 
@@ -68,16 +69,11 @@ export default function PostCreateScreen() {
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Posting is an athlete affordance only. Recruiters/coaches/parents/admins
-  // who somehow land here (stale deep link, history) bounce back to their
-  // home — the Feed tab is already hidden from their tab bar.
-  React.useEffect(() => {
-    if (!user?.role) return;
-    if (user.role === "athlete") return;
-    if (user.role === "admin") router.replace("/(tabs)/dashboard");
-    else if (user.role === "parent") router.replace("/(tabs)/home");
-    else router.replace("/(tabs)");
-  }, [user?.role, router]);
+  // Posting is an athlete affordance only. Recruiters/coaches/parents/
+  // admins who somehow land here bounce back via useRoleHomeRedirect.
+  // The Feed tab is already hidden from their tab bar; this is the
+  // backstop for deep links and stale history.
+  const redirecting = useRoleHomeRedirect(["athlete"]);
 
   const videoPlayer = useVideoPlayer(
     asset?.kind === "reel" ? asset.uri : "",
@@ -149,6 +145,7 @@ export default function PostCreateScreen() {
   };
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   const isVideo = asset?.kind === "reel";
 

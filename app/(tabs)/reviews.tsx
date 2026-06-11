@@ -31,6 +31,7 @@ import {
   GuardianLink,
   GuardianLinkStatus,
 } from "@/services/guardianLinks";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 type LinkWithVideo = GuardianLink & { video_url?: string };
 
@@ -129,14 +130,13 @@ export default function AdminReviewsTab() {
     [],
   );
 
+  const redirecting = useRoleHomeRedirect(["admin"]);
+
   useFocusEffect(
     useCallback(() => {
-      if (user?.role !== "admin") {
-        router.replace("/(tabs)");
-        return;
-      }
+      if (user?.role !== "admin") return;
       refresh(tab, "initial");
-    }, [user?.role, tab, refresh, router]),
+    }, [user?.role, tab, refresh]),
   );
 
   const decide = useCallback(
@@ -171,6 +171,7 @@ export default function AdminReviewsTab() {
   );
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

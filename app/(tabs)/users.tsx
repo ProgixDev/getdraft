@@ -24,6 +24,7 @@ import {
 import { brand, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { adminService, AdminUserRow } from "@/services/admin";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 type FilterId =
   | "all"
@@ -135,14 +136,13 @@ export default function AdminUsersTab() {
     }
   }, []);
 
+  const redirecting = useRoleHomeRedirect(["admin"]);
+
   useFocusEffect(
     useCallback(() => {
-      if (user?.role !== "admin") {
-        router.replace("/(tabs)");
-        return;
-      }
+      if (user?.role !== "admin") return;
       fetchUsers(filter);
-    }, [user?.role, filter, fetchUsers, router]),
+    }, [user?.role, filter, fetchUsers]),
   );
 
   const filtered = useMemo(() => {
@@ -157,6 +157,7 @@ export default function AdminUsersTab() {
   }, [rows, search]);
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

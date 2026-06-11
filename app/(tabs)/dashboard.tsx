@@ -27,6 +27,7 @@ import {
   AdminQueueCounts,
   AdminStats,
 } from "@/services/admin";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 type IonName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -67,17 +68,17 @@ export default function AdminDashboardScreen() {
     }
   }, []);
 
+  const redirecting = useRoleHomeRedirect(["admin"]);
+
   useFocusEffect(
     useCallback(() => {
-      if (user?.role !== "admin") {
-        router.replace("/(tabs)");
-        return;
-      }
+      if (user?.role !== "admin") return;
       load("initial");
-    }, [user?.role, load, router]),
+    }, [user?.role, load]),
   );
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

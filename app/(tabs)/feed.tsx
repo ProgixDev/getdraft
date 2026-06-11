@@ -33,11 +33,10 @@ import {
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 
-import { useSelector } from "react-redux";
 import { brand, theme } from "@/config/colors";
-import { RootState } from "@/store";
 import { postsService, type PostItem, type PostKind } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -61,17 +60,9 @@ function timeAgo(iso: string): string {
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const role = useSelector((s: RootState) => s.auth.user?.role);
-  const playerCanSee = role === "athlete";
-  // Anyone other than an athlete who deep-links here gets redirected to
-  // their home; this is the only path Feed has into the app for them now.
-  useEffect(() => {
-    if (role && !playerCanSee) {
-      if (role === "admin") router.replace("/(tabs)/dashboard");
-      else if (role === "parent") router.replace("/(tabs)/home");
-      else router.replace("/(tabs)");
-    }
-  }, [role, playerCanSee, router]);
+  // Feed is athletes-only. Anyone else lands on their role's home via
+  // useRoleHomeRedirect (focus-based, survives back-navigation).
+  const redirecting = useRoleHomeRedirect(["athlete"]);
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -189,7 +180,7 @@ export default function FeedScreen() {
 
   const isReels = kind === "reel";
 
-  if (role && !playerCanSee) return null;
+  if (redirecting) return null;
 
   return (
     <View style={[styles.container, isReels && styles.containerReels]}>

@@ -23,11 +23,10 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useSelector } from "react-redux";
+import { useFocusEffect } from "expo-router";
 import { theme } from "@/config/colors";
-import { RootState } from "@/store";
 import { statsService } from "@/services/stats";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -188,17 +187,9 @@ export default function GlobeTab() {
     Poppins_800ExtraBold,
   });
 
-  const router = useRouter();
-  const role = useSelector((s: RootState) => s.auth.user?.role);
-  const playerCanSee = role === "athlete";
-  // Globe is an athlete-only vanity tab; redirect anyone else to their home.
-  useEffect(() => {
-    if (role && !playerCanSee) {
-      if (role === "admin") router.replace("/(tabs)/dashboard");
-      else if (role === "parent") router.replace("/(tabs)/home");
-      else router.replace("/(tabs)");
-    }
-  }, [role, playerCanSee, router]);
+  // Globe is an athletes-only vanity tab; everyone else lands on their
+  // role's home via useRoleHomeRedirect (focus-based).
+  const redirecting = useRoleHomeRedirect(["athlete"]);
 
   const [isActive, setIsActive] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -230,7 +221,7 @@ export default function GlobeTab() {
     }, []),
   );
 
-  if (role && !playerCanSee) return null;
+  if (redirecting) return null;
 
   return (
     <View style={styles.container}>

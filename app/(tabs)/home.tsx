@@ -32,6 +32,7 @@ import {
 } from "@/services/guardianLinks";
 import { outreachService } from "@/services/outreach";
 import { kycService } from "@/services/kyc";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 type IonName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -116,19 +117,22 @@ export default function GuardianHomeScreen() {
     }
   }, []);
 
+  // Parent-only screen. The shared hook routes admin → /(tabs)/dashboard
+  // and any non-parent role → /(tabs), so an admin deep-linked here
+  // lands on their actual home instead of /(tabs).
+  const redirecting = useRoleHomeRedirect(["parent"]);
+
   useFocusEffect(
     useCallback(() => {
-      if (user?.role !== "parent") {
-        router.replace("/(tabs)");
-        return;
-      }
+      if (user?.role !== "parent") return;
       load("initial");
-    }, [user?.role, load, router]),
+    }, [user?.role, load]),
   );
 
   const recentOutreach = useMemo(() => outreach.slice(0, 4), [outreach]);
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   const approved = link?.status === "approved";
   const pendingReview = link?.status === "pending_admin";

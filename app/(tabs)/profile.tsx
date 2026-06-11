@@ -30,6 +30,7 @@ import { usersService } from "@/services/users";
 import { matchesService } from "@/services/matches";
 import { uploadsService, UploadBucket } from "@/services/uploads";
 import { pickAndUploadMedia } from "@/services/media";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 const { width } = Dimensions.get("window");
 const PHOTO_SIZE = (width - 48) / 3 - 8;
@@ -161,13 +162,17 @@ export default function ProfileScreen() {
   const isAthlete = user?.role === "athlete";
   const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
   const isParent = user?.role === "parent";
-  const isAdmin = user?.role === "admin";
 
-  // Admins don't have an athletic/parent profile schema — kick them back to
-  // their console instead of rendering an empty athlete editor.
-  React.useEffect(() => {
-    if (isAdmin) router.replace("/(tabs)/dashboard");
-  }, [isAdmin, router]);
+  // Admins have no athletic/parent profile schema. Phase 3 of the role
+  // experience leaves a minimal admin profile (see fix(admin) follow-up
+  // commit); until then they bounce to their dashboard via the shared
+  // role-redirect hook.
+  const redirecting = useRoleHomeRedirect([
+    "athlete",
+    "coach",
+    "recruiter",
+    "parent",
+  ]);
 
   const [me, setMe] = useState<any | null>(null);
   const [profileRaw, setProfileRaw] = useState<any | null>(null);
@@ -427,6 +432,7 @@ export default function ProfileScreen() {
       : null;
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   const displayName = me?.name ?? user?.name ?? "User";
   const location: string | null = me?.location ?? null;

@@ -10,6 +10,7 @@ import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
 import { outreachService } from "@/services/outreach";
 import { conversationsService } from "@/services/conversations";
+import { initialTabForRole, Role } from "@/lib/roleRoutes";
 
 function BadgeIcon({
   name,
@@ -80,12 +81,11 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
-type Role = "athlete" | "coach" | "recruiter" | "parent" | "admin";
-
 /**
  * Per-role tab visibility map. `href: null` removes the tab from the bar
  * but keeps the route registered so direct `router.push(...)` still works
- * (each role-gated screen does its own redirect-to-home on focus).
+ * (each role-gated screen does its own redirect-to-home on focus via
+ * useRoleHomeRedirect in @/lib/roleRoutes).
  *
  * The big design decisions encoded here:
  *  - Globe is athletes-only (vanity tab; the platform stats live in the
@@ -113,12 +113,6 @@ function tabVisibleForRole(tab: string, role: Role | undefined): boolean {
       // Internal console — never sees the player surface.
       return ["dashboard", "reviews", "users", "more"].includes(tab);
   }
-}
-
-function initialRouteForRole(role: Role | undefined): string {
-  if (role === "admin") return "dashboard";
-  if (role === "parent") return "home";
-  return "index";
 }
 
 export default function TabLayout() {
@@ -169,7 +163,7 @@ export default function TabLayout() {
   return (
     <Tabs
       backBehavior="initialRoute"
-      initialRouteName={initialRouteForRole(role)}
+      initialRouteName={initialTabForRole(role)}
       screenOptions={{
         tabBarActiveTintColor: theme.accent,
         tabBarInactiveTintColor: theme.textMuted,
