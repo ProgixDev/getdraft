@@ -251,9 +251,11 @@ export default function GlobeTab() {
     Poppins_800ExtraBold,
   });
 
-  // Globe is an athletes-only vanity tab; everyone else lands on their
-  // role's home via useRoleHomeRedirect (focus-based).
-  const redirecting = useRoleHomeRedirect(["athlete"]);
+  // Globe is the map view of the discover feed for everyone who swipes —
+  // athletes see recruiters/coaches, recruiters/coaches see athletes (the
+  // role split is enforced on the backend). Parents and admins land on
+  // their own role's home via useRoleHomeRedirect (focus-based).
+  const redirecting = useRoleHomeRedirect(["athlete", "coach", "recruiter"]);
 
   const [isActive, setIsActive] = useState(false);
   const [showStats, setShowStats] = useState(false);

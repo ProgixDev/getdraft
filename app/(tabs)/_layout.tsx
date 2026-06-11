@@ -88,8 +88,9 @@ const badgeStyles = StyleSheet.create({
  * useRoleHomeRedirect in @/lib/roleRoutes).
  *
  * The big design decisions encoded here:
- *  - Globe is athletes-only (vanity tab; the platform stats live in the
- *    admin dashboard for everyone else).
+ *  - Globe is the map view of the discover feed (tap a point → swipe).
+ *    Open to athletes, coaches and recruiters — everyone who actually
+ *    drafts. Parents and admins don't get it.
  *  - Feed center button is athletes-only — recruiters posting reels was
  *    out of role; parents and admins never post.
  *  - Parents and admins each have a dedicated set: parent = guardian
@@ -104,8 +105,10 @@ function tabVisibleForRole(tab: string, role: Role | undefined): boolean {
       return ["index", "matches", "feed", "globe", "more"].includes(tab);
     case "coach":
     case "recruiter":
-      // Drop Feed (center "+") and Globe — they were posing as athletes.
-      return ["index", "matches", "more"].includes(tab);
+      // Drop Feed (center "+") — recruiters posting reels was out of
+      // role. Globe is in: it's the map of swipe targets, so coaches
+      // and recruiters get it too (showing athletes instead of recruiters).
+      return ["index", "matches", "globe", "more"].includes(tab);
     case "parent":
       // Guardian dashboard + inbox + more. No Discover/Feed/Globe.
       return ["home", "matches", "more"].includes(tab);
@@ -304,7 +307,7 @@ export default function TabLayout() {
         name="profile"
         options={{ href: null, title: "Profile" }}
       />
-      {/* Athlete only — Globe */}
+      {/* Athlete + Recruiter — Globe (map view of swipe targets) */}
       <Tabs.Screen
         name="globe"
         options={{
