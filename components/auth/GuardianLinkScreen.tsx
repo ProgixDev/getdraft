@@ -22,6 +22,7 @@ import {
 } from 'expo-camera';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { videos } from '@/config/assets';
+import { uploadsService } from '@/services/uploads';
 import {
     useFonts,
     Poppins_400Regular,
@@ -258,25 +259,28 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                 return;
             }
 
-            const fileName = `declaration-${Date.now()}.mp4`;
+            // Derive the extension from the recorded file (Android tends to
+            // produce .mp4, iOS .mov). Hardcoding .mp4 / video/mp4 on an
+            // iOS .mov silently misnamed the object and broke the
+            // content-type header on the signed PUT.
+            const lower = recordedUri.toLowerCase();
+            const ext = lower.endsWith('.mov')
+                ? 'mov'
+                : lower.endsWith('.m4v')
+                  ? 'm4v'
+                  : 'mp4';
+            const contentType = ext === 'mov' ? 'video/quicktime' : 'video/mp4';
+            const fileName = `declaration-${Date.now()}.${ext}`;
             const { signedUrl, path } = await guardianLinksService.getVideoUploadUrl({
                 linkId: link.id,
                 fileName,
             });
 
-            // Read the recorded file as a blob and PUT it to the signed URL.
-            // expo-camera's recordAsync returns a file:// URI, which fetch()
-            // can read as a Blob on RN.
-            const fileResp = await fetch(recordedUri);
-            const blob = await fileResp.blob();
-            const uploadResp = await fetch(signedUrl, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'video/mp4' },
-                body: blob,
-            });
-            if (!uploadResp.ok) {
-                throw new Error(`Upload failed (${uploadResp.status}).`);
-            }
+            // Stream the file from disk via FileSystem.uploadAsync — the
+            // previous fetch(file://) -> blob approach loaded the entire
+            // 20s recording into JS memory (fragile on Android, especially
+            // on low-RAM devices) and routinely failed silently.
+            await uploadsService.uploadFromUri(signedUrl, recordedUri, contentType);
 
             await guardianLinksService.submitVideo({ linkId: link.id, storagePath: path });
             setStep('submitted');
