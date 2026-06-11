@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RankingsService } from './rankings.service';
@@ -36,5 +36,13 @@ export class RankingsController {
   @ApiOperation({ summary: "The current athlete's rank within their cohort" })
   getMyRank(@CurrentUser('id') userId: string) {
     return this.rankings.getMyRank(userId);
+  }
+
+  // Public-profile credibility chip — returns the ranking row for an
+  // arbitrary user id (or null when the user isn't a ranked athlete).
+  @Get('user/:id')
+  @ApiOperation({ summary: "Ranking row for a specific user" })
+  getRankForUser(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.rankings.getRankForUser(id);
   }
 }

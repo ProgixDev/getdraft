@@ -161,4 +161,16 @@ export const rankingsService = {
       return null;
     }
   },
+
+  // Ranking row for any user — powers the credibility chip on the public
+  // profile. Same null-on-failure contract as getMyRank so callers can
+  // simply hide the chip when this resolves to null.
+  async getRankForUser(userId: string): Promise<RankingRow | null> {
+    try {
+      const { data } = await api.get(`/rankings/user/${userId}`);
+      return (data.data as RankingRow | null) ?? null;
+    } catch {
+      return null;
+    }
+  },
 };

@@ -25,6 +25,12 @@ import { brand, semantic, theme } from '@/config/colors';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
+import {
+  rankingsService,
+  starsForRank,
+  DIVISION_LABEL,
+  type RankingRow,
+} from '@/services/rankings';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 48) / 3 - 8;
@@ -106,6 +112,7 @@ export default function PublicProfileScreen() {
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [rank, setRank] = useState<RankingRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blocking, setBlocking] = useState(false);
@@ -135,6 +142,11 @@ export default function PublicProfileScreen() {
       statsService.getProfileStats(id)
         .then((data) => { if (!cancelled) setStats(data ?? null); })
         .catch(() => { if (!cancelled) setStats(null); });
+
+      // Ranking row — service is null-safe, so non-athlete or unranked
+      // viewers just resolve to null and the credibility chip stays hidden.
+      rankingsService.getRankForUser(id)
+        .then((row) => { if (!cancelled) setRank(row); });
 
       // Best-effort view tracking — don't surface errors.
       usersService.trackProfileView(id).catch(() => {});
@@ -275,6 +287,35 @@ export default function PublicProfileScreen() {
                   </>
                 )}
               </View>
+            )}
+            {isAthlete && rank && (rank.division === 'CA' || rank.division === 'US') && (
+              <Pressable
+                style={({ pressed }) => [styles.rankChip, pressed && styles.rankChipPressed]}
+                onPress={() => router.push('/rankings')}
+                accessibilityRole="button"
+                accessibilityLabel={`Ranked number ${rank.division_rank} in ${DIVISION_LABEL[rank.division]} ${rank.sport}. Open rankings.`}
+              >
+                <Text style={styles.rankChipHash}>#{rank.division_rank}</Text>
+                <Text style={styles.rankChipMeta} numberOfLines={1}>
+                  in {DIVISION_LABEL[rank.division]} · {rank.sport}
+                </Text>
+                <Text style={styles.rankChipDot}>·</Text>
+                <View style={styles.rankChipStars}>
+                  {(() => {
+                    const filled = starsForRank(rank.division_rank, rank.cohort_size);
+                    return [1, 2, 3, 4, 5].map((i) => (
+                      <Ionicons
+                        key={i}
+                        name={i <= filled ? 'star' : 'star-outline'}
+                        size={11}
+                        color={i <= filled ? semantic.warning : theme.textMuted}
+                      />
+                    ));
+                  })()}
+                </View>
+                <Text style={styles.rankChipDot}>·</Text>
+                <Text style={styles.rankChipScore}>score {Math.round(rank.score)}</Text>
+              </Pressable>
             )}
           </View>
 
@@ -534,6 +575,45 @@ const styles = StyleSheet.create({
   sportDot: {
     fontSize: 13,
     color: theme.textMuted,
+  },
+  rankChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    marginHorizontal: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: semantic.warning,
+  },
+  rankChipPressed: { opacity: 0.7 },
+  rankChipHash: {
+    fontSize: 13,
+    fontFamily: 'Poppins_700Bold',
+    color: semantic.warning,
+  },
+  rankChipMeta: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.text,
+  },
+  rankChipDot: {
+    fontSize: 12,
+    color: theme.textMuted,
+  },
+  rankChipStars: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  rankChipScore: {
+    fontSize: 11,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.textSecondary,
+    letterSpacing: 0.3,
   },
   statsBar: {
     backgroundColor: theme.cardBg,

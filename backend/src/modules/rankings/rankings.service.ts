@@ -82,6 +82,15 @@ export class RankingsService {
    * athlete (no athlete profile / not role athlete / banned).
    */
   async getMyRank(userId: string): Promise<RankingRow | null> {
+    return this.getRankForUser(userId);
+  }
+
+  /**
+   * Ranking row for an arbitrary user id — used by the public profile to
+   * render a credibility chip. Returns null when the user is not a ranked
+   * athlete; callers should hide the chip in that case.
+   */
+  async getRankForUser(userId: string): Promise<RankingRow | null> {
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from(VIEW)
