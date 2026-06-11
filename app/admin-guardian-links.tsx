@@ -245,26 +245,33 @@ function ReviewCard(props: {
         <QRow label="Consent acknowledged" value={q.consentAcknowledged ? 'Yes' : 'No'} />
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Pressable
-          style={[styles.declineBtn, props.busy && { opacity: 0.6 }]}
-          onPress={props.onDecline}
-          disabled={props.busy}
-        >
-          <Text style={styles.declineBtnText}>Decline</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.approveBtn, props.busy && { opacity: 0.6 }]}
-          onPress={props.onApprove}
-          disabled={props.busy}
-        >
-          {props.busy ? (
-            <ActivityIndicator color={brand.white} />
-          ) : (
-            <Text style={styles.approveBtnText}>Approve</Text>
-          )}
-        </Pressable>
-      </View>
+      {/* Approve/Decline buttons are only valid while the link is still
+          pending review — once decided, the backend now rejects further
+          updates (409 ConflictException). The new (tabs)/reviews screen
+          already gates on isPending; mirror the same rule here so a
+          decided card no longer renders dead buttons. */}
+      {props.link.status === 'pending_admin' && (
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            style={[styles.declineBtn, props.busy && { opacity: 0.6 }]}
+            onPress={props.onDecline}
+            disabled={props.busy}
+          >
+            <Text style={styles.declineBtnText}>Decline</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.approveBtn, props.busy && { opacity: 0.6 }]}
+            onPress={props.onApprove}
+            disabled={props.busy}
+          >
+            {props.busy ? (
+              <ActivityIndicator color={brand.white} />
+            ) : (
+              <Text style={styles.approveBtnText}>Approve</Text>
+            )}
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }

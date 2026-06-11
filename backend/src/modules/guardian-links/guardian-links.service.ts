@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ConflictException,
   NotFoundException,
   ForbiddenException,
   Logger,
@@ -363,6 +364,25 @@ export class GuardianLinksService {
       throw new ForbiddenException('Admin role required.');
     }
     const supabase = this.supabaseService.getAdminClient();
+
+    // Read the current status FIRST. The old code applied the update
+    // with only `.eq('id', linkId)`, so an admin could flip a previously
+    // DECLINED link to APPROVED (or vice versa) — which silently grants a
+    // parent server-side access to that athlete. Only links still in
+    // pending_admin are decidable.
+    const { data: existing, error: readErr } = await supabase
+      .from('guardian_links')
+      .select('id, status')
+      .eq('id', linkId)
+      .maybeSingle();
+    if (readErr) throw new BadRequestException(readErr.message);
+    if (!existing) throw new NotFoundException('Link not found.');
+    if (existing.status !== 'pending_admin') {
+      throw new ConflictException(
+        'This guardian link has already been decided.',
+      );
+    }
+
     const { data, error } = await supabase
       .from('guardian_links')
       .update({
@@ -372,10 +392,16 @@ export class GuardianLinksService {
         decided_by: adminUserId,
       })
       .eq('id', linkId)
+      .eq('status', 'pending_admin') // belt-and-suspenders against a race
       .select()
       .maybeSingle();
     if (error) throw new BadRequestException(error.message);
-    if (!data) throw new NotFoundException('Link not found.');
+    if (!data) {
+      // Lost the race to another admin between the read and write.
+      throw new ConflictException(
+        'This guardian link has already been decided.',
+      );
+    }
     this.logger.log(
       `[guardian-link] ${linkId} -> ${decision} by admin ${adminUserId}`,
     );
