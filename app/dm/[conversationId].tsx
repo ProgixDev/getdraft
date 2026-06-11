@@ -71,6 +71,8 @@ export default function DmScreen() {
     initialOtherAvatar,
   );
   const [otherRole, setOtherRole] = useState(initialOtherRole);
+  // Tracked so the header avatar tap routes to the right /user/[id].
+  const [otherUserId, setOtherUserId] = useState<string | null>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -96,6 +98,7 @@ export default function DmScreen() {
           if (!initialOtherName) setOtherName(row.otherUser.name ?? "");
           if (!initialOtherAvatar) setOtherAvatar(row.otherUser.avatarUrl ?? null);
           if (!initialOtherRole) setOtherRole(row.otherUser.role ?? "");
+          if (row.otherUser.id) setOtherUserId(String(row.otherUser.id));
         }
         setMessages(
           (msgs ?? []).map((m) => ({
@@ -212,7 +215,23 @@ export default function DmScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={theme.text} />
         </Pressable>
-        <View style={styles.headerAvatarWrap}>
+        <Pressable
+          style={styles.headerAvatarWrap}
+          onPress={
+            otherUserId
+              ? () =>
+                  router.push({
+                    pathname: "/user/[userId]",
+                    params: { userId: otherUserId },
+                  })
+              : undefined
+          }
+          disabled={!otherUserId}
+          accessibilityRole={otherUserId ? "button" : undefined}
+          accessibilityLabel={
+            otherUserId ? `Open ${otherName || "user"}'s profile` : undefined
+          }
+        >
           {otherAvatar ? (
             <ExpoImage
               source={{ uri: otherAvatar }}
@@ -224,7 +243,7 @@ export default function DmScreen() {
               <Ionicons name="person" size={16} color={theme.textMuted} />
             </View>
           )}
-        </View>
+        </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {headerTitle}

@@ -15,6 +15,7 @@ import {
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
+import { useRouter } from "expo-router";
 import {
   useFonts,
   Poppins_400Regular,
@@ -510,7 +511,12 @@ function CommentRow({
   onLike: () => void;
   onDelete: () => void;
 }) {
+  const router = useRouter();
   const avatarSize = isReply ? 28 : 36;
+  const authorId = comment.author?.id;
+  const openAuthor = authorId
+    ? () => router.push({ pathname: "/user/[userId]", params: { userId: authorId } })
+    : undefined;
   return (
     <Pressable
       onLongPress={isMine ? onDelete : undefined}
@@ -521,36 +527,45 @@ function CommentRow({
         pressed && isMine && styles.pressed,
       ]}
     >
-      {comment.author?.avatarUrl ? (
-        <ExpoImage
-          source={{ uri: comment.author.avatarUrl }}
-          style={{
-            width: avatarSize,
-            height: avatarSize,
-            borderRadius: avatarSize / 2,
-            backgroundColor: theme.surface,
-          }}
-          contentFit="cover"
-        />
-      ) : (
-        <View
-          style={[
-            {
+      <Pressable
+        onPress={openAuthor}
+        disabled={!openAuthor}
+        accessibilityRole={openAuthor ? "button" : undefined}
+        accessibilityLabel={
+          openAuthor ? `Open ${comment.author?.name ?? "user"}'s profile` : undefined
+        }
+      >
+        {comment.author?.avatarUrl ? (
+          <ExpoImage
+            source={{ uri: comment.author.avatarUrl }}
+            style={{
               width: avatarSize,
               height: avatarSize,
               borderRadius: avatarSize / 2,
               backgroundColor: theme.surface,
-            },
-            styles.avatarFallback,
-          ]}
-        >
-          <Ionicons
-            name="person"
-            size={isReply ? 12 : 16}
-            color={theme.textMuted}
+            }}
+            contentFit="cover"
           />
-        </View>
-      )}
+        ) : (
+          <View
+            style={[
+              {
+                width: avatarSize,
+                height: avatarSize,
+                borderRadius: avatarSize / 2,
+                backgroundColor: theme.surface,
+              },
+              styles.avatarFallback,
+            ]}
+          >
+            <Ionicons
+              name="person"
+              size={isReply ? 12 : 16}
+              color={theme.textMuted}
+            />
+          </View>
+        )}
+      </Pressable>
       <View style={styles.commentBody}>
         <Text style={styles.commentText}>
           <Text style={styles.commentAuthor}>

@@ -455,33 +455,51 @@ function PostCard({
   onLikeToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
 }) {
+  const router = useRouter();
   const heart = useHeartBurst();
   const handleDoubleTapLike = useCallback(() => {
     heart.trigger();
     if (!post.likedByMe) onLikeToggle(post);
   }, [heart, onLikeToggle, post]);
   const onMediaPress = useDoubleTap({ onDouble: handleDoubleTapLike });
+  const authorId = post.author?.id;
+  const openAuthor = authorId
+    ? () => router.push({ pathname: "/user/[userId]", params: { userId: authorId } })
+    : undefined;
 
   return (
     <View style={styles.card}>
       <View style={styles.cardAuthorRow}>
-        {post.author?.avatarUrl ? (
-          <ExpoImage
-            source={{ uri: post.author.avatarUrl }}
-            style={styles.cardAvatar}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={[styles.cardAvatar, styles.cardAvatarFallback]}>
-            <Ionicons name="person" size={16} color={theme.textMuted} />
-          </View>
-        )}
-        <View style={{ flex: 1 }}>
+        <Pressable
+          onPress={openAuthor}
+          disabled={!openAuthor}
+          accessibilityRole={openAuthor ? "button" : undefined}
+          accessibilityLabel={
+            openAuthor ? `Open ${post.author?.name ?? "user"}'s profile` : undefined
+          }
+        >
+          {post.author?.avatarUrl ? (
+            <ExpoImage
+              source={{ uri: post.author.avatarUrl }}
+              style={styles.cardAvatar}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.cardAvatar, styles.cardAvatarFallback]}>
+              <Ionicons name="person" size={16} color={theme.textMuted} />
+            </View>
+          )}
+        </Pressable>
+        <Pressable
+          style={{ flex: 1 }}
+          onPress={openAuthor}
+          disabled={!openAuthor}
+        >
           <Text style={styles.cardAuthorName} numberOfLines={1}>
             {post.author?.name || "Someone"}
           </Text>
           <Text style={styles.cardTime}>{timeAgo(post.createdAt)}</Text>
-        </View>
+        </Pressable>
       </View>
 
       <Pressable
@@ -661,6 +679,7 @@ function ReelItem({
   onLikeToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
 }) {
+  const router = useRouter();
   const player = useVideoPlayer(post.mediaUrl, (p) => {
     p.loop = true;
     p.muted = true;
@@ -669,6 +688,10 @@ function ReelItem({
   const [userPaused, setUserPaused] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const heart = useHeartBurst();
+  const authorId = post.author?.id;
+  const openAuthor = authorId
+    ? () => router.push({ pathname: "/user/[userId]", params: { userId: authorId } })
+    : undefined;
 
   useEffect(() => {
     if (!player) return;
@@ -788,7 +811,15 @@ function ReelItem({
         </View>
 
         <View style={styles.reelBottom} pointerEvents="auto">
-          <View style={styles.reelAuthorRow}>
+          <Pressable
+            style={styles.reelAuthorRow}
+            onPress={openAuthor}
+            disabled={!openAuthor}
+            accessibilityRole={openAuthor ? "button" : undefined}
+            accessibilityLabel={
+              openAuthor ? `Open ${post.author?.name ?? "user"}'s profile` : undefined
+            }
+          >
             {post.author?.avatarUrl ? (
               <ExpoImage
                 source={{ uri: post.author.avatarUrl }}
@@ -804,7 +835,7 @@ function ReelItem({
               {post.author?.name || "Someone"}
             </Text>
             <Text style={styles.reelTime}>· {timeAgo(post.createdAt)}</Text>
-          </View>
+          </Pressable>
           {post.caption ? (
             <Text style={styles.reelCaption} numberOfLines={3}>
               {post.caption}
