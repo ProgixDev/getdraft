@@ -70,6 +70,14 @@ export class SignupOtpService {
     if (!row) {
       throw new BadRequestException('No pending verification for this contact.');
     }
+    if (row.verified) {
+      // The OTP was already consumed once. The caller already received a
+      // verificationToken; re-verifying must not mint another. The next
+      // signup attempt must request a fresh code.
+      throw new BadRequestException(
+        'This code has already been used. Request a new one.',
+      );
+    }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       throw new BadRequestException('This code has expired. Request a new one.');
     }
