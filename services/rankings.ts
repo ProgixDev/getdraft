@@ -52,6 +52,19 @@ export function starsForRank(rank: number, cohortSize: number): number {
   return 1;
 }
 
+// Cohort sizes for the demo divisions. Declared BEFORE MOCK_RANKINGS on
+// purpose: that array calls mock() at module-load time and mock() reads
+// this map, so a const declared *after* it would be undefined at that
+// point — an app-launch crash ("Cannot convert undefined value to object").
+const MOCK_COHORT: Record<string, number> = {
+  "CA:Hockey": 3,
+  "CA:Basketball": 2,
+  "CA:Soccer": 1,
+  "US:Football": 3,
+  "US:Basketball": 2,
+  "US:Baseball": 1,
+};
+
 // Graceful demo fallback — keeps the leaderboard populated when the API is
 // unreachable or the live DB is still sparse. Real data always wins.
 const MOCK_RANKINGS: RankingRow[] = [
@@ -102,15 +115,6 @@ function mock(
     cohort_size: cohort,
   };
 }
-
-const MOCK_COHORT: Record<string, number> = {
-  "CA:Hockey": 3,
-  "CA:Basketball": 2,
-  "CA:Soccer": 1,
-  "US:Football": 3,
-  "US:Basketball": 2,
-  "US:Baseball": 1,
-};
 
 export const rankingsService = {
   async getRankings(
