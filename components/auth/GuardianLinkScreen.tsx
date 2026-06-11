@@ -9,6 +9,8 @@ import {
     Alert,
     TextInput,
     RefreshControl,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -369,6 +371,10 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
 
     return (
         <LinearGradient colors={[brand.primary, '#0a4d8f', brand.primary]} style={styles.container}>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
             <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
@@ -462,6 +468,7 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                     />
                 )}
             </ScrollView>
+            </KeyboardAvoidingView>
         </LinearGradient>
     );
 };

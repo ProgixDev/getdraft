@@ -8,6 +8,8 @@ import {
     ActivityIndicator,
     Alert,
     TextInput,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -210,6 +212,10 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
             colors={[brand.primary, '#0a4d8f', brand.primary]}
             style={styles.container}
         >
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
             <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
@@ -288,6 +294,7 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
                     )}
                 </Pressable>
             </ScrollView>
+            </KeyboardAvoidingView>
         </LinearGradient>
     );
 };
