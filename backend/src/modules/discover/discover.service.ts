@@ -17,6 +17,61 @@ import {
 } from '../../common/types';
 import { NotificationsService } from '../notifications/notifications.service';
 
+// ── Globe placement ────────────────────────────────────────────────
+// Approximate map centers for the countries we support. Used to place
+// athletes who have a country but no precise lat/lng yet (signup currently
+// saves country only) so REAL athletes appear on the talent globe instead of
+// only the mock seed. Same CA/US normalization as the rankings view.
+const COUNTRY_CENTERS: Record<string, { lat: number; lng: number }> = {
+  CA: { lat: 56.13, lng: -106.35 },
+  US: { lat: 39.83, lng: -98.58 },
+};
+
+function normalizeCountryToKey(country: string | null): string | null {
+  const c = (country ?? '').trim().toLowerCase();
+  if (['canada', 'ca', 'can'].includes(c)) return 'CA';
+  if (
+    [
+      'usa',
+      'us',
+      'united states',
+      'united states of america',
+      'u.s.a.',
+      'u.s.',
+      'america',
+    ].includes(c)
+  ) {
+    return 'US';
+  }
+  return null;
+}
+
+// Stable per-user hash so the country offset is deterministic (same spread
+// every reload, and two same-country athletes don't stack on one point).
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+function placeByCountry(
+  country: string | null,
+  userId: string,
+): { lat: number; lng: number } | null {
+  const key = normalizeCountryToKey(country);
+  if (!key) return null;
+  const base = COUNTRY_CENTERS[key];
+  const h = hashString(userId);
+  // Mask to non-negative 10-bit slices so the offsets stay bounded — a raw
+  // `h % 1000` can be negative (h is a signed 32-bit int) and would fling a
+  // US athlete down to the Caribbean.
+  const latOff = ((h & 0x3ff) / 1024 - 0.5) * 12; // ±6°, bits 0-9
+  const lngOff = (((h >> 10) & 0x3ff) / 1024 - 0.5) * 18; // ±9°, bits 10-19
+  return { lat: base.lat + latOff, lng: base.lng + lngOff };
+}
+
 @Injectable()
 export class DiscoverService {
   private readonly logger = new Logger(DiscoverService.name);
@@ -169,8 +224,10 @@ export class DiscoverService {
 
   // Globe = talent map of athletes shown to EVERY viewer (recruiters and
   // coaches do the drafting, athletes browse the field too). Same
-  // not-yet-swiped, non-blocked, lat/lng-present filtering as the feed,
-  // narrowed to role 'athlete'. Parents stay 403 — they don't draft.
+  // not-yet-swiped, non-blocked filtering as the feed, narrowed to role
+  // 'athlete'. Each athlete is placed by precise lat/lng when set, else by
+  // their country center — so real athletes appear even before signup
+  // captures coordinates. Parents stay 403 — they don't draft.
   async getMapPoints(user: CurrentUserPayload) {
     if (user.role === UserRole.PARENT) {
       throw new ForbiddenException('Parents do not have a discover feed');
@@ -183,15 +240,13 @@ export class DiscoverService {
         role: 'athlete',
         is_banned: false,
         id: { notIn: [...excluded, user.id] },
-        // Coordinates are required to plot on the globe.
-        latitude: { not: null },
-        longitude: { not: null },
       },
       select: {
         id: true,
         name: true,
         avatar_url: true,
         kyc_status: true,
+        country: true,
         latitude: true,
         longitude: true,
         athlete_profiles: {
@@ -212,11 +267,23 @@ export class DiscoverService {
 
     return users
       .map((u) => {
-        const lat = u.latitude !== null ? Number(u.latitude) : NaN;
-        const lng = u.longitude !== null ? Number(u.longitude) : NaN;
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
         const p = u.athlete_profiles;
         if (!p) return null;
+        // Precise coords win; otherwise place by country (+ deterministic
+        // per-user offset). Signup saves country only today, so this is what
+        // makes REAL athletes show on the globe until lat/lng is captured.
+        let lat: number;
+        let lng: number;
+        if (u.latitude !== null && u.longitude !== null) {
+          lat = Number(u.latitude);
+          lng = Number(u.longitude);
+        } else {
+          const placed = placeByCountry(u.country, u.id);
+          if (!placed) return null;
+          lat = placed.lat;
+          lng = placed.lng;
+        }
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
         const photos = Array.isArray(p.photos) ? (p.photos as string[]) : [];
         return {
           id: u.id,
