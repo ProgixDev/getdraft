@@ -83,57 +83,99 @@ export default function MoreScreen() {
           ? (athleteRoleLine ?? "Athlete")
           : user?.role === "parent"
             ? "Parent"
-            : "User";
+            : user?.role === "admin"
+              ? "Admin"
+              : "User";
 
-  const menuItems = [
-    {
-      icon: "person-outline",
-      label: "My Profile",
-      onPress: () => router.push("/(tabs)/profile"),
-    },
-    {
-      icon: "star-outline",
-      label: "Who Drafted You",
-      onPress: () => router.push("/drafts-received"),
-    },
-    {
-      icon: "settings-outline",
-      label: "Settings",
-      onPress: () => router.push("/settings"),
-    },
-    // Parents get a quick route to the guardian-link flow so they can
-    // replay the tutorial video and record their declaration without
-    // digging through Settings.
-    ...(user?.role === "parent"
-      ? [
-          {
-            icon: "videocam-outline",
-            label: "Verify your guardian link",
-            onPress: () => router.push("/guardian-link"),
-          },
-        ]
-      : []),
-    {
-      icon: "diamond-outline",
-      label: "My Subscription",
-      onPress: () => router.push("/subscription"),
-    },
-    {
-      icon: "help-circle-outline",
-      label: "Help Center",
-      onPress: () => router.push("/help-center"),
-    },
-    {
-      icon: "people-outline",
-      label: "Invite Friends",
-      onPress: () => router.push("/invite-friends"),
-    },
-    {
-      icon: "information-circle-outline",
-      label: "About GetDraft",
-      onPress: () => router.push("/about"),
-    },
-  ];
+  const isAdmin = user?.role === "admin";
+  const isParent = user?.role === "parent";
+  const isAthlete = user?.role === "athlete";
+
+  const menuItems = isAdmin
+    ? [
+        {
+          icon: "person-outline",
+          label: "My Profile",
+          onPress: () => router.push("/(tabs)/profile"),
+        },
+        {
+          icon: "settings-outline",
+          label: "Settings",
+          onPress: () => router.push("/settings"),
+        },
+        {
+          icon: "help-circle-outline",
+          label: "Help Center",
+          onPress: () => router.push("/help-center"),
+        },
+        {
+          icon: "information-circle-outline",
+          label: "About GetDraft",
+          onPress: () => router.push("/about"),
+        },
+      ]
+    : [
+        {
+          icon: "person-outline",
+          label: "My Profile",
+          onPress: () => router.push("/(tabs)/profile"),
+        },
+        // "Who Drafted You" is athlete-side only; recruiters use Draft
+        // Board, parents have the inbox.
+        ...(isAthlete
+          ? [
+              {
+                icon: "star-outline" as const,
+                label: "Who Drafted You",
+                onPress: () => router.push("/drafts-received"),
+              },
+            ]
+          : []),
+        {
+          icon: "settings-outline",
+          label: "Settings",
+          onPress: () => router.push("/settings"),
+        },
+        // Parents get a quick route to the guardian-link flow so they can
+        // replay the tutorial video and record their declaration without
+        // digging through Settings.
+        ...(isParent
+          ? [
+              {
+                icon: "videocam-outline" as const,
+                label: "Verify your guardian link",
+                onPress: () => router.push("/guardian-link"),
+              },
+            ]
+          : []),
+        // Billing lives on the athlete + recruiter side. Parents are
+        // covered by their athlete's plan and never see a subscription
+        // they could buy here.
+        ...(isParent
+          ? []
+          : [
+              {
+                icon: "diamond-outline" as const,
+                label: "My Subscription",
+                onPress: () => router.push("/subscription"),
+              },
+            ]),
+        {
+          icon: "help-circle-outline",
+          label: "Help Center",
+          onPress: () => router.push("/help-center"),
+        },
+        {
+          icon: "people-outline",
+          label: "Invite Friends",
+          onPress: () => router.push("/invite-friends"),
+        },
+        {
+          icon: "information-circle-outline",
+          label: "About GetDraft",
+          onPress: () => router.push("/about"),
+        },
+      ];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

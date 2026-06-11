@@ -13,7 +13,6 @@ import { conversationsService } from "@/services/conversations";
 
 function BadgeIcon({
   name,
-  focused,
   color,
   count,
 }: {
@@ -81,14 +80,62 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
+type Role = "athlete" | "coach" | "recruiter" | "parent" | "admin";
+
+/**
+ * Per-role tab visibility map. `href: null` removes the tab from the bar
+ * but keeps the route registered so direct `router.push(...)` still works
+ * (each role-gated screen does its own redirect-to-home on focus).
+ *
+ * The big design decisions encoded here:
+ *  - Globe is athletes-only (vanity tab; the platform stats live in the
+ *    admin dashboard for everyone else).
+ *  - Feed center button is athletes-only — recruiters posting reels was
+ *    out of role; parents and admins never post.
+ *  - Parents and admins each have a dedicated set: parent = guardian
+ *    dashboard + messages + more; admin = dashboard + reviews + users + more.
+ */
+function tabVisibleForRole(tab: string, role: Role | undefined): boolean {
+  if (!role) return tab !== "dashboard" && tab !== "reviews" && tab !== "users" && tab !== "home";
+
+  switch (role) {
+    case "athlete":
+      // Reference experience — original 5 tabs.
+      return ["index", "matches", "feed", "globe", "more"].includes(tab);
+    case "coach":
+    case "recruiter":
+      // Drop Feed (center "+") and Globe — they were posing as athletes.
+      return ["index", "matches", "more"].includes(tab);
+    case "parent":
+      // Guardian dashboard + inbox + more. No Discover/Feed/Globe.
+      return ["home", "matches", "more"].includes(tab);
+    case "admin":
+      // Internal console — never sees the player surface.
+      return ["dashboard", "reviews", "users", "more"].includes(tab);
+  }
+}
+
+function initialRouteForRole(role: Role | undefined): string {
+  if (role === "admin") return "dashboard";
+  if (role === "parent") return "home";
+  return "index";
+}
+
 export default function TabLayout() {
   const user = useSelector((state: RootState) => state.auth.user);
-  const isParent = user?.role === "parent";
+  const role = user?.role as Role | undefined;
+  const isParent = role === "parent";
+  const isAdmin = role === "admin";
 
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
+    if (isAdmin) {
+      // Admin doesn't have a chat inbox surface; keep the badge at 0.
+      setUnreadCount(0);
+      return;
+    }
     let cancelled = false;
     const threadFetcher = isParent
       ? outreachService.getOutreachList()
@@ -115,11 +162,13 @@ export default function TabLayout() {
     return () => {
       cancelled = true;
     };
-  }, [isParent, user]);
+  }, [isParent, isAdmin, user]);
+
+  const matchesLabel = isParent ? "Messages" : "Draft Board";
 
   return (
     <Tabs
-      initialRouteName={isParent ? "matches" : "index"}
+      initialRouteName={initialRouteForRole(role)}
       screenOptions={{
         tabBarActiveTintColor: theme.accent,
         tabBarInactiveTintColor: theme.textMuted,
@@ -130,15 +179,74 @@ export default function TabLayout() {
           borderTopColor: theme.tabBarBorder,
           borderTopWidth: 1,
         },
-        tabBarLabelStyle: {
-          fontSize: 11,
-        },
+        tabBarLabelStyle: { fontSize: 11 },
       }}
     >
+      {/* Admin — Dashboard */}
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          href: tabVisibleForRole("dashboard", role) ? undefined : null,
+          title: "Dashboard",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "stats-chart" : "stats-chart-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      {/* Admin — Reviews queue */}
+      <Tabs.Screen
+        name="reviews"
+        options={{
+          href: tabVisibleForRole("reviews", role) ? undefined : null,
+          title: "Reviews",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "shield-checkmark" : "shield-checkmark-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      {/* Admin — Users directory */}
+      <Tabs.Screen
+        name="users"
+        options={{
+          href: tabVisibleForRole("users", role) ? undefined : null,
+          title: "Users",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "people" : "people-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      {/* Parent — Guardian Home */}
+      <Tabs.Screen
+        name="home"
+        options={{
+          href: tabVisibleForRole("home", role) ? undefined : null,
+          title: "Home",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "shield-half" : "shield-half-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      {/* Athlete + Recruiter — Discover (swipe) */}
       <Tabs.Screen
         name="index"
         options={{
-          href: isParent ? null : undefined,
+          href: tabVisibleForRole("index", role) ? undefined : null,
           title: "Discover",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
@@ -149,13 +257,23 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Athlete/Recruiter Draft Board · Parent Messages */}
       <Tabs.Screen
         name="matches"
         options={{
-          title: isParent ? "Inbox" : "Draft Board",
+          href: tabVisibleForRole("matches", role) ? undefined : null,
+          title: matchesLabel,
           tabBarIcon: ({ color, focused }) => (
             <BadgeIcon
-              name={focused ? "trophy" : "trophy-outline"}
+              name={
+                isParent
+                  ? focused
+                    ? "chatbubbles"
+                    : "chatbubbles-outline"
+                  : focused
+                    ? "trophy"
+                    : "trophy-outline"
+              }
               focused={focused}
               color={color}
               count={unreadCount}
@@ -163,9 +281,11 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Athlete only — Feed (center "+") */}
       <Tabs.Screen
         name="feed"
         options={{
+          href: tabVisibleForRole("feed", role) ? undefined : null,
           title: "",
           tabBarLabel: () => null,
           tabBarIcon: ({ focused }) => (
@@ -184,18 +304,16 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Profile — always hidden from the bar (opens from More) */}
       <Tabs.Screen
         name="profile"
-        options={{
-          // Removed from the tab bar — opened from the "More" menu instead.
-          // Route stays registered so router.push("/(tabs)/profile") still works.
-          href: null,
-          title: "Profile",
-        }}
+        options={{ href: null, title: "Profile" }}
       />
+      {/* Athlete only — Globe */}
       <Tabs.Screen
         name="globe"
         options={{
+          href: tabVisibleForRole("globe", role) ? undefined : null,
           title: "Globe",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
@@ -206,9 +324,11 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Everyone — More */}
       <Tabs.Screen
         name="more"
         options={{
+          href: tabVisibleForRole("more", role) ? undefined : null,
           title: "More",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
@@ -219,12 +339,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>
   );
 }

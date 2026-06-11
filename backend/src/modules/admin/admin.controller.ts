@@ -45,4 +45,10 @@ export class AdminController {
   getStats() {
     return this.adminService.getStats();
   }
+
+  @Get('queue-counts')
+  @ApiOperation({ summary: 'Get queue counts for the admin dashboard' })
+  getQueueCounts() {
+    return this.adminService.getQueueCounts();
+  }
 }

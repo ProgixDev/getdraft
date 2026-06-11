@@ -482,6 +482,7 @@ export default function DiscoverScreen() {
   );
   const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
   const isParent = user?.role === "parent";
+  const isAdmin = user?.role === "admin";
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [swipeLock, setSwipeLock] = useState(false);
@@ -595,11 +596,12 @@ export default function DiscoverScreen() {
     setPendingAction(null);
   }, [currentIndex]);
 
+  // Role redirects out of Discover. Parents land on their guardian home;
+  // admins land on the admin dashboard. Athletes + recruiters stay.
   useEffect(() => {
-    if (isParent) {
-      router.replace("/(tabs)/matches");
-    }
-  }, [isParent, router]);
+    if (isParent) router.replace("/(tabs)/home");
+    else if (isAdmin) router.replace("/(tabs)/dashboard");
+  }, [isParent, isAdmin, router]);
 
   const handleCardAreaLayout = useCallback((e: any) => {
     const next = Math.round(e?.nativeEvent?.layout?.height ?? 0);
@@ -884,7 +886,7 @@ export default function DiscoverScreen() {
   // early returns BELOW all hooks so the call order is stable when fontsLoaded
   // flips from false to true or the parent role check redirects.
   if (!fontsLoaded) return null;
-  if (isParent) return null;
+  if (isParent || isAdmin) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

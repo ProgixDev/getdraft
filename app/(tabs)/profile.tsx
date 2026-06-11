@@ -161,6 +161,13 @@ export default function ProfileScreen() {
   const isAthlete = user?.role === "athlete";
   const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
   const isParent = user?.role === "parent";
+  const isAdmin = user?.role === "admin";
+
+  // Admins don't have an athletic/parent profile schema — kick them back to
+  // their console instead of rendering an empty athlete editor.
+  React.useEffect(() => {
+    if (isAdmin) router.replace("/(tabs)/dashboard");
+  }, [isAdmin, router]);
 
   const [me, setMe] = useState<any | null>(null);
   const [profileRaw, setProfileRaw] = useState<any | null>(null);
