@@ -24,8 +24,9 @@ export class AdminController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('role') role?: string,
+    @Query('flag') flag?: 'kyc_pending' | 'kyc_declined' | 'banned',
   ) {
-    return this.adminService.getUsers(page || 1, limit || 20, role);
+    return this.adminService.getUsers(page || 1, limit || 20, role, flag);
   }
 
   @Put('users/:id/verify')

@@ -105,29 +105,23 @@ export default function AdminUsersTab() {
     setLoading(true);
     setError(false);
     try {
-      // Server-side role filters; client-side post-filters for KYC / banned
-      // (we ask for ALL when the filter is a flag rather than a role).
+      // Server-side filters end-to-end now: roles are passed as `role`,
+      // KYC/banned flags as `flag`. The old client-side slice over the
+      // first 100 rows disagreed with the dashboard's full-table counts
+      // past the first page.
       const isRoleFilter = ["athlete", "coach", "recruiter", "parent", "admin"]
         .includes(f);
+      const flag =
+        f === "kyc_pending" || f === "kyc_declined" || f === "banned"
+          ? f
+          : undefined;
       const page = await adminService.getUsers(
         1,
         100,
         isRoleFilter ? f : undefined,
+        flag,
       );
-      let rows = page.users;
-      if (f === "kyc_pending") {
-        // KYC has TWO active statuses: 'pending' (session created locally)
-        // and 'in_review' (Didit is processing it). Both belong in the
-        // queue an admin should triage.
-        rows = rows.filter(
-          (u) => u.kyc_status === "pending" || u.kyc_status === "in_review",
-        );
-      } else if (f === "kyc_declined") {
-        rows = rows.filter((u) => u.kyc_status === "declined");
-      } else if (f === "banned") {
-        rows = rows.filter((u) => u.is_banned);
-      }
-      setRows(rows);
+      setRows(page.users);
     } catch {
       setError(true);
       setRows([]);

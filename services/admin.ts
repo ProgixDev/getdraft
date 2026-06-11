@@ -62,9 +62,15 @@ export const adminService = {
     page = 1,
     limit = 20,
     role?: string,
+    flag?: "kyc_pending" | "kyc_declined" | "banned",
   ): Promise<AdminUserList> {
     const { data } = await api.get("/admin/users", {
-      params: { page, limit, ...(role ? { role } : {}) },
+      params: {
+        page,
+        limit,
+        ...(role ? { role } : {}),
+        ...(flag ? { flag } : {}),
+      },
     });
     return data.data;
   },

@@ -9,7 +9,18 @@ import { SupabaseService } from '../../config/supabase.config';
 export class AdminService {
   constructor(private supabaseService: SupabaseService) {}
 
-  async getUsers(page = 1, limit = 20, role?: string) {
+  async getUsers(
+    page = 1,
+    limit = 20,
+    role?: string,
+    /**
+     * Server-side flag filters used by the admin Users tab so the count
+     * matches the list past the first page. 'kyc_pending' covers both
+     * 'pending' (session created) and 'in_review' (Didit processing) —
+     * same set the dashboard's queue counts use.
+     */
+    flag?: 'kyc_pending' | 'kyc_declined' | 'banned',
+  ) {
     const supabase = this.supabaseService.getAdminClient();
     const offset = (page - 1) * limit;
 
@@ -21,6 +32,13 @@ export class AdminService {
 
     if (role) {
       query = query.eq('role', role);
+    }
+    if (flag === 'kyc_pending') {
+      query = query.in('kyc_status', ['pending', 'in_review']);
+    } else if (flag === 'kyc_declined') {
+      query = query.eq('kyc_status', 'declined');
+    } else if (flag === 'banned') {
+      query = query.eq('is_banned', true);
     }
 
     const { data, count, error } = await query;
