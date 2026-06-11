@@ -87,6 +87,29 @@ export class SubscriptionsService {
         .eq('id', userId);
     }
 
+    // A retry (crashed app, dismissed sheet, back-button) must not stack
+    // a second subscription on the customer — in production both first
+    // invoices can settle and the user is billed twice. One plan per
+    // user: cancel any prior attempt that never finished checkout before
+    // creating the new one.
+    const priorSubs = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'incomplete',
+      limit: 20,
+    });
+    for (const stale of priorSubs.data) {
+      try {
+        await stripe.subscriptions.cancel(stale.id);
+        this.logger.log(
+          `[payment-sheet] cancelled stale incomplete sub ${stale.id} for user ${userId}`,
+        );
+      } catch (err: any) {
+        this.logger.warn(
+          `[payment-sheet] could not cancel stale sub ${stale.id}: ${err?.message}`,
+        );
+      }
+    }
+
     // Ephemeral key is required by the mobile SDK so the device can
     // talk to Stripe on the customer's behalf without exposing the
     // secret key. Tie its API version to the latest stable.
@@ -619,6 +642,29 @@ export class SubscriptionsService {
           this.logger.log(
             `[stripe] user ${userId} → plan ${planId} via ${event.type}`,
           );
+
+          // One plan per user: a successful checkout supersedes any other
+          // subscription still active on this customer (double-pay during
+          // a retry, or an upgrade replacing the old plan). Cancel the
+          // losers so nobody is billed twice next cycle.
+          const others = await stripe.subscriptions.list({
+            customer: sub.customer as string,
+            status: 'active',
+            limit: 20,
+          });
+          for (const other of others.data) {
+            if (other.id === sub.id) continue;
+            try {
+              await stripe.subscriptions.cancel(other.id);
+              this.logger.log(
+                `[stripe] cancelled superseded sub ${other.id} (kept ${sub.id}) for user ${userId}`,
+              );
+            } catch (err: any) {
+              this.logger.warn(
+                `[stripe] could not cancel superseded sub ${other.id}: ${err?.message}`,
+              );
+            }
+          }
         } catch (err: any) {
           this.logger.warn(
             `payment_succeeded handler failed for ${subId}: ${err?.message}`,
