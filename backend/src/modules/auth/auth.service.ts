@@ -488,29 +488,51 @@ export class AuthService {
   }
 
   /**
-   * Newest auth.users row whose phone matches (digits-only compare, same
-   * normalisation as purgeAuthUsersByPhone).
+   * Look up an existing user by phone via the public.users.phone index
+   * (added in migration 015), then fetch the auth row by id. Replaces the
+   * old listUsers page-1 scan which silently capped at 1000 auth users
+   * — past that limit a returning phone user was invisible to login and
+   * fell through to "phone already exists" on signup.
+   *
+   * Tries exact match first (the normal case, since both client and
+   * trigger store E.164), then a digits-only fallback for rows that
+   * Supabase normalised differently (e.g. stripped the leading +).
    */
   private async findAuthUserByPhone(contact: string) {
     const admin = this.supabaseService.getAdminClient();
     const wantDigits = contact.replace(/\D/g, '');
-    const { data, error } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    });
-    if (error || !data) {
+
+    // Exact match — uses idx_users_phone_unique.
+    let { data: row } = await admin
+      .from('users')
+      .select('id')
+      .eq('phone', contact)
+      .maybeSingle();
+
+    // Fallback for legacy/normalised rows. Sequential scan, but only
+    // runs when the exact match missed AND we have a non-empty digit
+    // string — i.e. one corner-case query, not on every login.
+    if (!row && wantDigits) {
+      const { data: legacy } = await admin
+        .from('users')
+        .select('id, phone')
+        .not('phone', 'is', null);
+      row = (legacy ?? []).find(
+        (u: { id: string; phone: string | null }) =>
+          (u.phone ?? '').replace(/\D/g, '') === wantDigits,
+      ) as { id: string } | undefined ?? null;
+    }
+
+    if (!row) return null;
+
+    const { data: authUser, error } = await admin.auth.admin.getUserById(row.id);
+    if (error || !authUser?.user) {
       this.logger.warn(
-        `[phone-login] listUsers failed: ${error?.message ?? '(no data)'}`,
+        `[phone-login] public.users ${row.id} has no auth row: ${error?.message ?? 'missing'}`,
       );
       return null;
     }
-    const matches = data.users
-      .filter((u) => {
-        const userDigits = (u.phone ?? '').replace(/\D/g, '');
-        return userDigits.length > 0 && userDigits === wantDigits;
-      })
-      .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''));
-    return matches[0] ?? null;
+    return authUser.user;
   }
 
   /**
