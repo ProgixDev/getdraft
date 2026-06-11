@@ -35,7 +35,8 @@ import { RootState } from "@/store";
 import { login as setLoggedInUser } from "@/store/slices/authSlice";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
-import { uploadsService } from "@/services/uploads";
+import { uploadsService, UploadBucket } from "@/services/uploads";
+import { pickAndUploadMedia } from "@/services/media";
 import LocationPicker from "@/components/LocationPicker";
 
 const AVATAR_BUCKET = "avatars";
@@ -82,6 +83,64 @@ function formatDobForDisplay(d: Date | null): string {
   return `${month}/${day}/${d.getFullYear()}`;
 }
 
+// Lifted from profile.tsx — needed for the swipe-card photo/video manager
+// that now lives here. Discover.service reads the same photos[]/videos[]
+// arrays back, so as long as we write the same shape, the swipe deck
+// keeps rendering the right media.
+function pathFromPublicUrl(url: string, bucket: UploadBucket): string | null {
+  const marker = `/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  try {
+    return decodeURIComponent(url.slice(idx + marker.length));
+  } catch {
+    return null;
+  }
+}
+
+// Whitelist of fields we round-trip back through the upsert when only one
+// field changes — keeps unrelated columns intact (the upsert is a PUT, not
+// a PATCH). Identical lists to the ones profile.tsx used to maintain.
+const ATHLETE_DTO_FIELDS = [
+  "sport",
+  "position",
+  "level",
+  "bio",
+  "class_year",
+  "gpa",
+  "height",
+  "weight",
+  "forty_yard_dash",
+  "awards",
+  "photos",
+  "videos",
+] as const;
+
+const RECRUITER_DTO_FIELDS = [
+  "organization",
+  "sport",
+  "role_type",
+  "tags",
+  "bio",
+  "photos",
+  "videos",
+] as const;
+
+function pickFields<T extends string>(
+  src: any,
+  keys: readonly T[],
+): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of keys) {
+    const v = src?.[k];
+    if (v != null) out[k] = v;
+  }
+  return out;
+}
+
+const MAX_GALLERY_PHOTOS = 6;
+const MAX_HIGHLIGHT_VIDEOS = 1;
+
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -126,6 +185,14 @@ export default function EditProfileScreen() {
   const [existingProfile, setExistingProfile] = useState<any | null>(null);
   const [activeModal, setActiveModal] = useState<SelectorKey>(null);
 
+  // Swipe-card media now lives here (used to live on profile.tsx). Both
+  // arrays are committed IMMEDIATELY on add/delete — they don't wait on
+  // the Save button — because uploads happen out-of-band and reverting
+  // them on cancel would orphan blobs in storage.
+  const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
+  const [galleryVideos, setGalleryVideos] = useState<string[]>([]);
+  const [mediaBusy, setMediaBusy] = useState<null | "photos" | "videos">(null);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -161,6 +228,10 @@ export default function EditProfileScreen() {
           setWeight(p.weight ?? "");
           setGender(p.gender ?? "");
           setDob(fromIsoDate(p.date_of_birth));
+        }
+        if (isAthlete || isRecruiter) {
+          setGalleryPhotos(Array.isArray(p.photos) ? p.photos : []);
+          setGalleryVideos(Array.isArray(p.videos) ? p.videos : []);
         }
       }
       setLoading(false);
@@ -312,6 +383,152 @@ export default function EditProfileScreen() {
     }
   };
 
+  // Lifted verbatim from profile.tsx so the upsert shape stays identical
+  // (discover.service reads photos[]/videos[] off the same row). Validates
+  // the profile is set up enough to own media first, then appends new
+  // URLs and rewrites the array.
+  const handleAddMedia = async (kind: "photos" | "videos") => {
+    if (mediaBusy) return;
+    if (!isAthlete && !isRecruiter) return;
+    const currentArr = kind === "photos" ? galleryPhotos : galleryVideos;
+    const cap = kind === "photos" ? MAX_GALLERY_PHOTOS : MAX_HIGHLIGHT_VIDEOS;
+    if (currentArr.length >= cap) {
+      Alert.alert(
+        kind === "photos" ? "Photo limit" : "Video limit",
+        kind === "photos"
+          ? `You can have up to ${cap} swipe-card photos. Delete one to add another.`
+          : `You can have up to ${cap} highlight video. Delete it to add another.`,
+      );
+      return;
+    }
+    setMediaBusy(kind);
+    try {
+      let current: any = {};
+      try {
+        current = isAthlete
+          ? await profilesService.getAthleteProfile()
+          : await profilesService.getRecruiterProfile();
+      } catch {
+        /* 404 = no profile yet */
+      }
+      if (isAthlete && !current?.sport) {
+        Alert.alert(
+          "Set up your profile first",
+          "Pick a sport above before uploading media.",
+        );
+        return;
+      }
+      if (
+        isRecruiter &&
+        (!current?.organization || !current?.sport || !current?.role_type)
+      ) {
+        Alert.alert(
+          "Set up your profile first",
+          "Add your organization, sport, and role before uploading media.",
+        );
+        return;
+      }
+      const remaining = cap - currentArr.length;
+      const newUrls = await pickAndUploadMedia(
+        kind === "videos" ? "video" : "image",
+        kind,
+        {
+          allowsMultipleSelection: kind === "photos",
+          selectionLimit: kind === "photos" ? Math.max(1, remaining) : 1,
+        },
+      );
+      if (newUrls.length === 0) return;
+      const merged = pickFields(
+        current,
+        isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+      );
+      const existing: string[] = Array.isArray(current[kind])
+        ? current[kind]
+        : currentArr;
+      const next = [...existing, ...newUrls].slice(0, cap);
+      merged[kind] = next;
+      if (isAthlete) {
+        await profilesService.upsertAthleteProfile(merged);
+      } else {
+        await profilesService.upsertRecruiterProfile(merged);
+      }
+      if (kind === "photos") setGalleryPhotos(next);
+      else setGalleryVideos(next);
+    } catch (err: any) {
+      Alert.alert(
+        "Upload failed",
+        err?.message ?? "Something went wrong while uploading.",
+      );
+    } finally {
+      setMediaBusy(null);
+    }
+  };
+
+  const handleDeleteMedia = (kind: "photos" | "videos", url: string) => {
+    if (mediaBusy) return;
+    if (!isAthlete && !isRecruiter) return;
+    Alert.alert(
+      kind === "videos" ? "Delete this video?" : "Delete this photo?",
+      "This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setMediaBusy(kind);
+            try {
+              let current: any = {};
+              try {
+                current = isAthlete
+                  ? await profilesService.getAthleteProfile()
+                  : await profilesService.getRecruiterProfile();
+              } catch {
+                return; // 404 — nothing to delete from
+              }
+              const existing: string[] = Array.isArray(current[kind])
+                ? current[kind]
+                : kind === "photos"
+                  ? galleryPhotos
+                  : galleryVideos;
+              const next = existing.filter((u: string) => u !== url);
+              if (next.length === existing.length) return; // not in array
+
+              const bucket: UploadBucket =
+                kind === "videos" ? "videos" : "photos";
+              const path = pathFromPublicUrl(url, bucket);
+              if (path) {
+                await uploadsService
+                  .deleteFile(bucket, path)
+                  .catch(() => {});
+              }
+
+              const merged = pickFields(
+                current,
+                isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+              );
+              merged[kind] = next;
+              if (isAthlete) {
+                await profilesService.upsertAthleteProfile(merged);
+              } else {
+                await profilesService.upsertRecruiterProfile(merged);
+              }
+              if (kind === "photos") setGalleryPhotos(next);
+              else setGalleryVideos(next);
+            } catch (err: any) {
+              Alert.alert(
+                "Could not delete",
+                err?.message ?? "Try again in a moment.",
+              );
+            } finally {
+              setMediaBusy(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       setErrorMsg("Name is required.");
@@ -334,6 +551,11 @@ export default function EditProfileScreen() {
       const updatedUser = await usersService.updateMe(userUpdates);
 
       if (isAthlete) {
+        // Gallery photos[] + videos[] are managed by handleAddMedia /
+        // handleDeleteMedia and committed immediately, so the Save
+        // button no longer touches them. Previously this branch wrote
+        // `photos: [avatarUploadedUrl]` whenever the avatar changed,
+        // which wiped the swipe-card gallery — that override is gone.
         await profilesService.upsertAthleteProfile({
           sport,
           position: position || undefined,
@@ -343,7 +565,6 @@ export default function EditProfileScreen() {
           weight: weight.trim() || undefined,
           gender: gender || undefined,
           date_of_birth: dob ? toIsoDate(dob) : undefined,
-          ...(avatarUploadedUrl ? { photos: [avatarUploadedUrl] } : {}),
         });
       } else if (isRecruiter) {
         const prev = existingProfile ?? {};
@@ -353,7 +574,6 @@ export default function EditProfileScreen() {
           role_type: prev.role_type ?? (role === "coach" ? "coach" : "agent"),
           tags: prev.tags ?? [],
           bio: bio.trim() || undefined,
-          ...(avatarUploadedUrl ? { photos: [avatarUploadedUrl] } : {}),
         });
       } else if (isParent) {
         const prev = existingProfile ?? {};
@@ -604,6 +824,104 @@ export default function EditProfileScreen() {
           </View>
         )}
 
+        {(isAthlete || isRecruiter) && (
+          <View style={styles.section}>
+            <View style={styles.mediaHeader}>
+              <Text style={styles.sectionTitle}>Swipe-card photos</Text>
+              <Text style={styles.mediaSubLabel}>
+                {galleryPhotos.length}/{MAX_GALLERY_PHOTOS}
+              </Text>
+            </View>
+            <Text style={styles.mediaHelper}>
+              These show on your card in Discover. Tap to add, long-press to remove.
+            </Text>
+            <View style={styles.galleryGrid}>
+              {galleryPhotos.map((url) => (
+                <Pressable
+                  key={url}
+                  style={styles.galleryTile}
+                  onLongPress={() => handleDeleteMedia("photos", url)}
+                  delayLongPress={400}
+                  disabled={mediaBusy !== null}
+                >
+                  <Image
+                    source={{ uri: url }}
+                    style={styles.galleryImage}
+                    resizeMode="cover"
+                  />
+                </Pressable>
+              ))}
+              {galleryPhotos.length < MAX_GALLERY_PHOTOS && (
+                <Pressable
+                  style={[styles.galleryTile, styles.galleryAddTile]}
+                  onPress={() => handleAddMedia("photos")}
+                  disabled={mediaBusy !== null}
+                >
+                  {mediaBusy === "photos" ? (
+                    <ActivityIndicator size="small" color={theme.text} />
+                  ) : (
+                    <Ionicons name="add" size={24} color={theme.text} />
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+
+        {(isAthlete || isRecruiter) && (
+          <View style={styles.section}>
+            <View style={styles.mediaHeader}>
+              <Text style={styles.sectionTitle}>Highlight video</Text>
+              <Text style={styles.mediaSubLabel}>
+                {galleryVideos.length}/{MAX_HIGHLIGHT_VIDEOS}
+              </Text>
+            </View>
+            <Text style={styles.mediaHelper}>
+              The reel that plays on your card. Tap to add, long-press to remove.
+            </Text>
+            <View style={styles.videoList}>
+              {galleryVideos.map((url) => (
+                <Pressable
+                  key={url}
+                  style={styles.videoTile}
+                  onLongPress={() => handleDeleteMedia("videos", url)}
+                  delayLongPress={400}
+                  disabled={mediaBusy !== null}
+                >
+                  <View style={styles.videoTileInner}>
+                    <Ionicons
+                      name="play-circle"
+                      size={42}
+                      color={brand.white}
+                    />
+                    <Text style={styles.videoTileLabel}>Highlight reel</Text>
+                  </View>
+                </Pressable>
+              ))}
+              {galleryVideos.length < MAX_HIGHLIGHT_VIDEOS && (
+                <Pressable
+                  style={[styles.videoTile, styles.videoAddTile]}
+                  onPress={() => handleAddMedia("videos")}
+                  disabled={mediaBusy !== null}
+                >
+                  {mediaBusy === "videos" ? (
+                    <ActivityIndicator size="small" color={theme.text} />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="videocam-outline"
+                        size={26}
+                        color={theme.text}
+                      />
+                      <Text style={styles.videoAddLabel}>Add highlight video</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+
         {errorMsg && (
           <View style={styles.errorBox}>
             <Ionicons name="alert-circle" size={16} color="#FF7675" />
@@ -616,11 +934,12 @@ export default function EditProfileScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
-            (saving || uploadingAvatar) && styles.saveButtonDisabled,
+            (saving || uploadingAvatar || mediaBusy !== null) &&
+              styles.saveButtonDisabled,
             pressed && styles.pressed,
           ]}
           onPress={handleSave}
-          disabled={saving || uploadingAvatar}
+          disabled={saving || uploadingAvatar || mediaBusy !== null}
         >
           {saving ? (
             <ActivityIndicator size="small" color={theme.accentText} />
@@ -974,6 +1293,82 @@ const styles = StyleSheet.create({
   selectorValuePlaceholder: {
     color: theme.textMuted,
     fontFamily: "Poppins_400Regular",
+  },
+  mediaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  mediaSubLabel: {
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
+    color: theme.textSecondary,
+  },
+  mediaHelper: {
+    marginTop: -4,
+    fontSize: 12,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
+    lineHeight: 18,
+  },
+  galleryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  galleryTile: {
+    width: 84,
+    height: 84,
+    borderRadius: 12,
+    backgroundColor: theme.surface,
+    overflow: "hidden",
+  },
+  galleryImage: {
+    width: "100%",
+    height: "100%",
+  },
+  galleryAddTile: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: theme.borderLight,
+    backgroundColor: "transparent",
+  },
+  videoList: {
+    gap: 10,
+    marginTop: 4,
+  },
+  videoTile: {
+    height: 110,
+    borderRadius: 12,
+    backgroundColor: theme.surfaceSecondary,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoTileInner: {
+    alignItems: "center",
+    gap: 6,
+  },
+  videoTileLabel: {
+    fontSize: 13,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.85)",
+  },
+  videoAddTile: {
+    flexDirection: "row",
+    gap: 10,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: theme.borderLight,
+    backgroundColor: "transparent",
+  },
+  videoAddLabel: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
   },
   errorBox: {
     flexDirection: "row",
