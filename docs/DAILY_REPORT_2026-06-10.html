@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Report — Achraf Benamrane — 10→11 June 2026</title>
+<style>
+  :root {
+    --navy: #1F4E7A;
+    --navy-deep: #14304D;
+    --navy-soft: #E8EFF6;
+    --saffron: #E8A53D;
+    --saffron-soft: #FBEDD3;
+    --cream: #F4F6F9;
+    --cream-warm: #E3E9F1;
+    --deep: #0F1A26;
+    --text: #2A323D;
+    --text-muted: #6B7480;
+    --border: #C9D2DC;
+    --border-soft: #DDE3EB;
+    --green: #1E7A4D;
+    --green-soft: #E5F2EC;
+    --red: #B3382E;
+    --red-soft: #F9E8E6;
+  }
+  @page { size: A4; margin: 8mm 11mm 8mm 11mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: #fff; color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Inter", Roboto, sans-serif;
+    font-size: 8.5pt; line-height: 1.3;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 178mm; margin: 0 auto; }
+
+  .report-banner {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 5px; margin-bottom: 8px;
+    border-bottom: 1.5px solid var(--navy);
+  }
+  .report-title { font-size: 18pt; font-weight: 800; color: var(--navy); letter-spacing: -0.3px; line-height: 1; }
+  .report-author { text-align: right; line-height: 1.35; }
+  .report-author .name { font-size: 10.5pt; font-weight: 700; color: var(--navy); }
+  .report-author .date { font-size: 9pt; color: #5A6B7E; margin-top: 2px; }
+
+  .brand-strip {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-deep) 100%);
+    color: #fff; border-radius: 6px; padding: 7px 16px; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .brand-strip .left { font-size: 9pt; letter-spacing: 0.16em; text-transform: uppercase; color: var(--saffron); font-weight: 700; }
+  .brand-strip .left::before { content: "▲"; margin-right: 6px; font-size: 10pt; vertical-align: -1px; }
+  .brand-strip .right { font-size: 9pt; color: rgba(255,255,255,0.78); }
+  .brand-strip .right strong { color: #fff; font-weight: 600; }
+
+  .summary {
+    background: var(--green-soft); border-left: 4px solid var(--green);
+    border-radius: 4px; padding: 7px 14px; margin-bottom: 8px;
+  }
+  .summary-label { font-size: 8pt; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin-bottom: 3px; }
+  .summary p { margin: 0; font-size: 9pt; color: var(--deep); }
+
+  .effort-note {
+    background: var(--saffron-soft); border-left: 4px solid var(--saffron);
+    border-radius: 4px; padding: 6px 14px; margin-bottom: 8px;
+    font-size: 8.5pt; color: var(--deep);
+  }
+  .effort-note strong { color: var(--navy-deep); }
+
+  h2 {
+    font-size: 10.5pt; font-weight: 700; color: var(--navy-deep);
+    margin: 8px 0 4px 0; padding-bottom: 2px;
+    border-bottom: 1.5px solid var(--border-soft);
+    letter-spacing: -0.2px;
+  }
+  h2 .num { color: var(--saffron); font-weight: 800; margin-right: 6px; }
+
+  strong { font-weight: 700; color: var(--deep); }
+
+  .stats { display: flex; gap: 8px; margin: 2px 0 8px 0; }
+  .stat {
+    flex: 1; background: #fff; border: 1px solid var(--border-soft);
+    border-radius: 6px; padding: 5px 10px; text-align: left;
+  }
+  .stat .label { font-size: 7pt; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .stat .value { font-size: 11pt; font-weight: 700; color: var(--navy-deep); margin-top: 1px; }
+  .stat .sub { font-size: 7.5pt; color: var(--text-muted); margin-top: 0; }
+
+  .task-list {
+    list-style: none; padding: 0; margin: 5px 0 9px 0; counter-reset: tcnt;
+  }
+  .task-list > li {
+    position: relative; background: #fff; border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--green); border-radius: 4px;
+    padding: 4px 12px 4px 34px; margin-bottom: 3px;
+    counter-increment: tcnt;
+  }
+  .task-list > li.bug { border-left-color: var(--red); }
+  .task-list > li::before {
+    content: counter(tcnt, decimal-leading-zero);
+    position: absolute; left: 10px; top: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt; font-weight: 700; color: var(--saffron);
+  }
+  .task-list > li .title { font-weight: 600; color: var(--deep); font-size: 8.5pt; }
+  .task-list > li .body { color: var(--text-muted); font-size: 8pt; margin-top: 1px; line-height: 1.4; }
+
+  .shots { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px 0; }
+  .shot-placeholder {
+    width: calc(25% - 6px); aspect-ratio: 9 / 16; border: 1.5px dashed var(--border);
+    border-radius: 8px; background: var(--cream);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 8px; page-break-inside: avoid;
+  }
+  .shot-placeholder .ic { font-size: 16pt; color: var(--border); }
+  .shot-placeholder .cap { font-size: 7.5pt; color: var(--text-muted); font-weight: 600; margin-top: 4px; }
+
+  .doc-footer {
+    border-top: 1px solid var(--border); margin-top: 9px; padding-top: 6px;
+    text-align: center; color: var(--text-muted); font-size: 7.5pt; letter-spacing: 0.04em;
+  }
+  .doc-footer .knot { color: var(--saffron); font-weight: 700; margin: 0 6px; }
+
+  @media print {
+    body { background: #fff; }
+    .brand-strip, .summary, .effort-note, .task-list > li, .stat, .shot-placeholder {
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="report-banner">
+    <div class="report-title">Daily Report</div>
+    <div class="report-author">
+      <div class="name">Achraf Benamrane</div>
+      <div class="date">10 June 2026 → nuit du 11 June 2026</div>
+    </div>
+  </div>
+
+  <div class="brand-strip">
+    <div class="left">GetDraft · Recrutement Sportif</div>
+    <div class="right">Focus: <strong>port onboarding &amp; facturation (27 fonctionnalités) · vérifications sur appareil · 2 bugs critiques corrigés</strong></div>
+  </div>
+
+  <div class="summary">
+    <div class="summary-label">Summary</div>
+    <p>Journée et nuit consacrées à l'<strong>intégration complète du parcours d'inscription et de facturation</strong> (27 fonctionnalités, F1–F27) et à sa <strong>vérification sur téléphone réel</strong>. La base de données de production a reçu <strong>6 nouvelles migrations</strong>, une nouvelle version de développement de l'application a été générée et installée, et deux parcours sensibles ont été <strong>validés de bout en bout sur appareil</strong> : la <strong>liaison parent-athlète</strong> (QR → vidéo de déclaration → approbation admin) et le <strong>paiement d'un abonnement réel</strong> ($7 Starter via la feuille de paiement native Stripe). Cette campagne de test a révélé <strong>deux bugs critiques</strong> — un crash Android à l'ouverture du paiement et un risque de <strong>double facturation</strong> — tous deux <strong>corrigés et livrés</strong>. En bonus : durcissement UX des écrans guardian, verrouillage du contrôle d'identité (KYC), et une vraie <strong>connexion par téléphone</strong> pour les comptes existants.</p>
+  </div>
+
+  <div class="effort-note">
+    <strong>Note :</strong> Session longue (journée + nuit). Les parcours <strong>guardian</strong> et <strong>paiement Stripe</strong> ont été vérifiés sur <strong>téléphone Android réel</strong> contre le backend et la base de production. Une journée de test consolidée est planifiée — le plan de test détaillé accompagne ce rapport.
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Fonctionnalités portées</div>
+      <div class="value" style="color:#1E7A4D;">27</div>
+      <div class="sub">F1–F27 — parcours complet inscription → paiement</div>
+    </div>
+    <div class="stat">
+      <div class="label">Vérifié sur appareil</div>
+      <div class="value" style="color:#14304D;">2 parcours</div>
+      <div class="sub">liaison parent-athlète · paiement $7 réel (test)</div>
+    </div>
+    <div class="stat">
+      <div class="label">Bugs critiques</div>
+      <div class="value" style="color:#B3382E;">2 corrigés</div>
+      <div class="sub">crash paiement Android · double facturation</div>
+    </div>
+  </div>
+
+  <h2><span class="num">01</span>Port complet — inscription, identité &amp; facturation (F1–F27)</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Nouveau parcours d'inscription complet</div>
+      <div class="body">Inscription par <strong>email (code à 6 chiffres)</strong>, par <strong>téléphone (SMS ou WhatsApp via Twilio)</strong>, ou via <strong>Apple / Google</strong> ; puis rôle → localisation → profil → <strong>vérification d'identité</strong> → questionnaire personnalisé par rôle → tutoriel → choix du plan en dernier. Page d'accueil d'authentification repensée avec les 4 options.</div>
+    </li>
+    <li>
+      <div class="title">Vérification d'identité (KYC) universelle</div>
+      <div class="body">Chaque nouvelle inscription passe par une vérification <strong>pièce d'identité + selfie (OCR, vivacité, correspondance faciale)</strong> avant d'accéder à l'application. Un mode de validation rapide existe pour les tests internes.</div>
+    </li>
+    <li>
+      <div class="title">Liaison parent-athlète (guardian linking)</div>
+      <div class="body">Le parcours signature du produit : l'athlète affiche un <strong>QR signé</strong>, le parent le scanne, répond à un questionnaire de relation, enregistre une <strong>vidéo de déclaration</strong> guidée (téléprompteur), et l'<strong>admin approuve ou refuse</strong> depuis son écran de revue. Les parents terminent leur inscription à cette étape (pas de plan ni de swipe — choix produit).</div>
+    </li>
+    <li>
+      <div class="title">Nouvelle grille tarifaire — 3 plans</div>
+      <div class="body"><strong>$0 / $7 / $15</strong> pour <strong>10 / 30 / 70 swipes par jour</strong>. Adaptation locale : « Qui m'a drafté » <strong>reste gratuit</strong> (différenciateur du produit), contrairement à la version d'origine qui le réservait aux plans payants.</div>
+    </li>
+    <li>
+      <div class="title">Paiement natif intégré (Stripe Payment Sheet)</div>
+      <div class="body">Achat d'abonnement <strong>directement dans l'application</strong> (feuille de paiement native, cartes enregistrées), montée/descente de gamme, <strong>annulation / reprise</strong>, et <strong>packs de swipes</strong> à l'unité. Le plan peut aussi être ignoré d'un X → plan Basic gratuit.</div>
+    </li>
+    <li>
+      <div class="title">Finitions transverses</div>
+      <div class="body"><strong>Notifications push</strong> (messages, drafts) avec ouverture directe de la conversation, <strong>indicateurs de frappe et accusés de lecture</strong> dans le chat, profil public avec <strong>blocage</strong>, gestion des <strong>photos/vidéos du profil</strong> (ajout, suppression par appui long), lecteur vidéo plein écran, persistance des réglages.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">02</span>Déploiement — base de données &amp; application</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">6 migrations appliquées à la base de production</div>
+      <div class="body">Migrations <strong>013 → 018</strong> (achats de packs, statut KYC, préférences, liaisons guardian…) appliquées sur la base Supabase de production, plus le <strong>bucket de stockage des vidéos de déclaration</strong>.</div>
+    </li>
+    <li>
+      <div class="title">Nouvelle version de développement installée</div>
+      <div class="body">Build Android (EAS) intégrant les nouveaux modules natifs (paiement, caméra), <strong>installée et utilisée sur téléphone réel</strong> pour toute la campagne de vérification.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">03</span>Vérifié de bout en bout sur appareil</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Liaison parent-athlète — parcours complet validé</div>
+      <div class="body">Sur téléphone réel : scan du QR de l'athlète par le compte parent → questionnaire → <strong>vidéo de déclaration enregistrée et envoyée</strong> → approbation depuis le <strong>compte admin</strong> → le parent voit son état « <strong>You're linked!</strong> » avec les détails du lien. Confirmé dans les journaux du serveur <strong>et</strong> dans la base de production.</div>
+    </li>
+    <li>
+      <div class="title">Paiement réel validé — $7 Starter (mode test)</div>
+      <div class="body">Achat du plan Starter <strong>depuis le téléphone</strong> via la feuille de paiement native (carte de test). Paiement confirmé côté Stripe, abonnement actif, <strong>30 swipes/jour</strong> appliqués. Le décalage connu des webhooks en environnement local (Stripe ne peut pas joindre un PC de développement) a été comblé par une <strong>réconciliation contrôlée</strong> — en production, les webhooks pointeront sur le serveur public.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">04</span>Bugs critiques découverts en test — et corrigés</h2>
+  <ol class="task-list">
+    <li class="bug">
+      <div class="title">Crash Android à l'ouverture du paiement</div>
+      <div class="body"><strong>Symptôme :</strong> au moment de payer, l'application se fermait brutalement et revenait à l'écran d'accueil. <strong>Cause :</strong> un défaut de la bibliothèque Stripe (la tâche qui maintient l'application éveillée pendant la feuille de paiement n'est jamais enregistrée quand on l'initialise par le composant standard) — les téléphones à gestion mémoire agressive tuaient l'application en pleine transaction. <strong>Correctif :</strong> enregistrement explicite de cette tâche au démarrage. Paiement re-testé avec succès sur le même appareil.</div>
+    </li>
+    <li class="bug">
+      <div class="title">Risque de double facturation (« abonnements zombies »)</div>
+      <div class="body"><strong>Symptôme :</strong> chaque ouverture de la feuille de paiement créait un <strong>nouvel</strong> abonnement Stripe ; après un crash ou une annulation, les tentatives s'accumulaient et plusieurs pouvaient devenir actives — soit une <strong>double facturation réelle</strong> en production. <strong>Correctif :</strong> les tentatives abandonnées sont annulées avant chaque nouveau paiement, et tout abonnement supplanté est annulé dès la confirmation du nouveau (un seul plan par utilisateur). Les doublons créés pendant les tests ont été <strong>nettoyés côté Stripe</strong>.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">05</span>Durcissement UX &amp; sécurité</h2>
+  <ol class="task-list">
+    <li>
+      <div class="title">Écrans guardian — tous les états couverts</div>
+      <div class="body">Refonte de l'état « lié » en <strong>carte d'accréditation vérifiée</strong> (athlète, relation, date d'approbation, avantages débloqués) ; nouvel état <strong>refusé</strong> affichant la note de l'admin avec possibilité de recommencer ; état <strong>hors-ligne</strong> avec nouvelle tentative ; <strong>tirer-pour-actualiser</strong> pendant l'attente d'approbation ; suppression d'un flash visuel au chargement ; étiquettes d'accessibilité sur les contrôles.</div>
+    </li>
+    <li>
+      <div class="title">Verrouillage du contrôle d'identité</div>
+      <div class="body">Audit du parcours : aucune sortie ne contournait le KYC, mais une <strong>porte dérobée dormante</strong> existait dans le code (un raccourci jamais branché qui aurait sauté la vérification). Supprimée — le KYC est désormais <strong>structurellement incontournable</strong> pour tous les rôles.</div>
+    </li>
+    <li>
+      <div class="title">Connexion par téléphone pour les comptes existants</div>
+      <div class="body">Jusqu'ici le téléphone ne servait qu'à <strong>s'inscrire</strong> — un utilisateur existant qui re-saisissait son numéro créait un doublon. Désormais, le code OTP <strong>reconnaît le compte existant et le connecte directement</strong> (session créée côté serveur, sans mot de passe), qu'il soit déjà passé par l'onboarding ou non.</div>
+    </li>
+  </ol>
+
+  <h2><span class="num">06</span>Captures d'écran</h2>
+  <div class="shots">
+    <div class="shot-placeholder"><div class="ic">📱</div><div class="cap">Accueil — 4 options de connexion</div></div>
+    <div class="shot-placeholder"><div class="ic">🔢</div><div class="cap">Vérification OTP téléphone</div></div>
+    <div class="shot-placeholder"><div class="ic">🔗</div><div class="cap">QR de liaison guardian</div></div>
+    <div class="shot-placeholder"><div class="ic">✅</div><div class="cap">Revue admin — approbation</div></div>
+  </div>
+
+  <div class="doc-footer">
+    GetDraft <span class="knot">·</span> Recrutement Sportif <span class="knot">·</span> Daily report <span class="knot">·</span> 10 June 2026 → 11 June 2026 <span class="knot">·</span> Achraf Benamrane
+  </div>
+
+</div>
+</body>
+</html>

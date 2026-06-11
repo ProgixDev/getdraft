@@ -73,82 +73,96 @@
     </div>
     <div class="right">
       <div><b>Developer:</b> Achraf Benamrane — Progix</div>
-      <div><b>Date:</b> June 8, 2026</div>
+      <div><b>Date:</b> June 11, 2026</div>
     </div>
   </div>
 
   <div class="summary">
     <div class="l">Executive Summary</div>
-    <p>The GetDraft mobile application has reached a major milestone: the core product is <b>fully functional on a live backend and database</b>. Athletes and recruiters can create verified accounts, build complete profiles, discover and connect with one another through the swipe-based "Draft" experience, communicate in real time, and share photos and videos through a built-in social feed. It is now available as an <b>installable Android app running on live infrastructure</b> — ready to try today. The sections below detail the modules delivered to date, followed by a short guide to trying it yourself.</p>
+    <p>GetDraft now covers the <b>complete journey from first install to paid subscription</b>. Beyond the core product — verified accounts, rich profiles, the swipe-based "Draft" experience, real-time messaging and a built-in social feed — the platform now includes <b>identity verification (KYC) for every signup</b>, a <b>parent–athlete guardian verification flow</b> unique to GetDraft, <b>phone and Apple / Google sign-in</b>, and <b>in-app subscriptions with native card payments</b>. The two most sensitive flows — guardian linking and a real subscription purchase — were <b>verified end-to-end on a physical Android device on June 10, 2026</b>, against the live backend and database.</p>
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="v g">7</div><div class="k">Core modules delivered</div></div>
+    <div class="stat"><div class="v g">9</div><div class="k">Core modules delivered</div></div>
     <div class="stat"><div class="v g">Live</div><div class="k">Backend &amp; database online</div></div>
-    <div class="stat"><div class="v">Real-time</div><div class="k">Messaging &amp; social feed</div></div>
+    <div class="stat"><div class="v">Device-verified</div><div class="k">Guardian flow &amp; real payment</div></div>
   </div>
 
   <h2><span class="n">01</span>Accounts &amp; Onboarding</h2>
   <ul class="feat">
-    <li><div class="t">Secure sign-up with email verification</div><div class="d">New users register and confirm their account with a 6-digit code sent to their email (with a resend option) before entering the app.</div></li>
-    <li><div class="t">Guided onboarding</div><div class="d">A step-by-step flow captures role, plan, location and profile details so every account is ready to use from the first session.</div></li>
+    <li><div class="t">Four ways to sign in</div><div class="d">A redesigned welcome screen offers <b>phone number</b> (SMS or WhatsApp code), <b>Apple</b>, <b>Google</b>, or classic <b>email + 6-digit code</b>. Returning phone users are recognised and <b>logged straight back in</b> from the same code — no duplicate accounts.</div></li>
+    <li><div class="t">Guided onboarding, plan last</div><div class="d">Role → location → profile → <b>identity verification</b> → a per-role questionnaire that feeds matching → tutorial → plan selection. Every account is complete and verified before it enters the app.</div></li>
   </ul>
 
-  <h2><span class="n">02</span>Profiles</h2>
+  <h2><span class="n">02</span>Identity &amp; Safety</h2>
   <ul class="feat">
-    <li><div class="t">Fully editable profile</div><div class="d">Users edit their name, location, bio, sport and profile photo. Athletes additionally set position, level, height, weight, date of birth and gender.</div></li>
+    <li><div class="t">Identity verification on every signup (KYC)</div><div class="d">Each new user verifies a government ID and a live selfie (<b>OCR, liveness and face-match</b>) before reaching the app — recruiters and athletes alike are real, verified people.</div></li>
+    <li><div class="t">Parent–athlete guardian verification</div><div class="d">A GetDraft signature flow: the athlete shows a <b>secure QR</b>, the parent scans it, answers a relationship questionnaire and records a guided <b>video declaration</b>; an <b>admin reviews and approves</b> each link from a dedicated screen. Verified end-to-end on device, including the parent's "You're linked!" credential view.</div></li>
+    <li><div class="t">Public profiles with blocking</div><div class="d">Every user has a public profile view, and anyone can be blocked directly from chat — blocked users disappear from Discover and messaging.</div></li>
+  </ul>
+
+  <h2><span class="n">03</span>Subscriptions &amp; Billing</h2>
+  <ul class="feat">
+    <li><div class="t">Three plans — $0 / $7 / $15</div><div class="d">Basic, Starter and Pro give <b>10 / 30 / 70 swipes per day</b>. The plan step can be skipped at signup (free Basic); "who drafted you" remains <b>free for everyone</b>.</div></li>
+    <li><div class="t">Native in-app payments</div><div class="d">Subscriptions are purchased inside the app through the <b>native Stripe Payment Sheet</b> (saved cards supported), with in-app <b>upgrade, cancel and resume</b>. A real $7 purchase was completed on device in Stripe's test mode. Safeguards guarantee <b>one subscription per user</b> — retries can never double-bill.</div></li>
+    <li><div class="t">Swipe packs</div><div class="d">One-off swipe top-ups can be bought the same way when a day's quota runs out.</div></li>
+  </ul>
+
+  <h2><span class="n">04</span>Profiles</h2>
+  <ul class="feat">
+    <li><div class="t">Fully editable profile with media</div><div class="d">Users edit their name, location, bio, sport and photos; athletes additionally set position, level, height, weight, date of birth and gender. Photos and highlight videos can be added from the gallery and removed with a long-press; videos open in a full-screen player.</div></li>
     <li><div class="t">Map-based location</div><div class="d">Location can be set with a single tap ("use my current location") or by searching country then city, with a live map preview.</div></li>
   </ul>
 
-  <h2><span class="n">03</span>Discover &amp; Matching — the "Draft" experience</h2>
+  <h2><span class="n">05</span>Discover &amp; Matching — the "Draft" experience</h2>
   <ul class="feat">
     <li><div class="t">Immersive swipe interface</div><div class="d">A full-screen card experience: swipe left/right to browse, up to <b>Draft</b> (show interest), down to <b>Pass</b>, plus double-tap to like. Each card's background adapts to the athlete's sport.</div></li>
-    <li><div class="t">Smooth, instant browsing</div><div class="d">Cards and their imagery are pre-loaded so swiping is fast and fluid, with the background changing in step with each card.</div></li>
+    <li><div class="t">Daily quotas tied to plans</div><div class="d">Swipes are metered per plan (10/30/70 per day) with purchased packs adding bonus swipes on top.</div></li>
     <li><div class="t">Mutual matches</div><div class="d">When two users Draft each other, an instant "Game On!" match is created, opening a direct line of communication.</div></li>
   </ul>
 
-  <h2><span class="n">04</span>Draft Board — connections hub</h2>
+  <h2><span class="n">06</span>Draft Board — connections hub</h2>
   <ul class="feat">
     <li><div class="t">Received, Sent, Matches &amp; Messages in one place</div><div class="d">Users see who drafted them and can <b>Accept</b> or <b>Refuse</b>; review and <b>Withdraw</b> drafts they have sent; view confirmed matches; and open their conversations — all from a single tabbed board.</div></li>
     <li><div class="t">Conversation access on every connection</div><div class="d">A message action on each connection opens a private conversation directly.</div></li>
   </ul>
 
-  <h2><span class="n">05</span>Real-time Messaging</h2>
+  <h2><span class="n">07</span>Real-time Messaging</h2>
   <ul class="feat">
-    <li><div class="t">Private one-to-one chat in real time</div><div class="d">Any two users can message privately; messages are delivered to the other device in under two seconds, with no refresh required.</div></li>
-    <li><div class="t">Inbox with search and unread indicators</div><div class="d">A conversations inbox lists chats with message previews and unread counts, and includes a search to start a new conversation with any user.</div></li>
+    <li><div class="t">Private one-to-one chat in real time</div><div class="d">Any two users can message privately; messages are delivered to the other device in under two seconds, with <b>typing indicators and read receipts</b>, and the connection restores itself when the app returns from the background.</div></li>
+    <li><div class="t">Push notifications</div><div class="d">New messages and drafts notify the recipient even with the app closed; tapping the notification opens the right conversation directly.</div></li>
   </ul>
 
-  <h2><span class="n">06</span>Social Feed — Posts &amp; Reels</h2>
+  <h2><span class="n">08</span>Social Feed — Posts &amp; Reels</h2>
   <ul class="feat">
     <li><div class="t">Share photos and videos</div><div class="d">From a dedicated tab, users publish photo <b>Posts</b> and video <b>Reels</b> with captions to a feed that switches between the two formats.</div></li>
     <li><div class="t">Likes and comments</div><div class="d">Viewers like (including double-tap), comment, reply to comments, and like comments — a complete and familiar social interaction layer.</div></li>
   </ul>
 
-  <h2><span class="n">07</span>Platform &amp; Infrastructure</h2>
+  <h2><span class="n">09</span>Platform &amp; Infrastructure</h2>
   <ul class="feat">
-    <li><div class="t">Live backend and database</div><div class="d">The application's server and database are deployed and online, so the product is fully operational over the internet.</div></li>
-    <li><div class="t">Media hosted within the platform</div><div class="d">Profile and post images and videos are uploaded to and served from the application's own storage.</div></li>
+    <li><div class="t">Live backend and database</div><div class="d">The application's server and database are deployed and online; the production database carries the full schema including identity, guardian and billing tables.</div></li>
+    <li><div class="t">Media hosted within the platform</div><div class="d">Profile and post images, highlight videos and guardian declaration videos are uploaded to and served from the application's own storage.</div></li>
   </ul>
 
   <div class="note">
-    All modules above are implemented and operating on GetDraft's live backend infrastructure.
+    All modules above are implemented and operating on GetDraft's live backend infrastructure. The guardian verification flow and a real subscription purchase were <b>verified end-to-end on a physical Android device on June 10, 2026</b>.
   </div>
 
   <div class="trial">
     <div class="h">Try it yourself — with two accounts</div>
     <p>To experience the full product — including <b>real-time chat</b> and <b>mutual matching</b> — please create <b>two accounts</b> (ideally one <b>athlete</b> and one <b>recruiter / coach</b>, so they appear to each other in Discover):</p>
     <ol>
-      <li><b>Sign up two accounts</b> — each confirms with the 6-digit code sent by email. Best done on <b>two phones</b> so you can watch updates happen live on both.</li>
+      <li><b>Sign up two accounts</b> — by phone number (code via SMS/WhatsApp), Apple, Google, or email. Each completes the quick <b>identity verification</b> step. Best done on <b>two phones</b> so you can watch updates happen live on both.</li>
       <li><b>Draft each other</b> in Discover — swipe up to <b>Draft</b> on each account. When both have drafted, an instant <b>"Game On!" match</b> is created.</li>
-      <li><b>Open the chat</b> from the match and send a message — it appears on the other device in <b>under 2 seconds</b>, with no refresh.</li>
-      <li><b>Explore the rest:</b> edit your profile and set your location on the map, publish a <b>Post</b> or <b>Reel</b> and like / comment, and manage your <b>Draft Board</b> (accept, refuse, withdraw).</li>
+      <li><b>Open the chat</b> from the match and send a message — it appears on the other device in <b>under 2 seconds</b>, with typing indicators and read receipts.</li>
+      <li><b>Explore the rest:</b> edit your profile and add photos, publish a <b>Post</b> or <b>Reel</b>, try a <b>plan upgrade</b> (test card 4242 4242 4242 4242 in test mode), and manage your <b>Draft Board</b>.</li>
     </ol>
-    <p class="tip">Tip: two devices show the real-time chat and matching best — but you can also sign in to the second account on the same phone.</p>
+    <p class="tip">Tip: two devices show the real-time chat and matching best — but you can also sign in to the second account on the same phone. A parent account can be linked to an athlete via the QR guardian flow (Settings → Link a guardian on the athlete side).</p>
   </div>
 
   <div class="doc-footer">
-    GetDraft <b>·</b> Sports Recruiting Platform <b>·</b> Advancement Report <b>·</b> June 8, 2026 <b>·</b> Developed by Achraf Benamrane — Progix
+    GetDraft <b>·</b> Sports Recruiting Platform <b>·</b> Advancement Report <b>·</b> June 11, 2026 <b>·</b> Developed by Achraf Benamrane — Progix
   </div>
 
 </div>
