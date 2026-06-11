@@ -179,7 +179,13 @@ export default function ChatScreen() {
       }
     };
 
-    chatService.connectSocket().then((s) => {
+    // Attach handlers to a fresh socket. Mount calls this once; the
+    // AppState foreground hook calls it again whenever chatService had
+    // to create a new socket instance (its old one was disconnected).
+    // Without re-binding here, after a background cycle the socket
+    // emits new_message/user_typing into a void — chat silently dies
+    // until the screen remounts.
+    const bindSocket = (s: Socket) => {
       if (cancelled) return;
       activeSocket = s;
       s.off("new_message", onNewMessage);
@@ -188,11 +194,26 @@ export default function ChatScreen() {
       s.on("user_typing", onUserTyping);
       const joinNow = () => chatService.joinThread(matchId);
       if (s.connected) joinNow();
+      s.off("connect", joinNow);
       s.on("connect", joinNow);
+    };
+
+    chatService.connectSocket().then(bindSocket);
+
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || cancelled) return;
+      const socket = chatService.getSocket();
+      if (!socket || !socket.connected) {
+        chatService.connectSocket().then(bindSocket);
+      } else if (socket !== activeSocket) {
+        // Same chatService instance returned, but we missed it earlier.
+        bindSocket(socket);
+      }
     });
 
     return () => {
       cancelled = true;
+      appStateSub.remove();
       chatService.leaveThread(matchId);
       activeSocket?.off("new_message", onNewMessage);
       activeSocket?.off("user_typing", onUserTyping);
@@ -204,21 +225,6 @@ export default function ChatScreen() {
         localIsTyping.current = false;
       }
     };
-  }, [matchId, user?.id]);
-
-  // Reconnect socket when app returns to foreground
-  useEffect(() => {
-    if (!matchId || !user?.id) return;
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      const socket = chatService.getSocket();
-      if (!socket || !socket.connected) {
-        chatService.connectSocket().then(() => {
-          chatService.joinThread(matchId);
-        });
-      }
-    });
-    return () => sub.remove();
   }, [matchId, user?.id]);
 
   const onDraftChange = (val: string) => {
