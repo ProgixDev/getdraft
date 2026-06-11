@@ -53,3 +53,9 @@ app-example
 
 # Local Claude Code settings
 .claude/
+
+# Reports & doc artifacts — keep markdown and PDF deliverables out of the repo.
+# Already-tracked files are unaffected (git keeps tracking them); this only
+# stops NEW .md/.pdf from being added. Force one in with `git add -f <file>`.
+*.md
+*.pdf
