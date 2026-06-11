@@ -110,4 +110,36 @@ export const postsService = {
     const { data } = await api.delete(`/posts/comments/${commentId}/like`);
     return data.data;
   },
+
+  // ---- Saved / bookmarks ----
+  // Same null-safe contract as the rankings client: the UI can fire and
+  // forget these on a tap and the worst case is a stale chip state on
+  // the affected tile until the next refresh.
+
+  async savePost(postId: string): Promise<{ saved: true } | null> {
+    try {
+      const { data } = await api.post(`/posts/${postId}/save`);
+      return data.data;
+    } catch {
+      return null;
+    }
+  },
+
+  async unsavePost(postId: string): Promise<{ saved: false } | null> {
+    try {
+      const { data } = await api.delete(`/posts/${postId}/save`);
+      return data.data;
+    } catch {
+      return null;
+    }
+  },
+
+  async getSavedPosts(): Promise<{ posts: PostItem[] }> {
+    try {
+      const { data } = await api.get("/posts/saved");
+      return data.data;
+    } catch {
+      return { posts: [] };
+    }
+  },
 };

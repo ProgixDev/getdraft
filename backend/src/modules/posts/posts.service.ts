@@ -265,6 +265,79 @@ export class PostsService {
     if (error) throw new BadRequestException(error.message);
   }
 
+  // ---- Saved (bookmarks) ----
+
+  async save(userId: string, postId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+    // Confirm the post exists so we return a clean 404 rather than a
+    // foreign-key error string back to the client.
+    const { data: post, error: pErr } = await supabase
+      .from('posts')
+      .select('id')
+      .eq('id', postId)
+      .maybeSingle();
+    if (pErr) throw new BadRequestException(pErr.message);
+    if (!post) throw new NotFoundException('Post not found');
+
+    const { error } = await supabase
+      .from('saved_posts')
+      .insert({ post_id: postId, user_id: userId });
+    if (error) {
+      // 23505 = unique violation — already saved. Treat as idempotent
+      // success so the client can fire-and-forget the toggle.
+      if ((error as any).code === '23505') return { saved: true };
+      throw new BadRequestException(error.message);
+    }
+    return { saved: true };
+  }
+
+  async unsave(userId: string, postId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+    const { error } = await supabase
+      .from('saved_posts')
+      .delete()
+      .eq('post_id', postId)
+      .eq('user_id', userId);
+    if (error) throw new BadRequestException(error.message);
+    return { saved: false };
+  }
+
+  // Caller's saved posts/reels, newest first. Same shape as feed so the
+  // Saved tab on the profile grid can reuse the existing tile component.
+  async getSaved(viewerId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data, error } = await supabase
+      .from('saved_posts')
+      .select(
+        'created_at, post:posts(*, author:users!posts_user_id_fkey(id, name, avatar_url))',
+      )
+      .eq('user_id', viewerId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) throw new BadRequestException(error.message);
+
+    const rows = (data ?? []) as Array<{
+      created_at: string;
+      post: any | null;
+    }>;
+    const posts = rows
+      .map((r) => r.post)
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    // viewer is also the owner here, so every row is liked-by-me-tracked
+    // via the same fetchLikedByMe pass the feed uses.
+    const likedSet = await this.fetchLikedByMe(
+      viewerId,
+      posts.map((p: any) => p.id as string),
+    );
+
+    return {
+      posts: posts.map((p: any) =>
+        this.shapePost(p, p.author as AuthorRow | null, likedSet.has(p.id)),
+      ),
+    };
+  }
+
   // ---- helpers ----
 
   private async fetchLikedByMe(viewerId: string, postIds: string[]) {

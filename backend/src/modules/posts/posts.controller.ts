@@ -48,6 +48,14 @@ export class PostsController {
     return this.posts.getFeed(userId, q.kind, q.page ?? 1, q.limit ?? 20);
   }
 
+  // Static literal route — declared before any ':id' route so the
+  // router doesn't try to ParseUUIDPipe('saved').
+  @Get('saved')
+  @ApiOperation({ summary: "Caller's saved posts/reels (newest first)" })
+  getSaved(@CurrentUser('id') userId: string) {
+    return this.posts.getSaved(userId);
+  }
+
   @Get('user/:userId')
   @ApiOperation({ summary: "List a user's posts" })
   userPosts(
@@ -84,6 +92,24 @@ export class PostsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.posts.unlike(userId, id);
+  }
+
+  @Post(':id/save')
+  @ApiOperation({ summary: 'Bookmark a post (idempotent)' })
+  save(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.posts.save(userId, id);
+  }
+
+  @Delete(':id/save')
+  @ApiOperation({ summary: 'Remove a bookmark' })
+  unsave(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.posts.unsave(userId, id);
   }
 
   @Get(':id/comments')
