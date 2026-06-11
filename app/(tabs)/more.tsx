@@ -118,6 +118,14 @@ export default function MoreScreen() {
           label: "My Profile",
           onPress: () => router.push("/(tabs)/profile"),
         },
+        // Prospect rankings — every non-admin role cares: athletes see their
+        // standing, recruiters scout the top of a division, parents follow
+        // their athlete's rank.
+        {
+          icon: "trophy-outline" as const,
+          label: "Rankings",
+          onPress: () => router.push("/rankings"),
+        },
         // "Who Drafted You" is athlete-side only; recruiters use Draft
         // Board, parents have the inbox.
         ...(isAthlete

@@ -204,6 +204,7 @@ function RootLayoutContent() {
         <Stack.Screen name="invite-friends" options={{ headerShown: false }} />
         <Stack.Screen name="about" options={{ headerShown: false }} />
         <Stack.Screen name="drafts-received" options={{ headerShown: false }} />
+        <Stack.Screen name="rankings" options={{ headerShown: false }} />
         <Stack.Screen
           name="video"
           options={{ headerShown: false, animation: "fade" }}
