@@ -49,6 +49,33 @@ export class UsersService {
   async completeOnboarding(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
+    // Parents MUST have a real guardian_links row (pending_admin or
+    // approved) before is_onboarded can flip to true. Client-side
+    // preferences are not trustworthy — preferences is a free-form JSONB
+    // a parent could PUT themselves. This is the server-authoritative
+    // half of the guardian gate; the client mirrors the same rule.
+    const { data: existing, error: readErr } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    if (readErr || !existing) {
+      throw new NotFoundException('User not found');
+    }
+    if (existing.role === 'parent') {
+      const { data: link } = await supabase
+        .from('guardian_links')
+        .select('id, status')
+        .eq('guardian_user_id', userId)
+        .in('status', ['pending_admin', 'approved'])
+        .maybeSingle();
+      if (!link) {
+        throw new BadRequestException(
+          'Guardian link required before onboarding can be completed.',
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from('users')
       .update({ is_onboarded: true })
