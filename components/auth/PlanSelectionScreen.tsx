@@ -117,7 +117,7 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
 
         {/* Plans */}
         <View style={styles.plansContainer}>
-          {plans.map((plan, index) => {
+          {plans.filter((p) => !p.legacy).map((plan, index) => {
             const isProcessing = processingPlanId === plan.id;
             const isDisabled = processingPlanId !== null && !isProcessing;
             const isSelected = isProcessing; // visual highlight for the tapped one

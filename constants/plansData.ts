@@ -12,6 +12,8 @@ export interface Plan {
   swipesPerDay: number;
   features: string[];
   popular?: boolean;
+  /** Hide from the plan picker but keep for display on subscription.tsx. */
+  legacy?: boolean;
 }
 
 export const plans: Plan[] = [
@@ -49,5 +51,25 @@ export const plans: Plan[] = [
       "Priority matching",
       "No ads",
     ],
+  },
+  {
+    // LEGACY — keep as a display entry so users who subscribed before the
+    // 3-plan restructure don't see "Basic / Free" with manage controls on
+    // the subscription screen. Filtered out of PlanSelectionScreen by the
+    // `legacy` flag. The backend treats premium as an alias of pro for
+    // swipe-limit purposes (PLAN_SWIPE_LIMITS).
+    id: "premium",
+    name: "Premium",
+    price: 15,
+    period: "per month",
+    swipes: "70 swipes/day",
+    swipesPerDay: 70,
+    features: [
+      "Advanced filters",
+      "Premium badge",
+      "Priority matching",
+      "No ads",
+    ],
+    legacy: true,
   },
 ];

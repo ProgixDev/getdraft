@@ -276,7 +276,7 @@ export default function SubscriptionScreen() {
           {/* Plan comparison */}
           <Text style={styles.sectionHeading}>All Plans</Text>
 
-          {plans.map((plan) => {
+          {plans.filter((p) => !p.legacy || p.id === currentPlanId).map((plan) => {
             const isCurrent = plan.id === currentPlanId;
             const isPending = pendingAction === plan.id;
             return (
