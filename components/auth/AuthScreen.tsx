@@ -602,10 +602,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         if (result.isOnboarded) {
           onLogin?.();
         } else {
-          // Resume onboarding for an existing user that never finished —
-          // the resume effect above figures out the exact step.
+          // Resume onboarding for an existing user that never finished.
+          // MUST set "role" — the resume effect bails on
+          // signupStep !== "role" (and isn't keyed on signupStep), so
+          // starting on "location" leaves a parent on a step they don't
+          // even have in the flow. Going to "role" lets the effect read
+          // the user's current state and pick the correct step.
           setMode("signup");
-          setSignupStep("location");
+          setSignupStep("role");
         }
       } catch (err: any) {
         // Fallback to mock users only if backend is unreachable (network error, no response)
