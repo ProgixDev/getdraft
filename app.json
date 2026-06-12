@@ -16,7 +16,8 @@
         "NSPhotoLibraryUsageDescription": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
         "NSPhotoLibraryAddUsageDescription": "GetDraft saves selected photos to your profile.",
         "NSCameraUsageDescription": "GetDraft uses the camera to capture profile photos, scan guardian QR codes, and record your guardian declaration video.",
-        "NSMicrophoneUsageDescription": "GetDraft uses the microphone to record your guardian declaration video."
+        "NSMicrophoneUsageDescription": "GetDraft uses the microphone to record your guardian declaration video.",
+        "NSLocationWhenInUseUsageDescription": "GetDraft uses your location to set where you're based and place you on the talent map."
       }
     },
     "android": {
@@ -32,7 +33,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -77,6 +80,12 @@
           "cameraPermission": "GetDraft uses the camera to scan QR codes for guardian linking and to record your guardian declaration video.",
           "microphonePermission": "GetDraft uses the microphone to record your guardian declaration video.",
           "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GetDraft uses your location to set where you're based and place you on the talent map."
         }
       ]
     ],
