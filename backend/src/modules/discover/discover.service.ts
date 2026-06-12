@@ -18,15 +18,14 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 
 // ── Globe placement ────────────────────────────────────────────────
-// Approximate map centers for the countries we support. Used to place
-// athletes who have a country but no precise lat/lng yet (signup currently
-// saves country only) so REAL athletes appear on the talent globe instead of
-// only the mock seed. Same CA/US normalization as the rankings view.
-const COUNTRY_CENTERS: Record<string, { lat: number; lng: number }> = {
-  CA: { lat: 56.13, lng: -106.35 },
-  US: { lat: 39.83, lng: -98.58 },
-};
-
+// CA/US division mapping for the rankings view + anywhere else that
+// asks "is this user in the CA or US ranking pool?" Intentionally narrow
+// — adding countries here would silently widen the rankings divisions.
+// Globe placement uses the much broader COUNTRY_CENTROIDS map below.
+// (Currently unreferenced inside this file after placeByCountry switched
+// to COUNTRY_CENTROIDS; kept for parity with the rankings view and for
+// future TS callers that need the CA/US/OTHER classification.)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function normalizeCountryToKey(country: string | null): string | null {
   const c = (country ?? '').trim().toLowerCase();
   if (['canada', 'ca', 'can'].includes(c)) return 'CA';
@@ -46,6 +45,150 @@ function normalizeCountryToKey(country: string | null): string | null {
   return null;
 }
 
+// Broad country → approximate centroid map for globe placement. Used ONLY
+// by placeByCountry when a user has a country but no precise lat/lng yet.
+// Keys are lowercased country name; common aliases share a centroid via
+// COUNTRY_ALIASES. Adding a country here just plots its athletes near the
+// centroid — it does NOT affect the CA/US division logic above.
+const COUNTRY_CENTROIDS: Record<string, { lat: number; lng: number }> = {
+  // North America
+  canada: { lat: 56.13, lng: -106.35 },
+  'united states': { lat: 39.83, lng: -98.58 },
+  mexico: { lat: 23.63, lng: -102.55 },
+  // Central America + Caribbean
+  cuba: { lat: 21.52, lng: -77.78 },
+  'dominican republic': { lat: 18.74, lng: -70.16 },
+  jamaica: { lat: 18.11, lng: -77.3 },
+  'puerto rico': { lat: 18.22, lng: -66.59 },
+  panama: { lat: 8.54, lng: -80.78 },
+  // South America
+  brazil: { lat: -14.24, lng: -51.93 },
+  argentina: { lat: -38.42, lng: -63.62 },
+  chile: { lat: -35.68, lng: -71.54 },
+  colombia: { lat: 4.57, lng: -74.3 },
+  peru: { lat: -9.19, lng: -75.02 },
+  uruguay: { lat: -32.52, lng: -55.77 },
+  venezuela: { lat: 6.42, lng: -66.59 },
+  ecuador: { lat: -1.83, lng: -78.18 },
+  // Western Europe
+  'united kingdom': { lat: 55.38, lng: -3.44 },
+  ireland: { lat: 53.41, lng: -8.24 },
+  france: { lat: 46.23, lng: 2.21 },
+  germany: { lat: 51.17, lng: 10.45 },
+  spain: { lat: 40.46, lng: -3.75 },
+  portugal: { lat: 39.4, lng: -8.22 },
+  italy: { lat: 41.87, lng: 12.57 },
+  netherlands: { lat: 52.13, lng: 5.29 },
+  belgium: { lat: 50.5, lng: 4.47 },
+  switzerland: { lat: 46.82, lng: 8.23 },
+  austria: { lat: 47.52, lng: 14.55 },
+  // Nordics
+  sweden: { lat: 60.13, lng: 18.64 },
+  norway: { lat: 60.47, lng: 8.47 },
+  finland: { lat: 61.92, lng: 25.75 },
+  denmark: { lat: 56.26, lng: 9.5 },
+  iceland: { lat: 64.96, lng: -19.02 },
+  // Central + Eastern Europe
+  poland: { lat: 51.92, lng: 19.15 },
+  'czech republic': { lat: 49.82, lng: 15.47 },
+  hungary: { lat: 47.16, lng: 19.5 },
+  romania: { lat: 45.94, lng: 24.97 },
+  bulgaria: { lat: 42.73, lng: 25.49 },
+  ukraine: { lat: 48.38, lng: 31.17 },
+  greece: { lat: 39.07, lng: 21.82 },
+  turkey: { lat: 38.96, lng: 35.24 },
+  russia: { lat: 61.52, lng: 105.32 },
+  serbia: { lat: 44.02, lng: 21.01 },
+  croatia: { lat: 45.1, lng: 15.2 },
+  // North Africa
+  morocco: { lat: 31.79, lng: -7.09 },
+  algeria: { lat: 28.03, lng: 1.66 },
+  tunisia: { lat: 33.89, lng: 9.54 },
+  libya: { lat: 26.34, lng: 17.23 },
+  egypt: { lat: 26.82, lng: 30.8 },
+  // Sub-Saharan Africa
+  nigeria: { lat: 9.08, lng: 8.68 },
+  'south africa': { lat: -30.56, lng: 22.94 },
+  kenya: { lat: -0.02, lng: 37.91 },
+  ethiopia: { lat: 9.15, lng: 40.49 },
+  ghana: { lat: 7.95, lng: -1.03 },
+  senegal: { lat: 14.5, lng: -14.45 },
+  cameroon: { lat: 7.37, lng: 12.35 },
+  uganda: { lat: 1.37, lng: 32.29 },
+  tanzania: { lat: -6.37, lng: 34.89 },
+  // Middle East
+  israel: { lat: 31.05, lng: 34.85 },
+  'saudi arabia': { lat: 23.89, lng: 45.08 },
+  'united arab emirates': { lat: 23.42, lng: 53.85 },
+  qatar: { lat: 25.35, lng: 51.18 },
+  jordan: { lat: 30.59, lng: 36.24 },
+  lebanon: { lat: 33.85, lng: 35.86 },
+  iran: { lat: 32.43, lng: 53.69 },
+  iraq: { lat: 33.22, lng: 43.68 },
+  // South + Southeast Asia
+  india: { lat: 20.59, lng: 78.96 },
+  pakistan: { lat: 30.38, lng: 69.35 },
+  bangladesh: { lat: 23.68, lng: 90.36 },
+  'sri lanka': { lat: 7.87, lng: 80.77 },
+  thailand: { lat: 15.87, lng: 100.99 },
+  vietnam: { lat: 14.06, lng: 108.28 },
+  indonesia: { lat: -0.79, lng: 113.92 },
+  philippines: { lat: 12.88, lng: 121.77 },
+  malaysia: { lat: 4.21, lng: 101.98 },
+  singapore: { lat: 1.35, lng: 103.82 },
+  // East Asia
+  china: { lat: 35.86, lng: 104.2 },
+  japan: { lat: 36.2, lng: 138.25 },
+  'south korea': { lat: 35.91, lng: 127.77 },
+  taiwan: { lat: 23.7, lng: 120.96 },
+  'hong kong': { lat: 22.32, lng: 114.17 },
+  // Oceania
+  australia: { lat: -25.27, lng: 133.78 },
+  'new zealand': { lat: -40.9, lng: 174.89 },
+};
+
+// Aliases (variants of the same country) → canonical lowercase key in
+// COUNTRY_CENTROIDS. Avoids duplicating centroid coordinates.
+const COUNTRY_ALIASES: Record<string, string> = {
+  ca: 'canada',
+  can: 'canada',
+  us: 'united states',
+  usa: 'united states',
+  'u.s.': 'united states',
+  'u.s.a.': 'united states',
+  'united states of america': 'united states',
+  america: 'united states',
+  uk: 'united kingdom',
+  britain: 'united kingdom',
+  'great britain': 'united kingdom',
+  england: 'united kingdom',
+  scotland: 'united kingdom',
+  wales: 'united kingdom',
+  uae: 'united arab emirates',
+  emirates: 'united arab emirates',
+  'czech republic': 'czech republic',
+  czechia: 'czech republic',
+  korea: 'south korea',
+  'republic of korea': 'south korea',
+  'south korea': 'south korea',
+  'south africa': 'south africa',
+  rsa: 'south africa',
+  'hong kong sar': 'hong kong',
+  hk: 'hong kong',
+  'new zealand': 'new zealand',
+  nz: 'new zealand',
+};
+
+function normalizeCountryForCentroid(country: string | null): string | null {
+  const raw = (country ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  // Centroid hit (or alias hit) wins; otherwise null.
+  if (COUNTRY_CENTROIDS[raw]) return raw;
+  const aliased = COUNTRY_ALIASES[raw];
+  if (aliased && COUNTRY_CENTROIDS[aliased]) return aliased;
+  return null;
+}
+
 // Stable per-user hash so the country offset is deterministic (same spread
 // every reload, and two same-country athletes don't stack on one point).
 function hashString(s: string): number {
@@ -60,9 +203,9 @@ function placeByCountry(
   country: string | null,
   userId: string,
 ): { lat: number; lng: number } | null {
-  const key = normalizeCountryToKey(country);
+  const key = normalizeCountryForCentroid(country);
   if (!key) return null;
-  const base = COUNTRY_CENTERS[key];
+  const base = COUNTRY_CENTROIDS[key];
   const h = hashString(userId);
   // Mask to non-negative 10-bit slices so the offsets stay bounded — a raw
   // `h % 1000` can be negative (h is a signed 32-bit int) and would fling a
@@ -266,7 +409,8 @@ export class DiscoverService {
       take: 200,
     });
 
-    return users
+    let skippedNoCoords = 0;
+    const placed = users
       .map((u) => {
         const p = u.athlete_profiles;
         if (!p) return null;
@@ -279,10 +423,13 @@ export class DiscoverService {
           lat = Number(u.latitude);
           lng = Number(u.longitude);
         } else {
-          const placed = placeByCountry(u.country, u.id);
-          if (!placed) return null;
-          lat = placed.lat;
-          lng = placed.lng;
+          const fallback = placeByCountry(u.country, u.id);
+          if (!fallback) {
+            skippedNoCoords += 1;
+            return null;
+          }
+          lat = fallback.lat;
+          lng = fallback.lng;
         }
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
         const photos = Array.isArray(p.photos) ? (p.photos as string[]) : [];
@@ -311,6 +458,16 @@ export class DiscoverService {
         };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    // Visibility: how many athletes were dropped because they had neither
+    // precise coords NOR a country in COUNTRY_CENTROIDS. If this number
+    // grows we'll see it in the backend logs and know to widen the map.
+    if (skippedNoCoords > 0) {
+      this.logger.warn(
+        `getMapPoints: dropped ${skippedNoCoords} athlete(s) with no coords and an unsupported country`,
+      );
+    }
+    return placed;
   }
 
   private async excludedUserIds(userId: string): Promise<string[]> {
