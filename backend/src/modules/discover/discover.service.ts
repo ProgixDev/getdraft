@@ -243,6 +243,7 @@ export class DiscoverService {
       },
       select: {
         id: true,
+        email: true,
         name: true,
         avatar_url: true,
         kyc_status: true,
@@ -302,6 +303,11 @@ export class DiscoverService {
           // to render when the user hasn't set a separate avatar_url.
           photo: photos[0] ?? null,
           verified: u.kyc_status === 'approved',
+          // Seeded/demo accounts are created with @getdraft.app emails;
+          // manually-created real users sign up with their own email. The
+          // globe paints seeded points orange and real users green so they
+          // can be told apart at a glance.
+          generated: (u.email ?? '').toLowerCase().endsWith('@getdraft.app'),
         };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);

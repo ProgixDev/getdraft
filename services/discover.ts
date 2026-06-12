@@ -46,6 +46,9 @@ export interface MapPoint {
   // falls back to this when avatar_url is missing.
   photo: string | null;
   verified: boolean;
+  // True for seeded/demo accounts (@getdraft.app emails). The globe colors
+  // these orange and manually-created real users green.
+  generated: boolean;
 }
 
 export const discoverService = {

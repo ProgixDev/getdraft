@@ -78,7 +78,7 @@ const DEFAULT_CONTINENTS = [
 // user can TAP to bridge a "{type:'point', id}" message back to RN.
 // Drag still rotates the globe — taps are discriminated by elapsed
 // time + total movement on touchend.
-function buildGlobeHtml(points: { id: string; lat: number; lng: number; role: string }[]): string {
+function buildGlobeHtml(points: { id: string; lat: number; lng: number; role: string; generated: boolean }[]): string {
   // The points payload must be safe to embed inline. JSON.stringify
   // gives us a JS literal that can't break out of the script tag and
   // is bounded by what the backend returns (no untrusted markup).
@@ -108,8 +108,9 @@ var arcs=[
 {startLat:-30.6,startLng:22.9,endLat:40.5,endLng:-3.7},
 {startLat:23.6,startLng:-102.6,endLat:56.1,endLng:-106.3}
 ];
-// Visible point markers (athletes green, recruiters/coaches orange).
-function colorFor(d){return d.role==='athlete'?'#00B894':'#FDA63A'}
+// Visible point markers — manually-created REAL users are GREEN, seeded/demo
+// accounts (@getdraft.app) are ORANGE, so real signups stand out instantly.
+function colorFor(d){return d.generated?'#FDA63A':'#00B894'}
 var G=new ThreeGlobe()
 .globeImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg')
 .bumpImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png')
@@ -319,6 +320,7 @@ export default function GlobeTab() {
           lat: p.lat,
           lng: p.lng,
           role: p.role,
+          generated: p.generated,
         })),
       ),
     [points],
