@@ -272,12 +272,6 @@ function getStepsForRole(role: string): Step[] {
           placeholder: "185",
           icon: "fitness-outline",
         },
-        {
-          id: "jerseyNumber",
-          label: "Jersey Number",
-          placeholder: "10",
-          icon: "shirt-outline",
-        },
       ],
     },
   ];
@@ -519,7 +513,6 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               ? toIsoDate(dateOfBirth)
               : undefined,
             experience: formData.experience || undefined,
-            jersey_number: formData.jerseyNumber || undefined,
           });
         } else if (role === "coach" || role === "recruiter") {
           // tags carry the optional level + (recruiter-only) region so the
