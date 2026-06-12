@@ -499,22 +499,29 @@ export const LocationSelectionScreen: React.FC<
           </Animated.View>
 
           {/* 3D Globe — collapses to 0 height when the search input is
-              focused so the card lifts above the keyboard. */}
-          <Animated.View
-            entering={FadeInDown.duration(1000).delay(200)}
-            style={[styles.globeContainer, animatedGlobeStyle]}
-          >
-            <WebView
-              ref={webViewRef}
-              source={{ html: globeHtml }}
-              style={styles.globe}
-              scrollEnabled={false}
-              bounces={false}
-              javaScriptEnabled={true}
-              domStorageEnabled={true}
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
-            />
+              focused so the card lifts above the keyboard. The entering
+              layout animation goes on the OUTER wrapper, the
+              useAnimatedStyle (which also drives opacity) goes on the
+              INNER view — putting both on the same Animated.View made
+              Reanimated 4 warn that the layout animation could overwrite
+              the focus-driven opacity, which on new-arch can crash on
+              later unmount. */}
+          <Animated.View entering={FadeInDown.duration(1000).delay(200)}>
+            <Animated.View
+              style={[styles.globeContainer, animatedGlobeStyle]}
+            >
+              <WebView
+                ref={webViewRef}
+                source={{ html: globeHtml }}
+                style={styles.globe}
+                scrollEnabled={false}
+                bounces={false}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                allowsInlineMediaPlayback={true}
+                mediaPlaybackRequiresUserAction={false}
+              />
+            </Animated.View>
           </Animated.View>
 
           {/* Search & Results card */}
