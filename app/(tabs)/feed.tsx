@@ -104,9 +104,15 @@ export default function FeedScreen() {
         setHasMore(res.hasMore);
         setPage(p);
       } catch (err: any) {
-        const msg =
-          err?.response?.data?.message ?? err?.message ?? "Failed to load feed";
-        setErrorMsg(String(msg));
+        // When api.ts has already declared the session dead, don't paint a
+        // stranded error over the feed — the root layout's auth-state
+        // effect will swap to the login screen on the next render. Real
+        // (non-auth) failures still surface as before.
+        if (!err?.isAuthExpired) {
+          const msg =
+            err?.response?.data?.message ?? err?.message ?? "Failed to load feed";
+          setErrorMsg(String(msg));
+        }
         if (mode !== "append") setPosts([]);
       } finally {
         setLoading(false);

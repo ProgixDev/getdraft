@@ -45,8 +45,8 @@ import { SplashScreen, WelcomeScreen } from "@/components";
 import { AuthLanding } from "@/components/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
-import { login } from "@/store/slices/authSlice";
-import { API_ORIGIN } from "@/services/api";
+import { login, logout } from "@/store/slices/authSlice";
+import { API_ORIGIN, setOnSessionExpired } from "@/services/api";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -78,6 +78,17 @@ function RootLayoutContent() {
   useEffect(() => {
     fetch(`${API_ORIGIN}/api/health`).catch(() => {});
   }, []);
+
+  // Bridge api.ts's 401-after-refresh-failure into Redux so the existing
+  // `appState === "app" && !isAuthenticated` effect below kicks the user
+  // back to the auth screen. The callback is registered for the lifetime
+  // of this layout, cleared on unmount in case of fast refresh / HMR.
+  useEffect(() => {
+    setOnSessionExpired(() => {
+      dispatch(logout());
+    });
+    return () => setOnSessionExpired(null);
+  }, [dispatch]);
 
   // Restore auth on app start. Users who haven't finished onboarding
   // (location / profile / KYC / guardian-link / questions / plan) MUST

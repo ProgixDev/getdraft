@@ -98,6 +98,20 @@ export async function clearTokens(): Promise<void> {
   await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
+// --- Session-expired handoff ---
+//
+// api.ts can't import the Redux store (the store imports authSlice → which
+// imports authService → which imports api.ts; a direct store import here
+// would create a cycle that resolves to an undefined export at module load).
+// Instead we expose a callback that the root layout sets on mount with
+// `dispatch(logout)`, so a refresh failure inside the interceptor reliably
+// drives the app back to the auth screen without bolting on a parallel
+// mechanism.
+let _onSessionExpired: (() => void) | null = null;
+export function setOnSessionExpired(fn: (() => void) | null): void {
+  _onSessionExpired = fn;
+}
+
 // --- Axios instance ---
 
 const api = axios.create({
@@ -146,8 +160,22 @@ api.interceptors.response.use(
         original.headers.Authorization = `Bearer ${newTokens.accessToken}`;
         return api(original);
       } catch {
+        // Refresh genuinely failed (account deleted, refresh token revoked,
+        // …). Tear down auth state so the root layout transitions to login,
+        // and rewrite the user-facing message so screens that surface
+        // err.response.data.message show something neutral instead of the
+        // raw backend string "Missing authorization token".
         await clearTokens();
-        // The app's auth state listener will handle redirect to login
+        try {
+          _onSessionExpired?.();
+        } catch {
+          /* listener errors must never block the rejection */
+        }
+        (error as any).isAuthExpired = true;
+        if (error.response?.data && typeof error.response.data === "object") {
+          (error.response.data as any).message =
+            "Your session expired. Please sign in again.";
+        }
       }
     }
 
