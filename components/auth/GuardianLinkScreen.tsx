@@ -757,6 +757,25 @@ function VideoExampleStep(props: { onContinue: () => void; onBack: () => void })
  * "you're on stage now" UI. Only chrome is a small close button at
  * the top-left.
  */
+// Plays the just-recorded take back over the full screen so the parent
+// can review before tapping Submit. Lives in its own component because
+// useVideoPlayer is a hook and must only run when there's a uri to play.
+function RecordedPreview({ uri }: { uri: string }) {
+    const player = useVideoPlayer(uri, (p) => {
+        p.loop = true;
+        p.muted = false;
+        p.play();
+    });
+    return (
+        <VideoView
+            player={player}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            nativeControls
+        />
+    );
+}
+
 function VideoRecordStep(props: {
     cameraRef: React.MutableRefObject<CameraViewType | null>;
     permission: boolean;
@@ -774,9 +793,12 @@ function VideoRecordStep(props: {
 }) {
     const insets = useSafeAreaInsets();
     const rel = RELATIONSHIPS.find((r) => r.id === props.relationship)?.label.toLowerCase() ?? 'guardian';
+    const isPreviewing = !!props.recordedUri;
     return (
         <View style={styles.fullscreenBlack}>
-            {props.permission ? (
+            {isPreviewing ? (
+                <RecordedPreview uri={props.recordedUri!} />
+            ) : props.permission ? (
                 <CameraView
                     ref={props.cameraRef}
                     style={StyleSheet.absoluteFill}
@@ -799,7 +821,8 @@ function VideoRecordStep(props: {
                 </View>
             )}
 
-            {/* Top chrome — close at top-left, REC pill at top-center */}
+            {/* Top chrome — close at top-left, REC pill while recording or
+                PREVIEW pill while reviewing the last take. */}
             <Pressable
                 style={[styles.fullscreenCloseAbsolute, { top: insets.top + 8 }]}
                 onPress={props.onBack}
@@ -819,18 +842,30 @@ function VideoRecordStep(props: {
                     <Text style={styles.recText}>REC</Text>
                 </View>
             )}
-
-            {/* Telepromter at the bottom — what to say + record button */}
-            <View style={[styles.recBottom, { paddingBottom: insets.bottom + 12 }]}>
-                <View style={styles.telepromter}>
-                    <Text style={styles.telepromterLabel}>Read this out loud</Text>
-                    <Text style={styles.telepromterText}>
-                        "My name is <Text style={styles.telepromterBold}>[your full name]</Text>.
-                        {' '}I am the <Text style={styles.telepromterBold}>{rel}</Text> of{' '}
-                        <Text style={styles.telepromterBold}>{props.athleteFullName}</Text>.
-                        I confirm that I am submitting this on the GetDraft platform on their behalf."
-                    </Text>
+            {isPreviewing && (
+                <View
+                    pointerEvents="none"
+                    style={[styles.recIndicatorAbsolute, { top: insets.top + 14 }]}
+                >
+                    <Ionicons name="play" size={10} color={brand.white} />
+                    <Text style={styles.recText}>PREVIEW</Text>
                 </View>
+            )}
+
+            {/* Bottom controls — telepromter only while recording (it's a
+                read-this-out-loud cue, not needed during review). */}
+            <View style={[styles.recBottom, { paddingBottom: insets.bottom + 12 }]}>
+                {!isPreviewing && (
+                    <View style={styles.telepromter}>
+                        <Text style={styles.telepromterLabel}>Read this out loud</Text>
+                        <Text style={styles.telepromterText}>
+                            "My name is <Text style={styles.telepromterBold}>[your full name]</Text>.
+                            {' '}I am the <Text style={styles.telepromterBold}>{rel}</Text> of{' '}
+                            <Text style={styles.telepromterBold}>{props.athleteFullName}</Text>.
+                            I confirm that I am submitting this on the GetDraft platform on their behalf."
+                        </Text>
+                    </View>
+                )}
 
                 {!props.recordedUri ? (
                     props.isRecording ? (
