@@ -63,6 +63,7 @@ const MOCK_GRID_PHOTOS: PostItem[] = [
   likesCount: 0,
   commentsCount: 0,
   likedByMe: false,
+  savedByMe: false,
   createdAt: new Date().toISOString(),
   author: null,
 }));
@@ -81,6 +82,7 @@ const MOCK_GRID_REELS: PostItem[] = [
   likesCount: 0,
   commentsCount: 0,
   likedByMe: false,
+  savedByMe: false,
   createdAt: new Date().toISOString(),
   author: null,
 }));

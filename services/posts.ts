@@ -19,6 +19,7 @@ export interface PostItem {
   likesCount: number;
   commentsCount: number;
   likedByMe: boolean;
+  savedByMe: boolean;
   createdAt: string;
   author: PostAuthor | null;
 }

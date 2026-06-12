@@ -42,7 +42,7 @@ export class PostsService {
       .eq('id', userId)
       .single();
 
-    return this.shapePost(data, author as AuthorRow | null, false);
+    return this.shapePost(data, author as AuthorRow | null, false, false);
   }
 
   async getFeed(
@@ -72,13 +72,19 @@ export class PostsService {
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-    const likedSet = await this.fetchLikedByMe(
-      viewerId,
-      pageRows.map((r: any) => r.id as string),
-    );
+    const pageIds = pageRows.map((r: any) => r.id as string);
+    const [likedSet, savedSet] = await Promise.all([
+      this.fetchLikedByMe(viewerId, pageIds),
+      this.fetchSavedByMe(viewerId, pageIds),
+    ]);
 
     const posts = pageRows.map((row: any) =>
-      this.shapePost(row, row.author as AuthorRow | null, likedSet.has(row.id)),
+      this.shapePost(
+        row,
+        row.author as AuthorRow | null,
+        likedSet.has(row.id),
+        savedSet.has(row.id),
+      ),
     );
 
     return { posts, hasMore };
@@ -104,13 +110,19 @@ export class PostsService {
     if (error) throw new BadRequestException(error.message);
     const rows = data ?? [];
 
-    const likedSet = await this.fetchLikedByMe(
-      viewerId,
-      rows.map((r: any) => r.id as string),
-    );
+    const rowIds = rows.map((r: any) => r.id as string);
+    const [likedSet, savedSet] = await Promise.all([
+      this.fetchLikedByMe(viewerId, rowIds),
+      this.fetchSavedByMe(viewerId, rowIds),
+    ]);
     return {
       posts: rows.map((row: any) =>
-        this.shapePost(row, row.author as AuthorRow | null, likedSet.has(row.id)),
+        this.shapePost(
+          row,
+          row.author as AuthorRow | null,
+          likedSet.has(row.id),
+          savedSet.has(row.id),
+        ),
       ),
     };
   }
@@ -325,7 +337,9 @@ export class PostsService {
       .filter((p): p is NonNullable<typeof p> => p !== null);
 
     // viewer is also the owner here, so every row is liked-by-me-tracked
-    // via the same fetchLikedByMe pass the feed uses.
+    // via the same fetchLikedByMe pass the feed uses. savedByMe is always
+    // true on this endpoint by definition — these rows are this user's
+    // saved list.
     const likedSet = await this.fetchLikedByMe(
       viewerId,
       posts.map((p: any) => p.id as string),
@@ -333,7 +347,7 @@ export class PostsService {
 
     return {
       posts: posts.map((p: any) =>
-        this.shapePost(p, p.author as AuthorRow | null, likedSet.has(p.id)),
+        this.shapePost(p, p.author as AuthorRow | null, likedSet.has(p.id), true),
       ),
     };
   }
@@ -345,6 +359,21 @@ export class PostsService {
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from('post_likes')
+      .select('post_id')
+      .eq('user_id', viewerId)
+      .in('post_id', postIds);
+    if (error) return new Set<string>();
+    return new Set<string>((data ?? []).map((r: any) => r.post_id as string));
+  }
+
+  // Same shape as fetchLikedByMe but against the saved_posts table — used
+  // by getFeed + getUserPosts so the Feed's save button can render its
+  // filled-vs-outline icon correctly per viewer.
+  private async fetchSavedByMe(viewerId: string, postIds: string[]) {
+    if (postIds.length === 0) return new Set<string>();
+    const supabase = this.supabaseService.getAdminClient();
+    const { data, error } = await supabase
+      .from('saved_posts')
       .select('post_id')
       .eq('user_id', viewerId)
       .in('post_id', postIds);
@@ -364,7 +393,12 @@ export class PostsService {
     return new Set<string>((data ?? []).map((r: any) => r.comment_id as string));
   }
 
-  private shapePost(row: any, author: AuthorRow | null, likedByMe: boolean) {
+  private shapePost(
+    row: any,
+    author: AuthorRow | null,
+    likedByMe: boolean,
+    savedByMe: boolean,
+  ) {
     return {
       id: row.id as string,
       kind: row.kind as 'post' | 'reel',
@@ -375,6 +409,7 @@ export class PostsService {
       likesCount: Number(row.likes_count ?? 0),
       commentsCount: Number(row.comments_count ?? 0),
       likedByMe,
+      savedByMe,
       createdAt: row.created_at as string,
       author: author
         ? {

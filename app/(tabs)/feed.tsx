@@ -166,6 +166,28 @@ export default function FeedScreen() {
     }
   }, []);
 
+  // Same shape as handleLikeToggle but for the bookmark/save state.
+  // savePost/unsavePost return null on failure (the service swallows the
+  // error), so we roll back the optimistic flip if either resolves to null.
+  const handleSaveToggle = useCallback(async (post: PostItem) => {
+    const willSave = !post.savedByMe;
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === post.id ? { ...p, savedByMe: willSave } : p,
+      ),
+    );
+    const res = willSave
+      ? await postsService.savePost(post.id)
+      : await postsService.unsavePost(post.id);
+    if (res === null) {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === post.id ? { ...p, savedByMe: post.savedByMe } : p,
+        ),
+      );
+    }
+  }, []);
+
   const handleCommentCountChange = useCallback(
     (postId: string, count: number) => {
       setPosts((prev) =>
@@ -267,6 +289,7 @@ export default function FeedScreen() {
           onEndReached={onEndReached}
           loadingMore={loadingMore}
           onLikeToggle={handleLikeToggle}
+          onSaveToggle={handleSaveToggle}
           onOpenComments={(id) => setCommentsForPost(id)}
           reducedMotion={reducedMotion}
           headerHeight={insets.top + 60}
@@ -282,6 +305,7 @@ export default function FeedScreen() {
           onEndReached={onEndReached}
           loadingMore={loadingMore}
           onLikeToggle={handleLikeToggle}
+          onSaveToggle={handleSaveToggle}
           onOpenComments={(id) => setCommentsForPost(id)}
           insetsBottom={insets.bottom}
           errorMsg={errorMsg}
@@ -386,6 +410,7 @@ interface PostsListProps {
   onEndReached: () => void;
   loadingMore: boolean;
   onLikeToggle: (p: PostItem) => void;
+  onSaveToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
   insetsBottom: number;
   errorMsg: string | null;
@@ -399,6 +424,7 @@ function PostsList({
   onEndReached,
   loadingMore,
   onLikeToggle,
+  onSaveToggle,
   onOpenComments,
   insetsBottom,
   errorMsg,
@@ -445,6 +471,7 @@ function PostsList({
         <PostCard
           post={item}
           onLikeToggle={onLikeToggle}
+          onSaveToggle={onSaveToggle}
           onOpenComments={onOpenComments}
         />
       )}
@@ -455,10 +482,12 @@ function PostsList({
 function PostCard({
   post,
   onLikeToggle,
+  onSaveToggle,
   onOpenComments,
 }: {
   post: PostItem;
   onLikeToggle: (p: PostItem) => void;
+  onSaveToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
 }) {
   const router = useRouter();
@@ -543,6 +572,17 @@ function PostCard({
           <Ionicons name="chatbubble-outline" size={20} color={theme.text} />
           <Text style={styles.actionCount}>{post.commentsCount}</Text>
         </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
+          onPress={() => onSaveToggle(post)}
+          accessibilityLabel={post.savedByMe ? "Remove bookmark" : "Save"}
+        >
+          <Ionicons
+            name={post.savedByMe ? "bookmark" : "bookmark-outline"}
+            size={20}
+            color={post.savedByMe ? brand.primary : theme.text}
+          />
+        </Pressable>
       </View>
 
       {post.caption ? (
@@ -567,6 +607,7 @@ interface ReelsListProps {
   onEndReached: () => void;
   loadingMore: boolean;
   onLikeToggle: (p: PostItem) => void;
+  onSaveToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
   reducedMotion: boolean;
   headerHeight: number;
@@ -582,6 +623,7 @@ function ReelsList({
   onEndReached,
   loadingMore,
   onLikeToggle,
+  onSaveToggle,
   onOpenComments,
   reducedMotion,
   headerHeight,
@@ -661,6 +703,7 @@ function ReelsList({
           topInset={headerHeight}
           autoplay={!reducedMotion}
           onLikeToggle={onLikeToggle}
+          onSaveToggle={onSaveToggle}
           onOpenComments={onOpenComments}
         />
       )}
@@ -675,6 +718,7 @@ function ReelItem({
   topInset,
   autoplay,
   onLikeToggle,
+  onSaveToggle,
   onOpenComments,
 }: {
   post: PostItem;
@@ -683,6 +727,7 @@ function ReelItem({
   topInset: number;
   autoplay: boolean;
   onLikeToggle: (p: PostItem) => void;
+  onSaveToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
 }) {
   const router = useRouter();
@@ -785,6 +830,20 @@ function ReelItem({
           >
             <Ionicons name="chatbubble" size={28} color={brand.white} />
             <Text style={styles.reelActionCount}>{post.commentsCount}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.reelActionBtn,
+              pressed && styles.pressed,
+            ]}
+            onPress={() => onSaveToggle(post)}
+            accessibilityLabel={post.savedByMe ? "Remove bookmark" : "Save"}
+          >
+            <Ionicons
+              name={post.savedByMe ? "bookmark" : "bookmark-outline"}
+              size={26}
+              color={brand.white}
+            />
           </Pressable>
           <Pressable
             style={({ pressed }) => [
