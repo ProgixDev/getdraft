@@ -96,14 +96,17 @@ function RootLayoutContent() {
   // skip straight to home and leave them unverified.
   useEffect(() => {
     loadAuth().then((persisted) => {
+      // Restore any saved session into Redux, but ALWAYS open on the logo
+      // splash → welcome intro. Where we land AFTER the intro is decided in
+      // handleWelcomeComplete from the restored auth state — so a returning
+      // user (or a leftover, not-yet-cleared session) still sees the branded
+      // intro on a cold launch instead of being dropped onto the auth landing.
       if (persisted?.user) {
         dispatch(
           login({ user: persisted.user, isOnboarded: persisted.isOnboarded }),
         );
-        setAppState(persisted.isOnboarded ? "app" : "auth");
-      } else {
-        setAppState("splash");
       }
+      setAppState("splash");
     });
   }, [dispatch]);
 
@@ -135,8 +138,11 @@ function RootLayoutContent() {
   }, []);
 
   const handleWelcomeComplete = useCallback(() => {
-    setAppState("auth");
-  }, []);
+    // After the intro: a fully-onboarded signed-in user goes straight into
+    // the app; everyone else (logged out, or mid-signup) lands on the auth
+    // flow, which resumes their step if they were mid-signup.
+    setAppState(isAuthenticated && isOnboarded ? "app" : "auth");
+  }, [isAuthenticated, isOnboarded]);
 
   const handleAuthComplete = useCallback(() => {
     setAppState("app");
