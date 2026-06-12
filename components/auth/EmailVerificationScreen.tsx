@@ -6,6 +6,9 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
@@ -127,7 +130,15 @@ export const EmailVerificationScreen: React.FC<
       colors={[brand.primary, "#0a4d8f", brand.primary]}
       style={styles.container}
     >
-      <View style={styles.content}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Back Button */}
         <Pressable onPress={onBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={brand.white} />
@@ -217,7 +228,8 @@ export const EmailVerificationScreen: React.FC<
             </Pressable>
           </View>
         </Animated.View>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 };
@@ -227,9 +239,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingTop: 60,
     paddingHorizontal: 24,
+    paddingBottom: 40,
   },
   backButton: {
     width: 40,

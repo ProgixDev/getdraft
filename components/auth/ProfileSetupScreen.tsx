@@ -11,6 +11,7 @@ import {
   Platform,
   Switch,
   Alert,
+  KeyboardAvoidingView,
 } from "react-native";
 import DateTimePicker, {
   DateTimePickerAndroid,
@@ -617,10 +618,17 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           </View>
         </View>
 
-        {/* Form Card */}
+        {/* Form Card — wrapped in KAV so the focused field never sits
+            behind the keyboard. iOS uses padding; Android relies on
+            app.json's softwareKeyboardLayoutMode:"resize". */}
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
           <Animated.View
             key={currentStep}
@@ -1387,6 +1395,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </View>
           </Animated.View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </LinearGradient>
   );
@@ -1394,6 +1403,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   content: {
