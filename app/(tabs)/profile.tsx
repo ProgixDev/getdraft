@@ -549,6 +549,37 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Subscription entry — mirrors the More-tab "My Subscription"
+            row but lives on profile so the affordance is right where
+            users look when they want to upgrade. Hidden for parents
+            (their athlete owns the plan, parents don't subscribe). */}
+        {!isParent && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.subscriptionCard,
+              pressed && styles.subscriptionCardPressed,
+            ]}
+            onPress={() => router.push("/subscription")}
+            accessibilityRole="button"
+            accessibilityLabel="Manage subscription"
+          >
+            <View style={styles.subscriptionIcon}>
+              <Ionicons name="diamond" size={20} color={brand.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subscriptionTitle}>Manage Plan</Text>
+              <Text style={styles.subscriptionSubtitle}>
+                View or upgrade your subscription
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.textMuted}
+            />
+          </Pressable>
+        )}
+
         {/* Athlete Stats Bar */}
         {isAthlete && athleteProfile && (
           <View style={styles.statsBar}>
@@ -1248,6 +1279,39 @@ const styles = StyleSheet.create({
   sportDot: {
     fontSize: 13,
     color: theme.textMuted,
+  },
+  subscriptionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: theme.cardBg,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+  },
+  subscriptionCardPressed: {
+    opacity: 0.7,
+  },
+  subscriptionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: brand.primary,
+  },
+  subscriptionTitle: {
+    fontSize: 15,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  subscriptionSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
   },
   statsBar: {
     backgroundColor: theme.cardBg,
