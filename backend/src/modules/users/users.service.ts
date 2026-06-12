@@ -1,18 +1,25 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUserPayload, UserRole } from '../../common/types';
 
 @Injectable()
 export class UsersService {
-  constructor(private supabaseService: SupabaseService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private supabaseService: SupabaseService,
+    private subscriptionsService: SubscriptionsService,
+  ) {}
 
   async getMe(user: CurrentUserPayload) {
     const supabase = this.supabaseService.getAdminClient();
@@ -284,5 +291,42 @@ export class UsersService {
     }
 
     return { message: 'User unblocked' };
+  }
+
+  /**
+   * Permanent self-service account deletion. Best-effort cancels the
+   * Stripe subscription (so we don't keep charging a deleted user) and
+   * then removes the auth.users row — every public.* row referencing
+   * it (users, profiles, swipes, matches, conversations, messages,
+   * posts, saved_posts, guardian_links, subscriptions) cascades away
+   * via ON DELETE CASCADE FKs. Stripe failures are logged, never
+   * fatal: a card-processor outage must not strand the user with an
+   * undeletable account.
+   */
+  async deleteAccount(userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data: row } = await supabase
+      .from('users')
+      .select('stripe_subscription_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (row?.stripe_subscription_id) {
+      try {
+        await this.subscriptionsService.cancelSubscription(userId, true);
+      } catch (err: any) {
+        this.logger.error(
+          `Stripe cancel failed during deleteAccount(${userId}): ${err?.message ?? err}`,
+        );
+      }
+    }
+
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    return { deleted: true };
   }
 }

@@ -11,6 +11,10 @@ export const usersService = {
     return data.data;
   },
 
+  async deleteAccount(): Promise<void> {
+    await api.delete("/users/me");
+  },
+
   async completeOnboarding(): Promise<void> {
     // Opt this call out of api.ts's session-expired auto-logout. If the
     // PUT 401s right at the end of signup (e.g. the access token aged

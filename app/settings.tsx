@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useFonts,
@@ -22,6 +22,9 @@ import {
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { usersService } from "@/services/users";
+import { clearTokens } from "@/services/api";
+import { clearAuth } from "@/store/authStorage";
+import { logout } from "@/store/slices/authSlice";
 
 const PREF_DEFAULTS = {
   matchAlerts: true,
@@ -34,7 +37,9 @@ const PREF_DEFAULTS = {
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
+  const [deleting, setDeleting] = useState(false);
 
   const [matchAlerts, setMatchAlerts] = useState(PREF_DEFAULTS.matchAlerts);
   const [messageNotifications, setMessageNotifications] = useState(
@@ -128,6 +133,7 @@ export default function SettingsScreen() {
   if (!fontsLoaded) return null;
 
   const handleDeleteAccount = () => {
+    if (deleting) return;
     Alert.alert(
       "Delete Account",
       "Are you sure? This action cannot be undone. All your data, matches, and messages will be permanently deleted.",
@@ -138,8 +144,36 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: () =>
             Alert.alert(
-              "Account Deletion",
-              "Account deletion is coming soon. Contact support@getdraft.com for assistance.",
+              "Permanently delete your account?",
+              "This will erase your profile, posts, matches, and messages. This cannot be undone.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    setDeleting(true);
+                    try {
+                      await usersService.deleteAccount();
+                      // Tear down the local session WITHOUT hitting
+                      // /auth/logout — the backend user no longer
+                      // exists, that call would 401 and our api.ts
+                      // session-expired hook would already have
+                      // taken over. The _layout effect picks up
+                      // !isAuthenticated and routes to auth.
+                      await clearTokens().catch(() => {});
+                      await clearAuth().catch(() => {});
+                      dispatch(logout());
+                    } catch {
+                      setDeleting(false);
+                      Alert.alert(
+                        "Couldn't delete your account",
+                        "Please try again.",
+                      );
+                    }
+                  },
+                },
+              ],
             ),
         },
       ],
@@ -436,13 +470,15 @@ export default function SettingsScreen() {
               styles.menuRow,
               styles.menuRowLast,
               pressed && styles.menuRowPressed,
+              deleting && { opacity: 0.6 },
             ]}
             onPress={handleDeleteAccount}
+            disabled={deleting}
           >
             <Ionicons name="trash-outline" size={20} color={semantic.error} />
             <View style={styles.menuRowCopy}>
               <Text style={[styles.menuRowTitle, { color: semantic.error }]}>
-                Delete Account
+                {deleting ? "Deleting…" : "Delete Account"}
               </Text>
             </View>
             <Ionicons

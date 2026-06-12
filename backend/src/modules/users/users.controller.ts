@@ -39,6 +39,13 @@ export class UsersController {
     return this.usersService.updateMe(user, dto);
   }
 
+  @Delete('me')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Permanently delete the current user account' })
+  async deleteMe(@CurrentUser('id') userId: string) {
+    await this.usersService.deleteAccount(userId);
+  }
+
   @Put('me/onboarding')
   @ApiOperation({ summary: 'Mark onboarding as complete' })
   completeOnboarding(@CurrentUser('id') userId: string) {
