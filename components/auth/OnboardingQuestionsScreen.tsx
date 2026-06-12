@@ -132,6 +132,18 @@ const ATHLETE_GOAL_OPTIONS = [
     'Pro pathway',
     'Exposure & ranking',
 ];
+const ATHLETE_PRIORITY_OPTIONS = [
+    'Scholarship money',
+    'Playing time',
+    'Academics',
+    'Location / fit',
+];
+const ATHLETE_TIMELINE_OPTIONS = [
+    'ASAP',
+    'This year',
+    'Next year',
+    'Just exploring',
+];
 const ATHLETE_RELOCATION_OPTIONS = [
     'Stay local',
     'Within my country',
@@ -139,12 +151,12 @@ const ATHLETE_RELOCATION_OPTIONS = [
     'Anywhere worldwide',
 ];
 
-// When we know the athlete's sport (already chosen on the profile-setup
-// step), drive level + position questions from SPORTS_WITH_POSITIONS so
-// hockey players see QMJHL/U SPORTS and soccer players see MLS/CPL/etc.
-// When the sport lookup fails or comes back empty (e.g. backend down,
-// profile not yet saved), fall back to a sport picker + static questions
-// so the user is never blocked.
+// Athlete onboarding questions intentionally do NOT re-ask anything
+// ProfileSetup already collected (sport, position, level, height, weight,
+// DOB, gender). The sport-known branch tailors copy with the known sport
+// in the prompts but keeps the same answer set as the fallback — so a
+// hockey or soccer athlete gets four real questions about their goals,
+// not a second round of position/level pickers.
 function buildAthleteQuestions(sport: string | null): QuestionDef[] {
     const sportRow = sport
         ? SPORTS_WITH_POSITIONS.find((s) => s.name === sport)
@@ -158,16 +170,16 @@ function buildAthleteQuestions(sport: string | null): QuestionDef[] {
                 options: ATHLETE_GOAL_OPTIONS,
             },
             {
-                id: 'target_level',
-                prompt: 'What level are you aiming for?',
+                id: 'priority',
+                prompt: 'What matters most in a program?',
                 type: 'choice',
-                options: sportRow.levels,
+                options: ATHLETE_PRIORITY_OPTIONS,
             },
             {
-                id: 'best_position',
-                prompt: 'Which position best fits your strengths?',
+                id: 'timeline',
+                prompt: 'When are you looking to commit?',
                 type: 'choice',
-                options: sportRow.positions,
+                options: ATHLETE_TIMELINE_OPTIONS,
             },
             {
                 id: 'relocation',
@@ -177,10 +189,9 @@ function buildAthleteQuestions(sport: string | null): QuestionDef[] {
             },
         ];
     }
-    // Sport unknown — show goal + relocation and a sport picker so the
-    // user can still answer. Position/level skipped (we can't tailor them
-    // without a sport); they'll show up later if the user re-enters with
-    // a saved profile.
+    // Sport unknown — show the same four questions, plus a sport picker
+    // so the user can backfill what ProfileSetup didn't save. None of
+    // these repeat what ProfileSetup already collects.
     return [
         {
             id: 'sport',
@@ -193,6 +204,18 @@ function buildAthleteQuestions(sport: string | null): QuestionDef[] {
             prompt: "What's your main recruiting goal?",
             type: 'choice',
             options: ATHLETE_GOAL_OPTIONS,
+        },
+        {
+            id: 'priority',
+            prompt: 'What matters most in a program?',
+            type: 'choice',
+            options: ATHLETE_PRIORITY_OPTIONS,
+        },
+        {
+            id: 'timeline',
+            prompt: 'When are you looking to commit?',
+            type: 'choice',
+            options: ATHLETE_TIMELINE_OPTIONS,
         },
         {
             id: 'relocation',
