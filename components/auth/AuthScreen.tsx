@@ -490,13 +490,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     await finishOnboarding();
   };
 
-  const handleLocationSelected = async (city: string, country: string) => {
+  const handleLocationSelected = async (
+    city: string,
+    country: string,
+    lat?: number,
+    lng?: number,
+  ) => {
     setLocation({ city, country });
-    // Persist to backend so the user's discover feed can geo-filter
+    // Persist to backend so the user's discover feed can geo-filter AND
+    // the talent globe can plot the athlete at their real city (the green
+    // pin path) instead of falling back to the country center.
     try {
       await usersService.updateMe({
         location: city ? `${city}${country ? `, ${country}` : ""}` : undefined,
         country: country || undefined,
+        latitude: Number.isFinite(lat) ? lat : undefined,
+        longitude: Number.isFinite(lng) ? lng : undefined,
       });
     } catch (err: any) {
       console.warn(

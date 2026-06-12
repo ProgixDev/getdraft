@@ -9,11 +9,19 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
+  KeyboardAvoidingView,
 } from "react-native";
-import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  FadeIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+} from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
+import * as ExpoLocation from "expo-location";
 import {
   useFonts,
   Poppins_400Regular,
@@ -40,7 +48,12 @@ interface Location {
 }
 
 interface LocationSelectionScreenProps {
-  onLocationSelected: (city: string, country: string) => void;
+  onLocationSelected: (
+    city: string,
+    country: string,
+    lat: number,
+    lng: number,
+  ) => void;
   onBack: () => void;
 }
 
@@ -61,8 +74,25 @@ export const LocationSelectionScreen: React.FC<
     null,
   );
   const [isSearching, setIsSearching] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const webViewRef = useRef<WebView>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Globe collapses (height → 0) when the search input is focused so the
+  // card + results + Continue lift above the keyboard. Restored on blur.
+  const globeProgress = useSharedValue(1); // 1 = expanded, 0 = collapsed
+  const animatedGlobeStyle = useAnimatedStyle(() => ({
+    height: GLOBE_HEIGHT * globeProgress.value,
+    opacity: globeProgress.value,
+    marginBottom: 20 * globeProgress.value,
+  }));
+  const handleSearchFocus = () => {
+    globeProgress.value = withTiming(0, { duration: 220 });
+  };
+  const handleSearchBlur = () => {
+    globeProgress.value = withTiming(1, { duration: 260 });
+  };
 
   // Popular cities as fallback. Country names are FULL ("United States", not "USA") so they match
   // the seeded data and the Discover country filter.
@@ -295,9 +325,61 @@ export const LocationSelectionScreen: React.FC<
     }
   };
 
+  // "Use my current location" — wraps expo-location's foreground permission
+  // + GPS fix + reverse geocode. Every failure path keeps the search field
+  // working: we surface a small inline note ("Couldn't get your location —
+  // search below instead"), never an Alert, never a blocking error.
+  const handleUseMyLocation = async () => {
+    if (gpsLoading) return;
+    setGpsError(null);
+    setGpsLoading(true);
+    try {
+      const perm = await ExpoLocation.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        setGpsError("Couldn't get your location — search below instead.");
+        return;
+      }
+      const pos = await ExpoLocation.getCurrentPositionAsync({
+        accuracy: ExpoLocation.Accuracy.Balanced,
+      });
+      const { latitude, longitude } = pos.coords;
+      const places = await ExpoLocation.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+      const place = places[0];
+      // Reverse geocode can be sparse (rural / offline cache). Fall back to
+      // subregion / region so we always have SOMETHING to show.
+      const city =
+        place?.city ?? place?.subregion ?? place?.region ?? "Current location";
+      const country = place?.country ?? "";
+      const state = place?.region ?? undefined;
+      const formatted = [city, state, country].filter(Boolean).join(", ");
+      const loc: Location = {
+        name: city,
+        city,
+        country,
+        state,
+        lat: latitude,
+        lng: longitude,
+        formatted,
+      };
+      handleLocationSelect(loc);
+    } catch {
+      setGpsError("Couldn't get your location — search below instead.");
+    } finally {
+      setGpsLoading(false);
+    }
+  };
+
   const handleContinue = () => {
     if (selectedLocation) {
-      onLocationSelected(selectedLocation.city, selectedLocation.country);
+      onLocationSelected(
+        selectedLocation.city,
+        selectedLocation.country,
+        selectedLocation.lat,
+        selectedLocation.lng,
+      );
     }
   };
 
@@ -400,151 +482,206 @@ export const LocationSelectionScreen: React.FC<
       colors={[brand.primary, "#0a4d8f", brand.primary]}
       style={styles.container}
     >
-      <View style={styles.content}>
-        {/* Back Button */}
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={brand.white} />
-        </Pressable>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.content}>
+          {/* Back Button */}
+          <Pressable onPress={onBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={brand.white} />
+          </Pressable>
 
-        {/* Header */}
-        <Animated.View entering={FadeIn.duration(800)} style={styles.header}>
-          <Text style={styles.title}>Where Are You?</Text>
-          <Text style={styles.subtitle}>Search for your city worldwide</Text>
-        </Animated.View>
+          {/* Header */}
+          <Animated.View entering={FadeIn.duration(800)} style={styles.header}>
+            <Text style={styles.title}>Where Are You?</Text>
+            <Text style={styles.subtitle}>Use GPS or search for your city</Text>
+          </Animated.View>
 
-        {/* 3D Globe */}
-        <Animated.View
-          entering={FadeInDown.duration(1000).delay(200)}
-          style={styles.globeContainer}
-        >
-          <WebView
-            ref={webViewRef}
-            source={{ html: globeHtml }}
-            style={styles.globe}
-            scrollEnabled={false}
-            bounces={false}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-          />
-        </Animated.View>
-
-        {/* Search & Results */}
-        <Animated.View
-          entering={FadeInDown.duration(800).delay(400)}
-          style={styles.card}
-        >
-          {/* Search Input */}
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color={neutral.gray400} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search any city..."
-              placeholderTextColor={neutral.gray400}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCorrect={false}
-            />
-            {isSearching && (
-              <ActivityIndicator size="small" color={brand.primary} />
-            )}
-          </View>
-
-          {/* Results */}
-          <Text style={styles.sectionTitle}>
-            {searchQuery ? "Search Results" : "Popular Cities"}
-          </Text>
-
-          <ScrollView
-            style={styles.resultsScroll}
-            showsVerticalScrollIndicator={false}
+          {/* 3D Globe — collapses to 0 height when the search input is
+              focused so the card lifts above the keyboard. */}
+          <Animated.View
+            entering={FadeInDown.duration(1000).delay(200)}
+            style={[styles.globeContainer, animatedGlobeStyle]}
           >
-            <View style={styles.resultsGrid}>
-              {displayedLocations.map((location, index) => (
-                <Pressable
-                  key={index}
-                  style={[
-                    styles.locationCard,
-                    selectedLocation?.formatted === location.formatted &&
-                      styles.locationCardSelected,
-                  ]}
-                  onPress={() => handleLocationSelect(location)}
-                >
-                  <Ionicons
-                    name="location"
-                    size={20}
-                    color={
-                      selectedLocation?.formatted === location.formatted
-                        ? brand.white
-                        : brand.primary
-                    }
-                  />
-                  <View style={styles.locationInfo}>
-                    <Text
-                      style={[
-                        styles.locationName,
-                        selectedLocation?.formatted === location.formatted &&
-                          styles.locationNameSelected,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {location.city}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.locationCountry,
-                        selectedLocation?.formatted === location.formatted &&
-                          styles.locationCountrySelected,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {location.state ? `${location.state}, ` : ""}
-                      {location.country}
-                    </Text>
-                  </View>
-                  {selectedLocation?.formatted === location.formatted && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color={brand.white}
-                    />
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
+            <WebView
+              ref={webViewRef}
+              source={{ html: globeHtml }}
+              style={styles.globe}
+              scrollEnabled={false}
+              bounces={false}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+            />
+          </Animated.View>
 
-          {/* Continue Button */}
-          {selectedLocation && (
+          {/* Search & Results card */}
+          <Animated.View
+            entering={FadeInDown.duration(800).delay(400)}
+            style={styles.card}
+          >
+            {/* "Use my current location" — the new primary action. Sits
+                above the search field so the eye lands on it first. */}
             <Pressable
               style={({ pressed }) => [
-                styles.continueButton,
-                pressed && { transform: [{ scale: 0.98 }] },
+                styles.gpsButton,
+                pressed && { opacity: 0.9 },
+                gpsLoading && { opacity: 0.7 },
               ]}
-              onPress={handleContinue}
+              onPress={handleUseMyLocation}
+              disabled={gpsLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Use my current location"
             >
-              <LinearGradient
-                colors={[brand.primary, "#0a4d8f"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.buttonGradient}
-              >
-                <Text style={styles.buttonText}>
-                  Continue with {selectedLocation.city}
-                </Text>
-                <Ionicons name="arrow-forward" size={20} color={brand.white} />
-              </LinearGradient>
+              {gpsLoading ? (
+                <ActivityIndicator color={brand.white} />
+              ) : (
+                <>
+                  <Ionicons name="navigate" size={18} color={brand.white} />
+                  <Text style={styles.gpsButtonText}>
+                    Use my current location
+                  </Text>
+                </>
+              )}
             </Pressable>
-          )}
-        </Animated.View>
-      </View>
+
+            {gpsError ? (
+              <View style={styles.gpsErrorRow}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={14}
+                  color={neutral.gray600}
+                />
+                <Text style={styles.gpsErrorText}>{gpsError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerLabel}>or search</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color={neutral.gray400} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search any city..."
+                placeholderTextColor={neutral.gray400}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {isSearching && (
+                <ActivityIndicator size="small" color={brand.primary} />
+              )}
+            </View>
+
+            {/* Results */}
+            <Text style={styles.sectionTitle}>
+              {searchQuery ? "Search Results" : "Popular Cities"}
+            </Text>
+
+            <ScrollView
+              style={styles.resultsScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.resultsGrid}>
+                {displayedLocations.map((location, index) => (
+                  <Pressable
+                    key={index}
+                    style={[
+                      styles.locationCard,
+                      selectedLocation?.formatted === location.formatted &&
+                        styles.locationCardSelected,
+                    ]}
+                    onPress={() => handleLocationSelect(location)}
+                  >
+                    <Ionicons
+                      name="location"
+                      size={20}
+                      color={
+                        selectedLocation?.formatted === location.formatted
+                          ? brand.white
+                          : brand.primary
+                      }
+                    />
+                    <View style={styles.locationInfo}>
+                      <Text
+                        style={[
+                          styles.locationName,
+                          selectedLocation?.formatted === location.formatted &&
+                            styles.locationNameSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {location.city}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.locationCountry,
+                          selectedLocation?.formatted === location.formatted &&
+                            styles.locationCountrySelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {location.state ? `${location.state}, ` : ""}
+                        {location.country}
+                      </Text>
+                    </View>
+                    {selectedLocation?.formatted === location.formatted && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={brand.white}
+                      />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Continue Button */}
+            {selectedLocation && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.continueButton,
+                  pressed && { transform: [{ scale: 0.98 }] },
+                ]}
+                onPress={handleContinue}
+              >
+                <LinearGradient
+                  colors={[brand.primary, "#0a4d8f"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.buttonGradient}
+                >
+                  <Text style={styles.buttonText}>
+                    Continue with {selectedLocation.city}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={20} color={brand.white} />
+                </LinearGradient>
+              </Pressable>
+            )}
+          </Animated.View>
+        </View>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   content: {
@@ -594,6 +731,53 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 32,
     padding: 20,
   },
+  gpsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: brand.primary,
+    borderRadius: 12,
+    height: 50,
+    marginBottom: 10,
+  },
+  gpsButtonText: {
+    color: brand.white,
+    fontSize: 15,
+    fontFamily: "Poppins_600SemiBold",
+    letterSpacing: 0.2,
+  },
+  gpsErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  gpsErrorText: {
+    fontSize: 12,
+    fontFamily: "Poppins_400Regular",
+    color: neutral.gray600,
+    flex: 1,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: neutral.gray200,
+  },
+  dividerLabel: {
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: neutral.gray500,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -601,7 +785,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 50,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: neutral.gray200,
   },
