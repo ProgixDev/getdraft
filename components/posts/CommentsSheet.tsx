@@ -301,7 +301,7 @@ export default function CommentsSheet({
       <KeyboardProvider>
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <KeyboardStickyView style={styles.sheetWrap} offset={{ closed: 0, opened: 0 }}>
+        <View style={styles.sheetWrap}>
           <View style={[styles.sheet, { height: SHEET_HEIGHT }]}>
             <View style={styles.grabberRow}>
               <View style={styles.grabber} />
@@ -383,90 +383,92 @@ export default function CommentsSheet({
 
             {errorMsg && <Text style={styles.errorMsg}>{errorMsg}</Text>}
 
-            {replyTo && (
-              <View style={styles.replyChip}>
-                <Text style={styles.replyChipText}>
-                  Replying to{" "}
-                  <Text style={styles.replyChipName}>
-                    {replyTo.authorName}
+            <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+              {replyTo && (
+                <View style={styles.replyChip}>
+                  <Text style={styles.replyChipText}>
+                    Replying to{" "}
+                    <Text style={styles.replyChipName}>
+                      {replyTo.authorName}
+                    </Text>
                   </Text>
-                </Text>
-                <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
-                  <Ionicons name="close" size={14} color={theme.text} />
-                </Pressable>
-              </View>
-            )}
-
-            <View style={styles.emojiQuickRow}>
-              {EMOJI_QUICK_ROW.map((e) => (
-                <Pressable
-                  key={e}
-                  onPress={() => appendEmoji(e)}
-                  style={({ pressed }) => [
-                    styles.emojiQuickBtn,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.emojiQuickText}>{e}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={styles.composer}>
-              {myAvatar ? (
-                <ExpoImage
-                  source={{ uri: myAvatar }}
-                  style={styles.composerAvatar}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={[styles.composerAvatar, styles.avatarFallback]}>
-                  <Ionicons
-                    name="person"
-                    size={14}
-                    color={theme.textMuted}
-                  />
+                  <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
+                    <Ionicons name="close" size={14} color={theme.text} />
+                  </Pressable>
                 </View>
               )}
-              <TextInput
-                ref={inputRef}
-                value={text}
-                onChangeText={setText}
-                placeholder={
-                  replyTo
-                    ? `Reply to ${replyTo.authorName}…`
-                    : "Add a comment…"
-                }
-                placeholderTextColor={theme.inputPlaceholder}
-                style={styles.composerInput}
-                multiline
-                maxLength={2000}
-                editable={!sending}
-              />
-              {text.trim().length > 0 && (
-                <Pressable
-                  onPress={send}
-                  disabled={sending}
-                  style={({ pressed }) => [
-                    styles.postBtn,
-                    pressed && styles.pressed,
-                  ]}
-                  accessibilityLabel="Post comment"
-                  hitSlop={6}
-                >
-                  {sending ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.accentText}
+
+              <View style={styles.emojiQuickRow}>
+                {EMOJI_QUICK_ROW.map((e) => (
+                  <Pressable
+                    key={e}
+                    onPress={() => appendEmoji(e)}
+                    style={({ pressed }) => [
+                      styles.emojiQuickBtn,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.emojiQuickText}>{e}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={styles.composer}>
+                {myAvatar ? (
+                  <ExpoImage
+                    source={{ uri: myAvatar }}
+                    style={styles.composerAvatar}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.composerAvatar, styles.avatarFallback]}>
+                    <Ionicons
+                      name="person"
+                      size={14}
+                      color={theme.textMuted}
                     />
-                  ) : (
-                    <Text style={styles.postBtnText}>Post</Text>
-                  )}
-                </Pressable>
-              )}
-            </View>
+                  </View>
+                )}
+                <TextInput
+                  ref={inputRef}
+                  value={text}
+                  onChangeText={setText}
+                  placeholder={
+                    replyTo
+                      ? `Reply to ${replyTo.authorName}…`
+                      : "Add a comment…"
+                  }
+                  placeholderTextColor={theme.inputPlaceholder}
+                  style={styles.composerInput}
+                  multiline
+                  maxLength={2000}
+                  editable={!sending}
+                />
+                {text.trim().length > 0 && (
+                  <Pressable
+                    onPress={send}
+                    disabled={sending}
+                    style={({ pressed }) => [
+                      styles.postBtn,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityLabel="Post comment"
+                    hitSlop={6}
+                  >
+                    {sending ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.accentText}
+                      />
+                    ) : (
+                      <Text style={styles.postBtnText}>Post</Text>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            </KeyboardStickyView>
           </View>
-        </KeyboardStickyView>
+        </View>
       </View>
       </KeyboardProvider>
     </Modal>
@@ -607,7 +609,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 6,
     paddingBottom: 12,
-    overflow: "hidden",
   },
   grabberRow: {
     alignItems: "center",
@@ -669,7 +670,11 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingTop: 4,
-    paddingBottom: 12,
+    // Composer + emoji row stay anchored below the list when the keyboard is
+    // closed; once it opens the composer rises onto the keyboard and would
+    // otherwise overlap the last few comments. Reserve room so the user can
+    // scroll the bottom of the list out from behind the sticky composer.
+    paddingBottom: 160,
     gap: 14,
   },
   commentBlock: {
