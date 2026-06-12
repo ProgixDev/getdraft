@@ -6,10 +6,8 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
 } from "react-native";
+import KeyboardAwareScreen from "@/components/KeyboardAwareScreen";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -130,14 +128,9 @@ export const EmailVerificationScreen: React.FC<
       colors={[brand.primary, "#0a4d8f", brand.primary]}
       style={styles.container}
     >
-      <KeyboardAvoidingView
+      <KeyboardAwareScreen
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-      <ScrollView
         contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         {/* Back Button */}
         <Pressable onPress={onBack} style={styles.backButton}>
@@ -228,8 +221,7 @@ export const EmailVerificationScreen: React.FC<
             </Pressable>
           </View>
         </Animated.View>
-      </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScreen>
     </LinearGradient>
   );
 };

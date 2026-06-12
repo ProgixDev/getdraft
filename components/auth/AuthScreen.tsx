@@ -5,15 +5,13 @@ import {
   Dimensions,
   Image,
   Text,
-  KeyboardAvoidingView,
-  Platform,
   TextInput,
   Pressable,
-  ScrollView,
   LayoutAnimation,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import KeyboardAwareScreen from "@/components/KeyboardAwareScreen";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -745,15 +743,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         colors={[brand.primary, "#0a4d8f", brand.primary]}
         style={styles.container}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <KeyboardAwareScreen
           style={styles.container}
+          contentContainerStyle={styles.scrollContainer}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
             <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
               <Image
                 source={images.logoWhite}
@@ -862,8 +855,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </Pressable>
               </View>
             </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScreen>
       </LinearGradient>
     );
   }
@@ -874,15 +866,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         colors={[brand.primary, "#0a4d8f", brand.primary]}
         style={styles.container}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <KeyboardAwareScreen
           style={styles.container}
+          contentContainerStyle={styles.scrollContainer}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
             <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
               <Image
                 source={images.logoWhite}
@@ -1020,8 +1007,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </Pressable>
               </View>
             </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScreen>
       </LinearGradient>
     );
   }
@@ -1032,15 +1018,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       colors={[brand.primary, "#0a4d8f", brand.primary]}
       style={styles.container}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      <KeyboardAwareScreen
         style={styles.container}
+        contentContainerStyle={styles.scrollContainer}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
           {/* Header with Logo */}
           <Animated.View entering={FadeIn.duration(800)} style={styles.header}>
             <Image
@@ -1229,8 +1210,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               </Pressable>
             </View>
           </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScreen>
     </LinearGradient>
   );
 };

@@ -2,9 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Dimensions,
-  Keyboard,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +10,10 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  KeyboardProvider,
+  KeyboardStickyView,
+} from "react-native-keyboard-controller";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
@@ -30,8 +32,6 @@ import { postsService, type CommentItem } from "@/services/posts";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
-const SHEET_DEFAULT_TOP = SCREEN_HEIGHT - SHEET_HEIGHT;
-const SHEET_MIN_TOP = 56; // never push the grab handle above this on tall keyboards
 const HEART_RED = "#FF3040";
 const EMOJI_QUICK_ROW = ["❤️", "🙌", "😂", "😮", "😢", "👏", "🔥"];
 
@@ -90,28 +90,7 @@ export default function CommentsSheet({
   const [sending, setSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const inputRef = useRef<TextInput | null>(null);
-
-  useEffect(() => {
-    const showEvent =
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent =
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      setKeyboardHeight(e.endCoordinates?.height ?? 0);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const sheetTop = Math.max(SHEET_MIN_TOP, SHEET_DEFAULT_TOP - keyboardHeight);
-  const sheetH = SCREEN_HEIGHT - sheetTop - keyboardHeight;
 
   const totalCount = useMemo(
     () =>
@@ -319,15 +298,11 @@ export default function CommentsSheet({
       statusBarTranslucent
       onRequestClose={onClose}
     >
+      <KeyboardProvider>
       <View style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View
-          style={[
-            styles.sheetWrap,
-            { marginBottom: keyboardHeight },
-          ]}
-        >
-          <View style={[styles.sheet, { height: sheetH }]}>
+        <KeyboardStickyView style={styles.sheetWrap} offset={{ closed: 0, opened: 0 }}>
+          <View style={[styles.sheet, { height: SHEET_HEIGHT }]}>
             <View style={styles.grabberRow}>
               <View style={styles.grabber} />
             </View>
@@ -358,6 +333,7 @@ export default function CommentsSheet({
                 style={styles.list}
                 contentContainerStyle={styles.listContent}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
                 showsVerticalScrollIndicator={false}
               >
                 {comments.map((c) => {
@@ -490,8 +466,9 @@ export default function CommentsSheet({
               )}
             </View>
           </View>
-        </View>
+        </KeyboardStickyView>
       </View>
+      </KeyboardProvider>
     </Modal>
   );
 }

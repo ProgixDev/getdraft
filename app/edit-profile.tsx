@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
@@ -629,10 +629,7 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.container}>
       <View style={[styles.headerWrap, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable style={styles.headerButton} onPress={() => router.back()}>
@@ -653,7 +650,7 @@ export default function EditProfileScreen() {
         </View>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -661,6 +658,7 @@ export default function EditProfileScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={20}
       >
         <View style={styles.avatarSection}>
           <Pressable
@@ -928,7 +926,7 @@ export default function EditProfileScreen() {
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
         <Pressable
@@ -1003,7 +1001,7 @@ export default function EditProfileScreen() {
           </View>
         </Modal>
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

@@ -2,15 +2,13 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useSelector } from "react-redux";
@@ -150,10 +148,7 @@ export default function PostCreateScreen() {
   const isVideo = asset?.kind === "reel";
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Pressable
           style={styles.headerBtn}
@@ -180,12 +175,13 @@ export default function PostCreateScreen() {
         </Pressable>
       </View>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: insets.bottom + 24 },
         ]}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={20}
       >
         <View style={styles.previewWrap}>
           {asset ? (
@@ -273,8 +269,8 @@ export default function PostCreateScreen() {
             <Text style={styles.errorText}>{errorMsg}</Text>
           </View>
         )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
+    </View>
   );
 }
 

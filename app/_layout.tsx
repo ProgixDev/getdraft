@@ -8,6 +8,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Provider, useSelector, useDispatch } from "react-redux";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import {
   AppRegistry,
   Platform,
@@ -258,7 +259,9 @@ export default function RootLayout() {
           // paid Developer Program membership. Add it back when we join.
         >
           <GestureHandlerRootView style={styles.container}>
-            <RootLayoutContent />
+            <KeyboardProvider>
+              <RootLayoutContent />
+            </KeyboardProvider>
           </GestureHandlerRootView>
         </StripeProvider>
       </Provider>

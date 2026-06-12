@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
@@ -310,10 +309,7 @@ export default function ChatScreen() {
       : "";
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
           style={styles.headerIconButton}
@@ -390,6 +386,8 @@ export default function ChatScreen() {
             { paddingBottom: insets.bottom + 18 },
           ]}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
         >
           {messages.map((message) => (
             <View
@@ -437,22 +435,24 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
-        <View style={styles.inputWrap}>
-          <TextInput
-            value={draft}
-            onChangeText={onDraftChange}
-            placeholder="Type a message..."
-            placeholderTextColor={theme.inputPlaceholder}
-            style={styles.input}
-            multiline
-          />
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+          <View style={styles.inputWrap}>
+            <TextInput
+              value={draft}
+              onChangeText={onDraftChange}
+              placeholder="Type a message..."
+              placeholderTextColor={theme.inputPlaceholder}
+              style={styles.input}
+              multiline
+            />
+          </View>
+          <Pressable style={styles.sendButton} onPress={handleSend}>
+            <Ionicons name="send" size={18} color={theme.accentText} />
+          </Pressable>
         </View>
-        <Pressable style={styles.sendButton} onPress={handleSend}>
-          <Ionicons name="send" size={18} color={theme.accentText} />
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardStickyView>
+    </View>
   );
 }
 

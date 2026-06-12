@@ -227,6 +227,7 @@ export default function PreferencesCountryScreen() {
           <ScrollView
             style={styles.results}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             {filteredCountries.map((country) => {
               const selected = selectedCountry.name === country.name;

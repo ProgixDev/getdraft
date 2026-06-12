@@ -253,6 +253,7 @@ export default function AdminUsersTab() {
           ]}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
           renderItem={({ item }) => <UserRow row={item} />}
+          keyboardShouldPersistTaps="handled"
         />
       )}
     </View>

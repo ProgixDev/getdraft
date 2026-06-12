@@ -510,6 +510,7 @@ export function LocationPicker({
             <ScrollView
               style={styles.suggestionsScroll}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {COUNTRY_OPTIONS.map((c) => {
                 const selected = country?.code === c.code;

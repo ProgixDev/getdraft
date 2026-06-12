@@ -6,10 +6,8 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Platform,
-  KeyboardAvoidingView,
-  ScrollView,
 } from 'react-native';
+import KeyboardAwareScreen from '@/components/KeyboardAwareScreen';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -116,15 +114,10 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
       colors={[brand.primary, '#0a4d8f', brand.primary]}
       style={styles.container}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <KeyboardAwareScreen
         style={styles.container}
+        contentContainerStyle={styles.scrollContainer}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
           {onBack && (
             <View style={styles.headerRow}>
               <Pressable style={styles.backButton} onPress={onBack}>
@@ -224,8 +217,7 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
               Terms and Privacy Policy.
             </Text>
           </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScreen>
 
       <CountryPickerModal
         visible={pickerOpen}

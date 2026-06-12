@@ -112,6 +112,7 @@ export default function HelpCenterScreen() {
           { paddingBottom: insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Search */}
         <View style={styles.searchBar}>

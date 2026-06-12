@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -126,10 +124,7 @@ export default function NewMessageScreen() {
   if (!fontsLoaded) return null;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Pressable style={styles.headerBtn} onPress={() => router.back()}>
           <Ionicons name="close" size={22} color={theme.text} />
@@ -250,7 +245,7 @@ export default function NewMessageScreen() {
           ))
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

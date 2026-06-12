@@ -4,14 +4,13 @@ import {
     Text,
     StyleSheet,
     Pressable,
-    ScrollView,
     ActivityIndicator,
     Alert,
     TextInput,
     RefreshControl,
-    KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -371,15 +370,12 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
 
     return (
         <LinearGradient colors={[brand.primary, '#0a4d8f', brand.primary]} style={styles.container}>
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-            <ScrollView
+            <KeyboardAwareScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                bottomOffset={20}
                 refreshControl={
                     step === 'submitted' ? (
                         <RefreshControl
@@ -467,8 +463,7 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                         onStartOver={handleStartOver}
                     />
                 )}
-            </ScrollView>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScrollView>
         </LinearGradient>
     );
 };

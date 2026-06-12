@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
@@ -204,10 +203,7 @@ export default function DmScreen() {
   const headerSubtitle = otherRole || "";
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
           style={styles.headerIconButton}
@@ -290,6 +286,8 @@ export default function DmScreen() {
             { paddingBottom: insets.bottom + 18 },
           ]}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
         >
           {messages.map((message) => (
             <View
@@ -327,30 +325,32 @@ export default function DmScreen() {
         </ScrollView>
       )}
 
-      <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
-        <View style={styles.inputWrap}>
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Type a message..."
-            placeholderTextColor={theme.inputPlaceholder}
-            style={styles.input}
-            multiline
-          />
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+          <View style={styles.inputWrap}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Type a message..."
+              placeholderTextColor={theme.inputPlaceholder}
+              style={styles.input}
+              multiline
+            />
+          </View>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sendButton,
+              (!draft.trim()) && styles.sendButtonDisabled,
+              pressed && { opacity: 0.85 },
+            ]}
+            onPress={handleSend}
+            disabled={!draft.trim()}
+          >
+            <Ionicons name="send" size={18} color={theme.accentText} />
+          </Pressable>
         </View>
-        <Pressable
-          style={({ pressed }) => [
-            styles.sendButton,
-            (!draft.trim()) && styles.sendButtonDisabled,
-            pressed && { opacity: 0.85 },
-          ]}
-          onPress={handleSend}
-          disabled={!draft.trim()}
-        >
-          <Ionicons name="send" size={18} color={theme.accentText} />
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardStickyView>
+    </View>
   );
 }
 

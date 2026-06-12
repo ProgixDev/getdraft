@@ -4,13 +4,12 @@ import {
     Text,
     StyleSheet,
     Pressable,
-    ScrollView,
     ActivityIndicator,
     Alert,
     TextInput,
-    KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import KeyboardAwareScreen from '@/components/KeyboardAwareScreen';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -315,15 +314,9 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
             colors={[brand.primary, '#0a4d8f', brand.primary]}
             style={styles.container}
         >
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-            <ScrollView
+            <KeyboardAwareScreen
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
             >
                 <View style={styles.topBar}>
                     <Pressable onPress={onBack} style={styles.iconButton} disabled={isSaving}>
@@ -414,8 +407,7 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
                         </>
                     )}
                 </Pressable>
-            </ScrollView>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScreen>
         </LinearGradient>
     );
 };
