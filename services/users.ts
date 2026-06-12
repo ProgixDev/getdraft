@@ -12,7 +12,16 @@ export const usersService = {
   },
 
   async completeOnboarding(): Promise<void> {
-    await api.put("/users/me/onboarding");
+    // Opt this call out of api.ts's session-expired auto-logout. If the
+    // PUT 401s right at the end of signup (e.g. the access token aged
+    // out while the user lingered on KYC / questions / tutorial / plan)
+    // and refresh also fails, the AuthScreen's finishOnboarding catch
+    // already flips Redux's isOnboarded locally and routes into the
+    // app. Letting api.ts dispatch logout in parallel would tear
+    // isAuthenticated down and bounce the user to login instead.
+    await api.put("/users/me/onboarding", undefined, {
+      skipSessionExpiredHandler: true,
+    } as any);
   },
 
   async getPublicUser(userId: string): Promise<any> {

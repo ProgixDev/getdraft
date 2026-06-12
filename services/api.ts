@@ -165,11 +165,22 @@ api.interceptors.response.use(
         // and rewrite the user-facing message so screens that surface
         // err.response.data.message show something neutral instead of the
         // raw backend string "Missing authorization token".
+        //
+        // EXCEPTION: requests marked with `skipSessionExpiredHandler` opt
+        // out of the auto-logout. Used by signup-flow finishers like
+        // completeOnboarding so a transient 401 mid-finish doesn't tear
+        // down auth state behind the AuthScreen's back and bounce the
+        // user to login at the very last step. The caller's catch path
+        // still sees the error and can fall back locally.
         await clearTokens();
-        try {
-          _onSessionExpired?.();
-        } catch {
-          /* listener errors must never block the rejection */
+        const skipHandler =
+          (original as any)?.skipSessionExpiredHandler === true;
+        if (!skipHandler) {
+          try {
+            _onSessionExpired?.();
+          } catch {
+            /* listener errors must never block the rejection */
+          }
         }
         (error as any).isAuthExpired = true;
         if (error.response?.data && typeof error.response.data === "object") {
