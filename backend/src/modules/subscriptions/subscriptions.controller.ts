@@ -52,6 +52,30 @@ export class SubscriptionsController {
     );
   }
 
+  @Post('confirm')
+  @ApiOperation({
+    summary:
+      'Confirm-on-return: reconcile the subscription from Stripe right after the Payment Sheet succeeds (does not wait for the webhook).',
+  })
+  confirmSubscription(@CurrentUser('id') userId: string) {
+    return this.subscriptionsService.confirmSubscription(userId);
+  }
+
+  @Post('swipe-pack/confirm')
+  @ApiOperation({
+    summary:
+      'Confirm-on-return for a swipe-pack PaymentIntent. Body: { paymentIntentId }.',
+  })
+  confirmSwipePack(
+    @CurrentUser('id') userId: string,
+    @Body() body: { paymentIntentId: string },
+  ) {
+    return this.subscriptionsService.confirmSwipePack(
+      userId,
+      body?.paymentIntentId,
+    );
+  }
+
   @Post('cancel')
   @ApiOperation({
     summary:

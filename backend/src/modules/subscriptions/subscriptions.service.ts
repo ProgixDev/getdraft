@@ -215,6 +215,27 @@ export class SubscriptionsService {
           sub.current_period_end ?? item?.current_period_end,
         );
         if (livePeriodEnd) data.current_period_end = livePeriodEnd;
+
+        // Self-heal: if Stripe says this sub is paid but our row is still
+        // stale (the webhook never arrived), apply the plan now so the
+        // screen AND the swipe-limit reads are correct without depending on
+        // webhook delivery.
+        const livePlan = sub.metadata?.plan_id as PlanId | undefined;
+        if (
+          (sub.status === 'active' || sub.status === 'trialing') &&
+          livePlan &&
+          (data.plan_id !== livePlan || data.status !== 'active')
+        ) {
+          const applied = await this.applyActiveSubscription(sub.id);
+          if (applied) {
+            const { data: fresh } = await supabase
+              .from('subscriptions')
+              .select('*')
+              .eq('user_id', userId)
+              .maybeSingle();
+            if (fresh) Object.assign(data, fresh);
+          }
+        }
       } catch (err: any) {
         this.logger.warn(
           `Could not fetch Stripe sub ${data.stripe_subscription_id}: ${err?.message}`,
@@ -420,6 +441,7 @@ export class SubscriptionsService {
 
     return {
       paymentIntentClientSecret: intent.client_secret,
+      paymentIntentId: intent.id,
       ephemeralKeySecret: ephemeralKey.secret as string,
       customerId,
       publishableKey: this.configService.get<string>('STRIPE_PUBLISHABLE_KEY') ?? '',
@@ -595,169 +617,14 @@ export class SubscriptionsService {
               obj.parent?.subscription_details?.subscription ??
               null;
         if (!subId) break;
-        try {
-          const stripe = this.stripeService.getClient();
-          const sub = (await stripe.subscriptions.retrieve(subId, {
-            expand: ['items.data.price'],
-          })) as any;
-
-          if (sub.status !== 'active' && sub.status !== 'trialing') {
-            this.logger.log(
-              `[stripe] ignoring ${event.type} for ${sub.id} — status=${sub.status} (not paid yet)`,
-            );
-            break;
-          }
-
-          const item = sub.items?.data?.[0];
-          const priceId = item?.price?.id ?? null;
-          const userId = sub.metadata?.user_id as string | undefined;
-          const planId = sub.metadata?.plan_id as PlanId | undefined;
-          if (!userId || !planId) {
-            this.logger.warn(
-              `${event.type} for ${sub.id} missing metadata (user_id=${userId} plan_id=${planId})`,
-            );
-            break;
-          }
-          const swipeLimit = PLAN_SWIPE_LIMITS[planId] ?? 10;
-          // Stripe moved current_period_* off subscription onto the item
-          // in newer API versions; we accept either.
-          const periodStart = this.toIso(
-            sub.current_period_start ?? item?.current_period_start,
-          );
-          const periodEnd = this.toIso(
-            sub.current_period_end ?? item?.current_period_end,
-          );
-          // Past the gate above, sub.status is necessarily active|trialing.
-          const status = 'active';
-
-          // Match by user_id — this works even if /payment-sheet's
-          // initial link write was rolled back, or if the user has
-          // multiple Stripe subscriptions across upgrade attempts.
-          await supabase
-            .from('subscriptions')
-            .update({
-              plan_id: planId,
-              stripe_subscription_id: sub.id,
-              stripe_price_id: priceId,
-              status,
-              daily_swipe_limit: swipeLimit,
-              current_period_start: periodStart,
-              current_period_end: periodEnd,
-            })
-            .eq('user_id', userId);
-
-          await supabase
-            .from('users')
-            .update({
-              plan_id: planId,
-              stripe_subscription_id: sub.id,
-            })
-            .eq('id', userId);
-
-          this.logger.log(
-            `[stripe] user ${userId} → plan ${planId} via ${event.type}`,
-          );
-
-          // One plan per user: a successful checkout supersedes any other
-          // subscription still active on this customer (double-pay during
-          // a retry, or an upgrade replacing the old plan). Cancel the
-          // losers so nobody is billed twice next cycle.
-          const others = await stripe.subscriptions.list({
-            customer: sub.customer as string,
-            status: 'active',
-            limit: 20,
-          });
-          for (const other of others.data) {
-            if (other.id === sub.id) continue;
-            try {
-              await stripe.subscriptions.cancel(other.id);
-              this.logger.log(
-                `[stripe] cancelled superseded sub ${other.id} (kept ${sub.id}) for user ${userId}`,
-              );
-            } catch (err: any) {
-              this.logger.warn(
-                `[stripe] could not cancel superseded sub ${other.id}: ${err?.message}`,
-              );
-            }
-          }
-        } catch (err: any) {
-          this.logger.warn(
-            `payment_succeeded handler failed for ${subId}: ${err?.message}`,
-          );
-        }
+        await this.applyActiveSubscription(subId);
         break;
       }
 
       case 'payment_intent.succeeded': {
         // One-off purchases land here. We only care about swipe-pack
         // intents (subscription payments come in via invoice.* events).
-        const intent = event.data.object;
-        const meta = intent.metadata ?? {};
-        if (meta.type !== 'swipe_pack') break;
-
-        const userId = meta.user_id as string | undefined;
-        const packId = meta.pack_id as string | undefined;
-        const swipes = Number(meta.swipes ?? 0);
-        if (!userId || !packId || !Number.isFinite(swipes) || swipes <= 0) {
-          this.logger.warn(
-            `swipe_pack intent ${intent.id} missing metadata (user=${userId} pack=${packId} swipes=${swipes})`,
-          );
-          break;
-        }
-
-        // Idempotency: mark the audit row succeeded, but only flip
-        // pending → succeeded once. If a duplicate webhook fires the
-        // row is already 'succeeded' and the update affects 0 rows,
-        // so we skip the credit.
-        const { data: claimed, error: claimErr } = await supabase
-          .from('swipe_pack_purchases')
-          .update({ status: 'succeeded', granted_at: new Date().toISOString() })
-          .eq('stripe_payment_intent_id', intent.id)
-          .eq('status', 'pending')
-          .select('id')
-          .maybeSingle();
-
-        if (claimErr) {
-          this.logger.error(
-            `swipe_pack audit update failed for ${intent.id}: ${claimErr.message}`,
-          );
-          break;
-        }
-        if (!claimed) {
-          this.logger.log(
-            `swipe_pack intent ${intent.id} already credited — skipping.`,
-          );
-          break;
-        }
-
-        // Credit the swipes. We add to bonus_swipes (carries across
-        // days, does NOT reset). If the row doesn't exist yet we
-        // create it as Basic with the bonus.
-        const { data: sub } = await supabase
-          .from('subscriptions')
-          .select('bonus_swipes')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (!sub) {
-          await supabase.from('subscriptions').insert({
-            user_id: userId,
-            plan_id: PlanId.BASIC,
-            status: 'active',
-            daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
-            bonus_swipes: swipes,
-          });
-        } else {
-          const next = (sub.bonus_swipes ?? 0) + swipes;
-          await supabase
-            .from('subscriptions')
-            .update({ bonus_swipes: next })
-            .eq('user_id', userId);
-        }
-
-        this.logger.log(
-          `[stripe] user ${userId} bought ${swipes}-swipe pack (${intent.id})`,
-        );
+        await this.creditSwipePackFromIntent(event.data.object);
         break;
       }
 
@@ -765,6 +632,212 @@ export class SubscriptionsService {
         // Other events are intentionally ignored.
         break;
     }
+  }
+
+  /**
+   * Source-of-truth apply: pull a subscription straight from Stripe and, IF
+   * it is actually paid (active|trialing), flip our subscriptions + users rows
+   * to the paid plan and supersede any other active sub on the customer.
+   *
+   * Shared by the Stripe webhook AND the confirm-on-return endpoint /
+   * getMySubscription self-heal, so the plan updates even when webhook
+   * delivery is delayed or not configured (local dev, mis-set prod endpoint).
+   * Returns true if a paid plan was applied. Never throws.
+   */
+  private async applyActiveSubscription(subId: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    try {
+      const stripe = this.stripeService.getClient();
+      const sub = (await stripe.subscriptions.retrieve(subId, {
+        expand: ['items.data.price'],
+      })) as any;
+
+      // GATE: Stripe creates the default_incomplete sub BEFORE the card is
+      // charged. Only paid statuses may flip the plan — otherwise a user
+      // could open the sheet, dismiss it, and keep Pro.
+      if (sub.status !== 'active' && sub.status !== 'trialing') {
+        this.logger.log(
+          `[stripe] ${subId} not paid yet (status=${sub.status}) — no plan change`,
+        );
+        return false;
+      }
+
+      const item = sub.items?.data?.[0];
+      const priceId = item?.price?.id ?? null;
+      const userId = sub.metadata?.user_id as string | undefined;
+      const planId = sub.metadata?.plan_id as PlanId | undefined;
+      if (!userId || !planId) {
+        this.logger.warn(
+          `[stripe] ${subId} missing metadata (user_id=${userId} plan_id=${planId})`,
+        );
+        return false;
+      }
+      const swipeLimit = PLAN_SWIPE_LIMITS[planId] ?? 10;
+      const periodStart = this.toIso(
+        sub.current_period_start ?? item?.current_period_start,
+      );
+      const periodEnd = this.toIso(
+        sub.current_period_end ?? item?.current_period_end,
+      );
+
+      await supabase
+        .from('subscriptions')
+        .update({
+          plan_id: planId,
+          stripe_subscription_id: sub.id,
+          stripe_price_id: priceId,
+          status: 'active',
+          daily_swipe_limit: swipeLimit,
+          current_period_start: periodStart,
+          current_period_end: periodEnd,
+        })
+        .eq('user_id', userId);
+
+      await supabase
+        .from('users')
+        .update({ plan_id: planId, stripe_subscription_id: sub.id })
+        .eq('id', userId);
+
+      this.logger.log(`[stripe] user ${userId} → plan ${planId} (sub ${sub.id})`);
+
+      // One plan per user: cancel any other active sub on this customer so a
+      // retry / upgrade doesn't double-bill next cycle.
+      const others = await stripe.subscriptions.list({
+        customer: sub.customer as string,
+        status: 'active',
+        limit: 20,
+      });
+      for (const other of others.data) {
+        if (other.id === sub.id) continue;
+        try {
+          await stripe.subscriptions.cancel(other.id);
+          this.logger.log(
+            `[stripe] cancelled superseded sub ${other.id} (kept ${sub.id})`,
+          );
+        } catch (err: any) {
+          this.logger.warn(
+            `[stripe] could not cancel superseded sub ${other.id}: ${err?.message}`,
+          );
+        }
+      }
+      return true;
+    } catch (err: any) {
+      this.logger.warn(
+        `applyActiveSubscription failed for ${subId}: ${err?.message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Idempotently credit a one-off swipe-pack from its PaymentIntent. Claims
+   * the pending audit row (so duplicate webhook + confirm calls can't
+   * double-credit) and adds to bonus_swipes. Shared by the webhook and the
+   * confirm-on-return endpoint. Caller is responsible for confirming the
+   * intent actually succeeded. Returns true if it credited this call.
+   */
+  private async creditSwipePackFromIntent(intent: any): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const meta = intent?.metadata ?? {};
+    if (meta.type !== 'swipe_pack') return false;
+
+    const userId = meta.user_id as string | undefined;
+    const packId = meta.pack_id as string | undefined;
+    const swipes = Number(meta.swipes ?? 0);
+    if (!userId || !packId || !Number.isFinite(swipes) || swipes <= 0) {
+      this.logger.warn(
+        `swipe_pack intent ${intent?.id} missing metadata (user=${userId} pack=${packId} swipes=${swipes})`,
+      );
+      return false;
+    }
+
+    // Idempotency: only the writer that flips pending → succeeded credits.
+    const { data: claimed, error: claimErr } = await supabase
+      .from('swipe_pack_purchases')
+      .update({ status: 'succeeded', granted_at: new Date().toISOString() })
+      .eq('stripe_payment_intent_id', intent.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle();
+
+    if (claimErr) {
+      this.logger.error(
+        `swipe_pack audit update failed for ${intent.id}: ${claimErr.message}`,
+      );
+      return false;
+    }
+    if (!claimed) {
+      this.logger.log(
+        `swipe_pack intent ${intent.id} already credited — skipping.`,
+      );
+      return false;
+    }
+
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('bonus_swipes')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!sub) {
+      await supabase.from('subscriptions').insert({
+        user_id: userId,
+        plan_id: PlanId.BASIC,
+        status: 'active',
+        daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
+        bonus_swipes: swipes,
+      });
+    } else {
+      await supabase
+        .from('subscriptions')
+        .update({ bonus_swipes: (sub.bonus_swipes ?? 0) + swipes })
+        .eq('user_id', userId);
+    }
+
+    this.logger.log(
+      `[stripe] user ${userId} bought ${swipes}-swipe pack (${intent.id})`,
+    );
+    return true;
+  }
+
+  /**
+   * Confirm-on-return (subscriptions): called by the client right after the
+   * Payment Sheet reports success. Reconciles the user's subscription straight
+   * from Stripe so the plan flips immediately, independent of webhook
+   * delivery. The webhook remains the backstop. Returns the fresh row.
+   */
+  async confirmSubscription(userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data: row } = await supabase
+      .from('subscriptions')
+      .select('stripe_subscription_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (row?.stripe_subscription_id) {
+      await this.applyActiveSubscription(row.stripe_subscription_id);
+    }
+    return this.getMySubscription(userId);
+  }
+
+  /**
+   * Confirm-on-return (swipe packs): verify the PaymentIntent with Stripe,
+   * ensure it belongs to the caller and actually succeeded, then credit
+   * idempotently. Independent of the webhook.
+   */
+  async confirmSwipePack(userId: string, paymentIntentId: string) {
+    if (!paymentIntentId) {
+      throw new BadRequestException('Missing paymentIntentId.');
+    }
+    const stripe = this.stripeService.getClient();
+    const intent = (await stripe.paymentIntents.retrieve(paymentIntentId)) as any;
+    if (intent?.metadata?.user_id !== userId) {
+      throw new BadRequestException('This payment does not belong to you.');
+    }
+    if (intent.status === 'succeeded') {
+      await this.creditSwipePackFromIntent(intent);
+    }
+    const sub = await this.getMySubscription(userId);
+    return { bonus_swipes: sub?.bonus_swipes ?? 0, status: intent.status };
   }
 
   private toIso(unixSeconds: number | null | undefined): string | null {

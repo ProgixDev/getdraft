@@ -132,8 +132,13 @@ export default function SubscriptionScreen() {
           }
           return; // user dismissed the sheet
         }
-        // Payment succeeded — webhook handles status transition, but refresh
-        // the local view immediately so the UI doesn't stay stale.
+        // Payment succeeded — confirm with the backend so the plan flips now
+        // (independent of webhook delivery), then refresh the view.
+        try {
+          await subscriptionsService.confirmSubscription();
+        } catch {
+          // Non-fatal — webhook / getMySubscription self-heal will catch up.
+        }
         await refresh();
       } catch (err: any) {
         const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';

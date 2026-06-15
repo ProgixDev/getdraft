@@ -111,7 +111,13 @@ export default function BuySwipesScreen() {
           }
           return;
         }
-        // Webhook credits bonus_swipes; refresh to surface the new total.
+        // Confirm with the backend so the swipes are credited immediately
+        // (independent of webhook delivery); webhook is the backstop.
+        try {
+          await subscriptionsService.confirmSwipePack(params.paymentIntentId);
+        } catch {
+          // Non-fatal — the webhook will still credit it.
+        }
         await refreshBonus();
         Alert.alert(
           'Swipes added!',

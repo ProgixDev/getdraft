@@ -14,6 +14,26 @@ export const subscriptionsService = {
     return data.data;
   },
 
+  /**
+   * Call right after the subscription Payment Sheet succeeds — reconciles the
+   * plan from Stripe immediately instead of waiting for the webhook. Returns
+   * the fresh subscription. Safe to call even if the webhook also fires.
+   */
+  async confirmSubscription(): Promise<any> {
+    const { data } = await api.post("/subscriptions/confirm");
+    return data.data;
+  },
+
+  /** Call right after a swipe-pack Payment Sheet succeeds. */
+  async confirmSwipePack(
+    paymentIntentId: string,
+  ): Promise<{ bonus_swipes: number; status: string }> {
+    const { data } = await api.post("/subscriptions/swipe-pack/confirm", {
+      paymentIntentId,
+    });
+    return data.data;
+  },
+
   /** Web Checkout path — kept for any non-mobile entry points. */
   async createCheckout(planId: string): Promise<{ checkoutUrl: string }> {
     const { data } = await api.post("/subscriptions/checkout", { planId });
@@ -56,6 +76,7 @@ export const subscriptionsService = {
 
   async buySwipePackSheet(packId: string): Promise<
     PaymentSheetParams & {
+      paymentIntentId: string;
       pack: { id: string; swipes: number; amountCents: number; label: string };
     }
   > {

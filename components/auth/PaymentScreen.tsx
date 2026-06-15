@@ -118,7 +118,13 @@ export const PaymentScreen: React.FC<PaymentScreenProps> = ({
       }
       return;
     }
-    // Payment succeeded; webhook will flip subscriptions.status to active.
+    // Payment succeeded. Confirm with the backend so the plan is applied
+    // immediately (don't depend on webhook delivery); webhook is the backstop.
+    try {
+      await subscriptionsService.confirmSubscription();
+    } catch {
+      // Non-fatal — the webhook / getMySubscription self-heal will catch up.
+    }
     onPaymentComplete();
   };
 
