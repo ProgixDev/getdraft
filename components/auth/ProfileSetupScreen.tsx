@@ -37,6 +37,8 @@ import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
+import { useAppDispatch } from "@/store/hooks";
+import { updateUser } from "@/store/slices/authSlice";
 
 function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -294,6 +296,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   // Role-specific step set — recomputed only when the role prop changes.
   const steps = useMemo(() => getStepsForRole(role), [role]);
 
+  const dispatch = useAppDispatch();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [dateModalVisible, setDateModalVisible] = useState(false);
@@ -486,6 +489,10 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         const fullName =
           `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
         if (fullName) {
+          // Reflect the real name in the store immediately so Discover (and
+          // anywhere reading user.name) shows the actual first name instead of
+          // the email-derived placeholder seeded at signup.
+          dispatch(updateUser({ name: fullName }));
           try {
             await usersService.updateMe({ name: fullName });
           } catch (e) {

@@ -153,6 +153,18 @@ export const authSlice = createSlice({
         );
       }
     },
+    // Merge fields into the current user + persist. Used to push the real
+    // name (collected in profile setup, or read from /users/me) into the
+    // store so screens like Discover show the actual first name instead of
+    // the email-derived placeholder seeded at signup.
+    updateUser: (state, action: PayloadAction<Partial<User>>) => {
+      if (state.user) {
+        state.user = { ...state.user, ...action.payload };
+        saveAuth({ user: state.user, isOnboarded: state.isOnboarded }).catch(
+          () => {},
+        );
+      }
+    },
     clearError: (state) => {
       state.error = null;
     },
@@ -221,6 +233,7 @@ export const {
   logout,
   completeOnboarding,
   setActivationStatus,
+  updateUser,
   clearError,
 } = authSlice.actions;
 

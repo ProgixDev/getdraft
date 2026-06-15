@@ -52,6 +52,7 @@ import {
   logout,
   logoutAsync,
   setActivationStatus,
+  updateUser,
 } from "@/store/slices/authSlice";
 import { usersService } from "@/services/users";
 import { chatService } from "@/services/chat";
@@ -147,6 +148,9 @@ function RootLayoutContent() {
             ? "pending_guardian"
             : "active";
         dispatch(setActivationStatus(status));
+        // Refresh the real name from the server so Discover etc. show the
+        // actual name, not the email-derived placeholder seeded at signup.
+        if (me?.name) dispatch(updateUser({ name: me.name }));
       })
       .catch(() => {});
     return () => {

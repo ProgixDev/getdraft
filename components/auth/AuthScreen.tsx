@@ -414,8 +414,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       const result = await authService.completeSignup({
         verificationToken: token,
         password,
+        // Don't seed a display name from the email local-part — it leaks into
+        // Discover etc. The real name is collected in the profile step
+        // (ProfileSetupScreen) and pushed to the store there.
         role,
-        name: email.split("@")[0],
+        name: undefined,
       });
       dispatch(login({ user: result.user, isOnboarded: result.isOnboarded }));
       setSignupStep(role === "parent" ? "profile" : "location");
