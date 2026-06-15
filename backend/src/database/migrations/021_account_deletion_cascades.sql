@@ -24,13 +24,13 @@
 BEGIN;
 
 ALTER TABLE public.guardian_links
-  DROP CONSTRAINT guardian_links_athlete_user_id_fkey,
+  DROP CONSTRAINT IF EXISTS guardian_links_athlete_user_id_fkey,
   ADD CONSTRAINT guardian_links_athlete_user_id_fkey
     FOREIGN KEY (athlete_user_id) REFERENCES public.users(id)
     ON DELETE CASCADE;
 
 ALTER TABLE public.parent_profiles
-  DROP CONSTRAINT parent_profiles_child_athlete_id_fkey,
+  DROP CONSTRAINT IF EXISTS parent_profiles_child_athlete_id_fkey,
   ADD CONSTRAINT parent_profiles_child_athlete_id_fkey
     FOREIGN KEY (child_athlete_id) REFERENCES public.users(id)
     ON DELETE SET NULL;

@@ -83,6 +83,25 @@ export class AdminService {
       throw new NotFoundException('User not found');
     }
 
+    // Flipping the column alone left a banned user with full API access:
+    // no guard read is_banned, and their existing JWT stayed valid. Mirror
+    // the flag into auth.users.user_metadata so JwtAuthGuard rejects it on
+    // the next request, AND revoke every active session so the current
+    // token dies immediately (a banned user can't keep using a live token).
+    try {
+      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+      const mergedMeta = {
+        ...(authUser?.user?.user_metadata ?? {}),
+        is_banned: true,
+      };
+      await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: mergedMeta,
+      });
+      await supabase.auth.admin.signOut(userId, 'global');
+    } catch {
+      // Best-effort: the DB flag + guard check still apply on next login.
+    }
+
     return { message: 'User banned' };
   }
 

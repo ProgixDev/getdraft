@@ -6,11 +6,14 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../config/supabase.config';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUserPayload, UserRole } from '../../common/types';
+import { isMinor } from '../../common/utils/age';
+import { setActivationStatus } from '../../common/utils/activation';
 
 @Injectable()
 export class UsersService {
@@ -19,6 +22,7 @@ export class UsersService {
   constructor(
     private supabaseService: SupabaseService,
     private subscriptionsService: SubscriptionsService,
+    private configService: ConfigService,
   ) {}
 
   async getMe(user: CurrentUserPayload) {
@@ -34,7 +38,12 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    return data;
+    // Convenience flag the client uses to decide whether to show the
+    // pending-activation gate. Older rows (pre-022) have no column → active.
+    const activationStatus = (data.activation_status ?? 'active') as
+      | 'active'
+      | 'pending_guardian';
+    return { ...data, activation_status: activationStatus, isActivated: activationStatus === 'active' };
   }
 
   async updateMe(user: CurrentUserPayload, dto: UpdateUserDto) {
@@ -148,6 +157,31 @@ export class UsersService {
       }
     }
 
+    // Under-18 athletes finish onboarding but land in 'pending_guardian':
+    // they can't use any feature until a guardian validates them (existing
+    // QR flow) and an admin approves that link. Age is read from the
+    // athlete profile's DOB; a missing DOB or any non-athlete role stays
+    // 'active'. See guardian-links.service.ts -> adminDecide for the flip.
+    let activationStatus: 'active' | 'pending_guardian' = 'active';
+    if (existing.role === 'athlete') {
+      const { data: prof, error: profErr } = await supabase
+        .from('athlete_profiles')
+        .select('date_of_birth')
+        .eq('user_id', userId)
+        .maybeSingle();
+      // Don't silently treat a query error as "adult" — that would let a
+      // minor slip past the guardian gate. A genuinely missing row (no DOB)
+      // still falls through as adult, which is the intended default.
+      if (profErr) {
+        throw new BadRequestException(
+          `Could not read athlete profile for activation check: ${profErr.message}`,
+        );
+      }
+      if (isMinor(prof?.date_of_birth)) {
+        activationStatus = 'pending_guardian';
+      }
+    }
+
     const { data, error } = await supabase
       .from('users')
       .update({ is_onboarded: true })
@@ -159,7 +193,37 @@ export class UsersService {
       throw new BadRequestException(error.message);
     }
 
-    return data;
+    // Set the column AND mirror into the JWT metadata so the very next
+    // request from this minor is already gated by the ActivationGuard.
+    if (activationStatus !== 'active') {
+      await setActivationStatus(supabase, userId, activationStatus);
+      this.logger.log(
+        `[activation] athlete ${userId} onboarded as minor → pending_guardian`,
+      );
+    }
+
+    return {
+      ...data,
+      activation_status: activationStatus,
+      isActivated: activationStatus === 'active',
+    };
+  }
+
+  /**
+   * Dev-only escape hatch — flips the current user straight to 'active'
+   * without waiting for a guardian/admin. Mirrors the kyc dev-approve
+   * pattern and is hard-disabled in production. Powers the __DEV__
+   * "skip activation" button on the pending-activation screen.
+   */
+  async devActivate(userId: string): Promise<{ activationStatus: 'active' }> {
+    const env = this.configService.get<string>('NODE_ENV') ?? 'development';
+    if (env === 'production') {
+      throw new BadRequestException('Dev activate is disabled in production.');
+    }
+    const supabase = this.supabaseService.getAdminClient();
+    await setActivationStatus(supabase, userId, 'active');
+    this.logger.warn(`[dev] activation bypassed for user ${userId}`);
+    return { activationStatus: 'active' };
   }
 
   async getPublicProfile(userId: string) {

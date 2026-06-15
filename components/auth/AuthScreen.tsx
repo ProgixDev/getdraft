@@ -34,12 +34,14 @@ import { useStripe } from "@stripe/stripe-react-native";
 import { images } from "@/config/assets";
 import { brand, neutral } from "@/config/colors";
 import { MOCK_USERS } from "@/constants/mockUsers";
+import { plans as PLAN_CATALOG } from "@/constants/plansData";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   login,
   loginAsync,
   completeOnboarding,
   completeOnboardingAsync,
+  setActivationStatus,
   clearError,
   logout,
 } from "@/store/slices/authSlice";
@@ -436,9 +438,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
    */
   const handlePlanSelected = async (planId: string) => {
     setSelectedPlan(planId);
-    const plan = (await import("@/constants/plansData")).plans.find(
-      (p) => p.id === planId,
-    );
+    const plan = PLAN_CATALOG.find((p) => p.id === planId);
     if (!plan || plan.price === 0) {
       await finishOnboarding();
       return;
@@ -556,12 +556,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
    */
   const finishOnboarding = async () => {
     try {
+      // Success path: the thunk also stores the server's activation_status,
+      // so an under-18 athlete is gated on the first app frame.
       await dispatch(completeOnboardingAsync()).unwrap();
+      onLogin?.();
+      return;
     } catch (err: any) {
       console.warn("[AuthScreen] completeOnboardingAsync failed:", err);
-      dispatch(completeOnboarding());
     }
-    onLogin?.();
+
+    // Failure path: do NOT blindly flip isOnboarded locally — for a minor
+    // that would skip the guardian-activation gate the server never set.
+    // Ask the server for the truth before entering the app.
+    try {
+      const me = await usersService.getMe();
+      if (me?.activation_status === "pending_guardian") {
+        dispatch(setActivationStatus("pending_guardian"));
+      }
+      if (me?.is_onboarded) {
+        dispatch(completeOnboarding());
+        onLogin?.();
+        return;
+      }
+    } catch {
+      // Server unreachable — fall through to the retry prompt below.
+    }
+
+    Alert.alert(
+      "Almost there",
+      "We couldn't finish setting up your account. Please check your connection and try again.",
+    );
   };
 
   const handleSubmit = async () => {

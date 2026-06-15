@@ -15,17 +15,28 @@ export const usersService = {
     await api.delete("/users/me");
   },
 
-  async completeOnboarding(): Promise<void> {
+  /** [DEV ONLY] Activate the current account without guardian/admin. */
+  async devActivate(): Promise<void> {
+    await api.post("/users/me/dev-activate");
+  },
+
+  async completeOnboarding(): Promise<{
+    is_onboarded?: boolean;
+    activation_status?: "active" | "pending_guardian";
+  } | null> {
     // Opt this call out of api.ts's session-expired auto-logout. If the
     // PUT 401s right at the end of signup (e.g. the access token aged
     // out while the user lingered on KYC / questions / tutorial / plan)
     // and refresh also fails, the AuthScreen's finishOnboarding catch
-    // already flips Redux's isOnboarded locally and routes into the
+    // confirms onboarding/activation with the server before entering the
     // app. Letting api.ts dispatch logout in parallel would tear
     // isAuthenticated down and bounce the user to login instead.
-    await api.put("/users/me/onboarding", undefined, {
+    const { data } = await api.put("/users/me/onboarding", undefined, {
       skipSessionExpiredHandler: true,
     } as any);
+    // Returns the updated users row incl. activation_status so the caller
+    // can gate an under-18 athlete on the first app frame (no tab flash).
+    return data?.data ?? null;
   },
 
   async getPublicUser(userId: string): Promise<any> {

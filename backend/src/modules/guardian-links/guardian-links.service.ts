@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../config/supabase.config';
 import { UserRole } from '../../common/types';
+import { setActivationStatus } from '../../common/utils/activation';
 
 export type GuardianRelationship =
   | 'parent'
@@ -405,6 +406,26 @@ export class GuardianLinksService {
     this.logger.log(
       `[guardian-link] ${linkId} -> ${decision} by admin ${adminUserId}`,
     );
+
+    // Approving the guardian link is the single event that ACTIVATES a
+    // pending under-18 athlete (migration 022). Flip the linked athlete to
+    // 'active' (idempotent — an already-active athlete just stays active)
+    // and mirror it into their JWT metadata so their next request passes
+    // the ActivationGuard. Best-effort: a metadata hiccup must not fail
+    // the admin's decision, which already committed above.
+    if (decision === 'approved' && data.athlete_user_id) {
+      try {
+        await setActivationStatus(supabase, data.athlete_user_id, 'active');
+        this.logger.log(
+          `[activation] athlete ${data.athlete_user_id} activated via guardian-link ${linkId}`,
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `[activation] failed to activate athlete ${data.athlete_user_id} after approving ${linkId}: ${err?.message ?? err}`,
+        );
+      }
+    }
+
     return data;
   }
 }

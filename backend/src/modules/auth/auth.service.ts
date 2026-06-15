@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
+  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -136,6 +137,10 @@ export class AuthService {
         email: data.user.email!,
         role: (userData?.role as UserRole) || UserRole.ATHLETE,
         name: userData?.name || '',
+        activationStatus:
+          userData?.activation_status === 'pending_guardian'
+            ? 'pending_guardian'
+            : 'active',
       },
       isOnboarded: userData?.is_onboarded || false,
       accessToken: data.session.access_token,
@@ -170,6 +175,10 @@ export class AuthService {
         email: data.user.email!,
         role: (userData?.role as UserRole) || UserRole.ATHLETE,
         name: userData?.name || data.user.user_metadata?.name || '',
+        activationStatus:
+          userData?.activation_status === 'pending_guardian'
+            ? 'pending_guardian'
+            : 'active',
       },
       isOnboarded: userData?.is_onboarded || false,
       accessToken: data.session.access_token,
@@ -483,11 +492,24 @@ export class AuthService {
     const authUser = await this.findAuthUserByPhone(normalized);
     if (authUser) {
       const admin = this.supabaseService.getAdminClient();
-      const { data: profile } = await admin
+      const { data: profile, error: profileErr } = await admin
         .from('users')
-        .select('id, email, name, role, is_onboarded')
+        .select('id, email, name, role, is_onboarded, activation_status')
         .eq('id', authUser.id)
         .maybeSingle();
+
+      // A QUERY error (missing column, RLS, transient) is NOT the same as
+      // "no profile row". Swallowing it here would drop a real returning
+      // user into the signup branch below and mint a DUPLICATE account.
+      // Fail loudly instead so the client shows a retry, not a wrong path.
+      if (profileErr) {
+        this.logger.error(
+          `[phone-login] profile read failed for ${authUser.id}: ${profileErr.message}`,
+        );
+        throw new InternalServerErrorException(
+          'Could not sign you in. Please try again.',
+        );
+      }
 
       if (profile) {
         const session = await this.mintSessionForAuthUser(
@@ -506,6 +528,10 @@ export class AuthService {
             phone: normalized,
             role: profile.role,
             name: profile.name ?? null,
+            activationStatus:
+              profile.activation_status === 'pending_guardian'
+                ? 'pending_guardian'
+                : 'active',
           },
           isOnboarded: !!profile.is_onboarded,
           accessToken: session.access_token,

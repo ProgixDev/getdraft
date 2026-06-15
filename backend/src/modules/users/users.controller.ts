@@ -16,6 +16,7 @@ import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AllowPending } from '../../common/decorators/allow-pending.decorator';
 import { CurrentUserPayload } from '../../common/types';
 
 @ApiTags('Users')
@@ -25,6 +26,7 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Get('me')
+  @AllowPending()
   @ApiOperation({ summary: 'Get current user profile' })
   getMe(@CurrentUser() user: CurrentUserPayload) {
     return this.usersService.getMe(user);
@@ -40,6 +42,7 @@ export class UsersController {
   }
 
   @Delete('me')
+  @AllowPending()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Permanently delete the current user account' })
   async deleteMe(@CurrentUser('id') userId: string) {
@@ -47,9 +50,19 @@ export class UsersController {
   }
 
   @Put('me/onboarding')
+  @AllowPending()
   @ApiOperation({ summary: 'Mark onboarding as complete' })
   completeOnboarding(@CurrentUser('id') userId: string) {
     return this.usersService.completeOnboarding(userId);
+  }
+
+  @Post('me/dev-activate')
+  @AllowPending()
+  @ApiOperation({
+    summary: '[DEV ONLY] Activate current account without guardian/admin.',
+  })
+  devActivate(@CurrentUser('id') userId: string) {
+    return this.usersService.devActivate(userId);
   }
 
   @Get('me/blocks')

@@ -6,7 +6,7 @@ import {
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Provider, useSelector, useDispatch } from "react-redux";
+import { Provider, useSelector } from "react-redux";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import {
@@ -42,11 +42,19 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { theme } from "@/config/colors";
 import { store, RootState } from "@/store";
+import { useAppDispatch } from "@/store/hooks";
 import { SplashScreen, WelcomeScreen } from "@/components";
-import { AuthLanding } from "@/components/auth";
+import { AuthLanding, PendingActivationScreen } from "@/components/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
-import { login, logout } from "@/store/slices/authSlice";
+import {
+  login,
+  logout,
+  logoutAsync,
+  setActivationStatus,
+} from "@/store/slices/authSlice";
+import { usersService } from "@/services/users";
+import { chatService } from "@/services/chat";
 import { API_ORIGIN, setOnSessionExpired } from "@/services/api";
 
 export const unstable_settings = {
@@ -57,7 +65,7 @@ type AppState = "loading" | "splash" | "welcome" | "auth" | "app";
 
 function RootLayoutContent() {
   const colorScheme = useColorScheme();
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const isAuthenticated = useSelector(
     (state: RootState) => state.auth.isAuthenticated,
   );
@@ -86,6 +94,11 @@ function RootLayoutContent() {
   // of this layout, cleared on unmount in case of fast refresh / HMR.
   useEffect(() => {
     setOnSessionExpired(() => {
+      try {
+        chatService.disconnectSocket();
+      } catch {
+        // ignore socket teardown errors
+      }
       dispatch(logout());
     });
     return () => setOnSessionExpired(null);
@@ -117,6 +130,29 @@ function RootLayoutContent() {
       saveAuth({ user, isOnboarded }).catch(() => {});
     }
   }, [isAuthenticated, user, isOnboarded]);
+
+  // Sync the minor-activation gate from the server whenever we land in the
+  // app. Covers the just-finished-signup case (the signup response can't
+  // know the post-onboarding activation status) and re-checks on every cold
+  // launch. The pending-activation screen below also polls while shown.
+  useEffect(() => {
+    if (appState !== "app" || !isAuthenticated || !isOnboarded) return;
+    let cancelled = false;
+    usersService
+      .getMe()
+      .then((me) => {
+        if (cancelled) return;
+        const status =
+          me?.activation_status === "pending_guardian"
+            ? "pending_guardian"
+            : "active";
+        dispatch(setActivationStatus(status));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [appState, isAuthenticated, isOnboarded, dispatch]);
 
   // When user logs out from app, go back to auth screen
   useEffect(() => {
@@ -196,6 +232,22 @@ function RootLayoutContent() {
       <>
         <StatusBar style="light" />
         <AuthLanding onLogin={handleAuthComplete} />
+      </>
+    );
+  }
+
+  // Under-18 athletes who haven't been guardian-validated are blocked from
+  // the entire app — they only ever see the pending-activation screen until
+  // an admin approves their guardian link (then the gate clears and the tabs
+  // render). Server-side guards back this up so the API refuses them too.
+  if (user?.activationStatus === "pending_guardian") {
+    return (
+      <>
+        <StatusBar style="light" />
+        <PendingActivationScreen
+          onActivated={() => dispatch(setActivationStatus("active"))}
+          onLogout={() => dispatch(logoutAsync())}
+        />
       </>
     );
   }

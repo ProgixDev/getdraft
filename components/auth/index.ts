@@ -12,6 +12,7 @@ export { EmailVerificationScreen } from "./EmailVerificationScreen";
 export { OnboardingQuestionsScreen } from "./OnboardingQuestionsScreen";
 export { KycVerificationScreen } from "./KycVerificationScreen";
 export { GuardianLinkScreen } from "./GuardianLinkScreen";
+export { PendingActivationScreen } from "./PendingActivationScreen";
 export { PlanSelectionScreen } from "./PlanSelectionScreen";
 export { LocationSelectionScreen } from "./LocationSelectionScreen";
 export { ProfileSetupScreen } from "./ProfileSetupScreen";

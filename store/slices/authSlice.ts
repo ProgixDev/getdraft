@@ -1,15 +1,25 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { authService, type AuthResponse } from "@/services/auth";
 import { usersService } from "@/services/users";
+import { chatService } from "@/services/chat";
 import { saveAuth, clearAuth } from "../authStorage";
 
 export type UserRole = "athlete" | "parent" | "coach" | "recruiter" | "admin";
+
+export type ActivationStatus = "active" | "pending_guardian";
 
 export interface User {
   id: string;
   email: string;
   role: UserRole;
   name?: string;
+  /**
+   * Under-18 athletes are 'pending_guardian' until a guardian validates
+   * them and an admin approves the link; the root layout then blocks the
+   * whole app behind the pending-activation screen. Absent/undefined is
+   * treated as 'active' (every adult / non-athlete / pre-existing account).
+   */
+  activationStatus?: ActivationStatus;
 }
 
 interface AuthState {
@@ -73,17 +83,30 @@ export const signupAsync = createAsyncThunk<
 );
 
 export const logoutAsync = createAsyncThunk("auth/logoutAsync", async () => {
+  // Revoke the server session + clear tokens, drop the authenticated realtime
+  // socket (otherwise it stays connected as the previous user and is reused
+  // after the next login), then wipe persisted auth.
   await authService.logout();
+  try {
+    chatService.disconnectSocket();
+  } catch {
+    // never let a socket teardown error block logout
+  }
   await clearAuth();
 });
 
 export const completeOnboardingAsync = createAsyncThunk<
-  void,
+  { activationStatus: ActivationStatus },
   void,
   { rejectValue: string }
 >("auth/completeOnboardingAsync", async (_, { rejectWithValue }) => {
   try {
-    await usersService.completeOnboarding();
+    const res = await usersService.completeOnboarding();
+    const activationStatus: ActivationStatus =
+      res?.activation_status === "pending_guardian"
+        ? "pending_guardian"
+        : "active";
+    return { activationStatus };
   } catch (err: any) {
     return rejectWithValue(
       err.response?.data?.message || "Failed to complete onboarding",
@@ -117,6 +140,17 @@ export const authSlice = createSlice({
       state.isOnboarded = true;
       if (state.user) {
         saveAuth({ user: state.user, isOnboarded: true }).catch(() => {});
+      }
+    },
+    // Sync the minor-activation gate. Set from GET /users/me on app entry,
+    // and flipped to 'active' by the pending-activation screen once the
+    // guardian link is approved (or via the __DEV__ bypass).
+    setActivationStatus: (state, action: PayloadAction<ActivationStatus>) => {
+      if (state.user) {
+        state.user.activationStatus = action.payload;
+        saveAuth({ user: state.user, isOnboarded: state.isOnboarded }).catch(
+          () => {},
+        );
       }
     },
     clearError: (state) => {
@@ -170,14 +204,24 @@ export const authSlice = createSlice({
       state.isOnboarded = false;
     });
 
-    // Complete onboarding
-    builder.addCase(completeOnboardingAsync.fulfilled, (state) => {
+    // Complete onboarding — also carry the server's activation status so an
+    // under-18 athlete is gated on the first app frame (no tab-bar flash).
+    builder.addCase(completeOnboardingAsync.fulfilled, (state, action) => {
       state.isOnboarded = true;
+      if (state.user) {
+        state.user.activationStatus = action.payload.activationStatus;
+        saveAuth({ user: state.user, isOnboarded: true }).catch(() => {});
+      }
     });
   },
 });
 
-export const { login, logout, completeOnboarding, clearError } =
-  authSlice.actions;
+export const {
+  login,
+  logout,
+  completeOnboarding,
+  setActivationStatus,
+  clearError,
+} = authSlice.actions;
 
 export default authSlice.reducer;

@@ -130,29 +130,32 @@ export default function MatchesScreen() {
 
   const [inFlight, setInFlight] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadPrimary = useCallback(async () => {
     setLoading(true);
     setError(false);
-    const fetcher = isParent
-      ? outreachService.getOutreachList()
-      : matchesService.getMatches();
-    fetcher
-      .then((rows) => {
-        if (cancelled) return;
-        if (isParent) setParentMessages((rows ?? []) as RecruiterParentOutreach[]);
-        else setAthleteMatches((rows ?? []) as AthleteMatch[]);
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    try {
+      if (isParent) {
+        const rows = await outreachService.getOutreachList();
+        setParentMessages((rows ?? []) as RecruiterParentOutreach[]);
+      } else {
+        const rows = await matchesService.getMatches();
+        setAthleteMatches((rows ?? []) as AthleteMatch[]);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [isParent]);
+
+  // Reload whenever the tab regains focus (fires on first mount too) so a
+  // match just created by accepting a draft — or anything that changed while
+  // the user was elsewhere — shows up without a manual remount.
+  useFocusEffect(
+    useCallback(() => {
+      loadPrimary();
+    }, [loadPrimary]),
+  );
 
   const totalUnread = useMemo(
     () => athleteMatches.reduce((sum, m) => sum + (m.unreadCount || 0), 0),
@@ -295,6 +298,8 @@ export default function MatchesScreen() {
         setReceived((prev) => prev.filter((r) => r.swiper.id !== swiperId));
         if (res.matched) {
           Alert.alert("Game On!", `You matched with ${name}.`);
+          // Surface the new match in the Matches list immediately.
+          loadPrimary();
         }
       } catch (e: any) {
         Alert.alert(
@@ -305,7 +310,7 @@ export default function MatchesScreen() {
         setInFlight(null);
       }
     },
-    [inFlight],
+    [inFlight, loadPrimary],
   );
 
   const handleRefuse = useCallback(

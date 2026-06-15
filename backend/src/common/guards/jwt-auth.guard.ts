@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -45,10 +46,24 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid or expired token');
       }
 
+      // Banned users are mirrored into user_metadata by AdminService.banUser
+      // (which also revokes their sessions). Reject here so a banned user who
+      // logs back in still can't reach any endpoint.
+      if (user.user_metadata?.is_banned === true) {
+        throw new ForbiddenException('This account has been suspended.');
+      }
+
       const currentUser: CurrentUserPayload = {
         id: user.id,
         email: user.email!,
         role: (user.user_metadata?.role as UserRole) || UserRole.ATHLETE,
+        // Mirrored from user_metadata so ActivationGuard can gate without a
+        // DB read. Anything other than 'pending_guardian' is treated as
+        // active (covers all existing accounts minted before migration 022).
+        activationStatus:
+          user.user_metadata?.activation_status === 'pending_guardian'
+            ? 'pending_guardian'
+            : 'active',
       };
 
       request.user = currentUser;

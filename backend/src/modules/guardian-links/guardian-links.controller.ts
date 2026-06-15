@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/commo
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowPending } from '../../common/decorators/allow-pending.decorator';
 import { UserRole } from '../../common/types';
 import { GuardianLinksService } from './guardian-links.service';
 import type { GuardianLinkStatus, GuardianRelationship } from './guardian-links.service';
@@ -14,19 +15,24 @@ export class GuardianLinksController {
 
   // ──────────── Athlete-side ────────────
 
+  // @AllowPending: a pending-guardian minor MUST reach these to show /
+  // refresh their QR and watch the link status — that's how they activate.
   @Post('qr')
+  @AllowPending()
   @ApiOperation({ summary: 'Athlete: mint a fresh QR token (expires in 10 min).' })
   issueQr(@CurrentUser('id') userId: string) {
     return this.service.issueQr(userId);
   }
 
   @Get('my-athlete-links')
+  @AllowPending()
   @ApiOperation({ summary: 'Athlete: list guardians linked (or pending) to me.' })
   listForAthlete(@CurrentUser('id') userId: string) {
     return this.service.listForAthlete(userId);
   }
 
   @Delete(':id')
+  @AllowPending()
   @ApiOperation({ summary: 'Athlete: revoke a guardian link.' })
   revoke(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.service.revoke(userId, id);

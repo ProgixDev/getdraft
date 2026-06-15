@@ -22,6 +22,7 @@ import {
 import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { usersService } from "@/services/users";
+import { chatService } from "@/services/chat";
 import { clearTokens } from "@/services/api";
 import { clearAuth } from "@/store/authStorage";
 import { logout } from "@/store/slices/authSlice";
@@ -163,6 +164,11 @@ export default function SettingsScreen() {
                       // !isAuthenticated and routes to auth.
                       await clearTokens().catch(() => {});
                       await clearAuth().catch(() => {});
+                      try {
+                        chatService.disconnectSocket();
+                      } catch {
+                        // ignore socket teardown errors
+                      }
                       dispatch(logout());
                     } catch {
                       setDeleting(false);

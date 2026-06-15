@@ -59,4 +59,11 @@ export class CurrentUserPayload {
   id: string;
   email: string;
   role: UserRole;
+  /**
+   * Account activation state, mirrored from auth.users.user_metadata by
+   * JwtAuthGuard. 'pending_guardian' = under-18 athlete awaiting guardian
+   * validation; the ActivationGuard blocks feature endpoints for them.
+   * Defaults to 'active' for every existing/adult/non-athlete account.
+   */
+  activationStatus?: 'active' | 'pending_guardian';
 }

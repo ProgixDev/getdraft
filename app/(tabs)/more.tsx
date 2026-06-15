@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, StyleSheet, Text, Pressable, Alert, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { useRouter } from "expo-router";
 import {
   useFonts,
@@ -11,14 +11,15 @@ import {
   Poppins_600SemiBold,
 } from "@expo-google-fonts/poppins";
 import { brand, semantic, theme } from "@/config/colors";
-import { logout } from "@/store/slices/authSlice";
+import { logoutAsync } from "@/store/slices/authSlice";
+import { useAppDispatch } from "@/store/hooks";
 import { RootState } from "@/store";
 import { usersService } from "@/services/users";
 import { profilesService } from "@/services/profiles";
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
   const [fontsLoaded] = useFonts({
@@ -67,7 +68,7 @@ export default function MoreScreen() {
       {
         text: "Log out",
         style: "destructive",
-        onPress: () => dispatch(logout()),
+        onPress: () => dispatch(logoutAsync()),
       },
     ]);
   };

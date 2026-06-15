@@ -16,8 +16,12 @@ import { KycService } from './kyc.service';
 import { StartKycDto } from './dto/start-kyc.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { AllowPending } from '../../common/decorators/allow-pending.decorator';
 
 @ApiTags('KYC')
+// KYC runs during signup (before onboarding sets pending_guardian), but
+// allow pending minors through so a resumed/retried KYC is never blocked.
+@AllowPending()
 @Controller('kyc')
 export class KycController {
   private readonly logger = new Logger(KycController.name);

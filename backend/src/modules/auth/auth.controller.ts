@@ -20,6 +20,7 @@ import {
 } from './dto/phone-otp.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { AllowPending } from '../../common/decorators/allow-pending.decorator';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -69,6 +70,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @AllowPending()
   @ApiOperation({ summary: 'Logout current session' })
   logout(@Body() dto: LogoutDto, @Req() req: any) {
     const headerAuth = req?.headers?.authorization || '';

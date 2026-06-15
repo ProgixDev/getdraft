@@ -12,6 +12,7 @@ export interface AuthResponse {
     email: string;
     role: UserRole;
     name?: string;
+    activationStatus?: "active" | "pending_guardian";
   };
   isOnboarded: boolean;
   accessToken: string;
@@ -176,6 +177,10 @@ export const authService = {
         email: u.email ?? me.email ?? "",
         role: (me.role as UserRole) ?? "athlete",
         name: me.name ?? (u.user_metadata?.full_name as string | undefined),
+        activationStatus:
+          me.activation_status === "pending_guardian"
+            ? "pending_guardian"
+            : "active",
       },
       isOnboarded: !!me.is_onboarded,
       accessToken: exchange.session.access_token,

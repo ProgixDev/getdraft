@@ -35,11 +35,15 @@ export const uploadsService = {
     file: Blob | File,
     contentType: string,
   ): Promise<void> {
-    await fetch(signedUrl, {
+    // Must throw on a failed PUT — otherwise callers (post-create, avatar
+    // upload) proceed to persist a post/avatar that points at a URL whose
+    // bytes never landed. Matches uploadBlob / uploadFromUri.
+    const res = await fetch(signedUrl, {
       method: "PUT",
       headers: { "Content-Type": contentType },
       body: file,
     });
+    if (!res.ok) throw new Error(`Upload failed (${res.status})`);
   },
 
   /**

@@ -4,6 +4,7 @@ import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { ActivationGuard } from './common/guards/activation.guard';
 import { Public } from './common/decorators/public.decorator';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -58,6 +59,9 @@ class HealthController {
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Runs after JwtAuthGuard (needs request.user.activationStatus). Blocks
+    // pending-guardian minors from every endpoint not marked @AllowPending().
+    { provide: APP_GUARD, useClass: ActivationGuard },
   ],
 })
 export class AppModule {}
