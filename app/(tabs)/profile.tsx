@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  Platform,
 } from "react-native";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -370,6 +371,19 @@ export default function ProfileScreen() {
     setCommentsVisible(false);
     setOpenedPost(null);
   }, []);
+
+  // Back handling for the detail sheet. The CommentsSheet is a Modal nested
+  // inside the detail Modal; on Android a hardware-back could otherwise tear
+  // down the outer sheet (nulling openedPost) while the inner sheet is still
+  // closing, which threw. So when comments are open, back closes ONLY the
+  // comments; otherwise it closes the detail. Keeps the stack deterministic.
+  const handleDetailRequestClose = useCallback(() => {
+    if (commentsVisible) {
+      setCommentsVisible(false);
+    } else {
+      closeDetail();
+    }
+  }, [commentsVisible, closeDetail]);
 
   const athleteProfile = useMemo<NormalizedAthleteProfile | null>(() => {
     if (!isAthlete || !profileRaw) return null;
@@ -948,8 +962,8 @@ export default function ProfileScreen() {
       <Modal
         visible={openedPost !== null}
         animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={closeDetail}
+        presentationStyle={Platform.OS === "ios" ? "pageSheet" : "fullScreen"}
+        onRequestClose={handleDetailRequestClose}
       >
         {openedPost && (
           <DetailModalContents
@@ -1030,7 +1044,12 @@ function DetailModalContents({
         <View style={{ width: 26 }} />
       </View>
 
-      <View style={styles.detailMediaWrap}>
+      <View
+        style={[
+          styles.detailMediaWrap,
+          isReel ? styles.detailMediaWrapReel : styles.detailMediaWrapPhoto,
+        ]}
+      >
         {isReel ? (
           <VideoView
             player={player}
@@ -1596,8 +1615,19 @@ const styles = StyleSheet.create({
   },
   detailMediaWrap: {
     width: "100%",
-    aspectRatio: 1,
     backgroundColor: theme.surface,
+  },
+  // Photos keep the square (IG-style) crop.
+  detailMediaWrapPhoto: {
+    aspectRatio: 1,
+  },
+  // Reels are vertical video — let the player fill the sheet between the
+  // header and the action row so a saved reel opens at the same tall,
+  // full-bleed dimensions it has in the reels feed (instead of a cropped
+  // square).
+  detailMediaWrapReel: {
+    flex: 1,
+    backgroundColor: "#000",
   },
   detailMedia: {
     flex: 1,

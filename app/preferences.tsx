@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
+  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -29,6 +30,11 @@ import {
   resetDiscoverPreferences,
   setDiscoverPreferences,
 } from "@/store/slices/discoverPreferencesSlice";
+
+// Cap the picker list so a long location list scrolls inside the sheet instead
+// of overflowing past the bottom edge (where it was previously cut off).
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const LIST_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.6);
 
 const DISTANCE_OPTIONS: { label: string; value: number | null }[] = [
   { label: "Any", value: null },
@@ -102,6 +108,7 @@ function OptionPickerModal({
   selectedValue,
   onClose,
   onSelect,
+  emptyHint,
 }: {
   visible: boolean;
   title: string;
@@ -109,6 +116,7 @@ function OptionPickerModal({
   selectedValue: string;
   onClose: () => void;
   onSelect: (value: string) => void;
+  emptyHint?: string;
 }) {
   return (
     <Modal
@@ -127,9 +135,14 @@ function OptionPickerModal({
             </Pressable>
           </View>
           <ScrollView
-            style={styles.modalOptions}
-            showsVerticalScrollIndicator={false}
+            style={[styles.modalOptions, { maxHeight: LIST_MAX_HEIGHT }]}
+            contentContainerStyle={styles.modalOptionsContent}
+            showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
           >
+            {emptyHint && options.length <= 1 ? (
+              <Text style={styles.modalEmptyHint}>{emptyHint}</Text>
+            ) : null}
             {options.map((option) => {
               const selected = option.value === selectedValue;
               return (
@@ -531,6 +544,11 @@ export default function PreferencesScreen() {
         selectedValue={selectorValue}
         onClose={() => setActiveModal(null)}
         onSelect={handleSelectFromModal}
+        emptyHint={
+          activeModal === "city"
+            ? "No cities to show yet. Pick a country first to see its cities here."
+            : undefined
+        }
       />
     </View>
   );
@@ -710,17 +728,23 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     flexDirection: "row",
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: theme.border,
     backgroundColor: theme.headerBg,
+    // Lift the bar off the content so the action buttons read clearly.
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 16,
   },
   resetButton: {
     width: 108,
-    height: 48,
-    borderRadius: 24,
+    height: 52,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: theme.borderLight,
     alignItems: "center",
@@ -734,15 +758,21 @@ const styles = StyleSheet.create({
   },
   applyButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 24,
+    height: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.accent,
+    // Make the primary CTA pop against the footer bar.
+    shadowColor: theme.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
   },
   applyButtonText: {
-    fontSize: 14,
-    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    fontFamily: "Poppins_700Bold",
     color: theme.accentText,
   },
   rowPressed: {
@@ -757,7 +787,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   modalSheet: {
-    maxHeight: "65%",
+    maxHeight: "82%",
     backgroundColor: theme.cardBg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -786,6 +816,18 @@ const styles = StyleSheet.create({
   },
   modalOptions: {
     marginTop: 4,
+  },
+  modalOptionsContent: {
+    paddingBottom: 8,
+  },
+  modalEmptyHint: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textMuted,
+    textAlign: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 8,
   },
   modalOption: {
     flexDirection: "row",
