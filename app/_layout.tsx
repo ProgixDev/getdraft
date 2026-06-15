@@ -78,7 +78,7 @@ function RootLayoutContent() {
 
   // Register the Expo push token + handle notification taps once the
   // user is authenticated. Physical device required.
-  usePushNotifications(isAuthenticated && !!user);
+  usePushNotifications(isAuthenticated && !!user, appState === "app");
 
   // Prewarm the backend the moment the app launches. Render's free tier
   // sleeps after ~15 min; this fire-and-forget ping wakes it during splash /

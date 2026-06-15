@@ -6,7 +6,13 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+
+// Query params arrive as strings. `@Type(() => Boolean)` is WRONG for them:
+// Boolean('false') === true, so "?includeInternational=false" became true and
+// the toggle was silently ignored. Parse the string explicitly instead.
+const toBool = ({ value }: { value: unknown }) =>
+  value === true || value === 'true';
 
 export class DiscoverQueryDto {
   @ApiPropertyOptional({ example: 160 })
@@ -18,7 +24,7 @@ export class DiscoverQueryDto {
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(toBool)
   @IsBoolean()
   includeInternational?: boolean;
 
@@ -54,7 +60,7 @@ export class DiscoverQueryDto {
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(toBool)
   @IsBoolean()
   verifiedRecruitersOnly?: boolean;
 

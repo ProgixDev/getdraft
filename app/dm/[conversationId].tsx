@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -144,20 +145,38 @@ export default function DmScreen() {
       if (!mine) conversationsService.markRead(conversationId).catch(() => {});
     };
 
-    chatService.connectSocket().then((s) => {
+    const joinNow = () => conversationsService.joinConversation(conversationId);
+    // Re-bind listeners + rejoin whenever we (re)connect. After a background
+    // cycle chatService may hand back a fresh socket; without re-binding here
+    // the screen stops receiving new_dm and DMs silently die until remount.
+    const bindSocket = (s: Socket) => {
       if (cancelled) return;
       activeSocket = s;
       s.off("new_dm", onNewDm);
       s.on("new_dm", onNewDm);
-      const joinNow = () => conversationsService.joinConversation(conversationId);
       if (s.connected) joinNow();
+      s.off("connect", joinNow);
       s.on("connect", joinNow);
+    };
+
+    chatService.connectSocket().then(bindSocket);
+
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || cancelled) return;
+      const s = chatService.getSocket();
+      if (!s || !s.connected) {
+        chatService.connectSocket().then(bindSocket);
+      } else if (s !== activeSocket) {
+        bindSocket(s);
+      }
     });
 
     return () => {
       cancelled = true;
+      appStateSub.remove();
       conversationsService.leaveConversation(conversationId);
       activeSocket?.off("new_dm", onNewDm);
+      activeSocket?.off("connect", joinNow);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, user?.id]);

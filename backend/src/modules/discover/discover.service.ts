@@ -293,17 +293,55 @@ export class DiscoverService {
     const excluded = await this.excludedUserIds(userId);
 
     const where: Prisma.public_usersWhereInput = {
-      role: { in: ['athlete', 'coach', 'recruiter'] },
       is_banned: false,
       id: { notIn: excluded },
     };
     if (query.country && !query.includeInternational) where.country = query.country;
-    if (query.sport && query.sport !== 'all') {
-      where.OR = [
-        { athlete_profiles: { is: { sport: query.sport } } },
-        { recruiter_profiles: { is: { sport: query.sport } } },
-      ];
+
+    // Normalise "all"/empty sentinels to "no filter".
+    const sport =
+      query.sport && query.sport !== 'all' ? query.sport : undefined;
+    const position =
+      query.athletePosition && query.athletePosition !== 'all'
+        ? query.athletePosition
+        : undefined;
+    const level =
+      query.athleteLevel && query.athleteLevel !== 'all'
+        ? query.athleteLevel
+        : undefined;
+    const recruiterType =
+      query.recruiterType && query.recruiterType !== 'all'
+        ? query.recruiterType
+        : undefined;
+    const verifiedOnly = query.verifiedRecruitersOnly === true;
+
+    // Apply each filter only to the role it belongs to (athlete filters must
+    // not exclude recruiters and vice-versa), then OR the two role branches.
+    // distanceKm is intentionally NOT applied — viewer coordinates aren't
+    // captured at signup, so there's nothing to measure distance against yet.
+    const athleteProfileFilter: any = {};
+    if (sport) athleteProfileFilter.sport = sport;
+    if (position) athleteProfileFilter.position = position;
+    if (level) athleteProfileFilter.level = level;
+
+    const recruiterProfileFilter: any = {};
+    if (sport) recruiterProfileFilter.sport = sport;
+    if (recruiterType) recruiterProfileFilter.role_type = recruiterType;
+    if (verifiedOnly) recruiterProfileFilter.verified = true;
+
+    const athleteBranch: Prisma.public_usersWhereInput = { role: 'athlete' };
+    if (Object.keys(athleteProfileFilter).length) {
+      athleteBranch.athlete_profiles = { is: athleteProfileFilter };
     }
+
+    const recruiterBranch: Prisma.public_usersWhereInput = {
+      role: { in: ['coach', 'recruiter'] },
+    };
+    if (Object.keys(recruiterProfileFilter).length) {
+      recruiterBranch.recruiter_profiles = { is: recruiterProfileFilter };
+    }
+
+    where.OR = [athleteBranch, recruiterBranch];
 
     const users = await this.prisma.public_users.findMany({
       where,

@@ -68,7 +68,16 @@ async function getExpoPushToken(): Promise<string | null> {
   return token;
 }
 
-export function usePushNotifications(enabled: boolean) {
+export function usePushNotifications(
+  enabled: boolean,
+  /**
+   * True once the navigation <Stack> is mounted (appState === "app"). The
+   * cold-start deep-link replay waits for this — otherwise router.push runs
+   * during the splash/welcome screens before any navigator exists, throws
+   * "navigation hasn't mounted", and the tapped notification is lost.
+   */
+  routingReady: boolean = true,
+) {
   const attemptedRef = useRef(false);
   const coldStartHandledRef = useRef(false);
 
@@ -106,8 +115,10 @@ export function usePushNotifications(enabled: boolean) {
       return;
     }
 
-    // Cold-start: app launched by tapping a notification.
-    if (!coldStartHandledRef.current) {
+    // Cold-start: app launched by tapping a notification. Wait until the
+    // navigator is mounted before replaying it (the launch response persists,
+    // so deferring loses nothing).
+    if (routingReady && !coldStartHandledRef.current) {
       coldStartHandledRef.current = true;
       Notifications.getLastNotificationResponseAsync()
         .then((response) => {
@@ -121,5 +132,5 @@ export function usePushNotifications(enabled: boolean) {
       routeFromNotificationData(response.notification.request.content.data);
     });
     return () => sub.remove();
-  }, [enabled]);
+  }, [enabled, routingReady]);
 }

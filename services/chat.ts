@@ -35,9 +35,16 @@ export const chatService = {
       socket.disconnect();
       socket = null;
     }
-    const tokens = await loadTokens();
+    // Function-form auth: socket.io re-invokes this on every (re)connect, so a
+    // token refreshed by the REST layer is picked up on reconnect instead of
+    // being frozen at first-connect time (which silently killed realtime ~1h
+    // after login when the original access token expired).
     socket = io(`${API_ORIGIN}/chat`, {
-      auth: { token: tokens?.accessToken },
+      auth: (cb: (data: Record<string, unknown>) => void) => {
+        loadTokens()
+          .then((tokens) => cb({ token: tokens?.accessToken }))
+          .catch(() => cb({}));
+      },
       transports: ["websocket"],
     });
     return socket;

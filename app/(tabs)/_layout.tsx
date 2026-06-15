@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
 
@@ -125,15 +125,16 @@ export default function TabLayout() {
   const isAdmin = role === "admin";
 
   const [unreadCount, setUnreadCount] = useState(0);
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
-    if (!user) return;
-    if (isAdmin) {
-      // Admin doesn't have a chat inbox surface; keep the badge at 0.
+  // Recompute the badge from the server. Reactive (not one-shot at mount) so
+  // it self-clears after the user reads messages, instead of sticking on a
+  // stale count forever.
+  const refreshUnread = useCallback(() => {
+    if (!user || isAdmin) {
       setUnreadCount(0);
       return;
     }
-    let cancelled = false;
     const threadFetcher = isParent
       ? outreachService.getOutreachList()
       : chatService.getThreads();
@@ -142,7 +143,7 @@ export default function TabLayout() {
       conversationsService.getInbox().catch(() => [] as any[]),
     ])
       .then(([threads, inbox]) => {
-        if (cancelled) return;
+        if (!mountedRef.current) return;
         const threadUnread = (threads ?? []).reduce(
           (acc: number, r: any) => acc + (r?.unreadCount || 0),
           0,
@@ -153,13 +154,24 @@ export default function TabLayout() {
         );
         setUnreadCount(threadUnread + dmUnread);
       })
-      .catch(() => {
-        if (!cancelled) setUnreadCount(0);
-      });
+      .catch(() => {});
+  }, [user, isAdmin, isParent]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    refreshUnread();
+    // Keep it fresh: poll modestly + recompute when the app returns to the
+    // foreground (covers messages read on another device / the other surface).
+    const interval = setInterval(refreshUnread, 30000);
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") refreshUnread();
+    });
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
+      clearInterval(interval);
+      sub.remove();
     };
-  }, [isParent, isAdmin, user]);
+  }, [refreshUnread]);
 
   const matchesLabel = isParent ? "Messages" : "Draft Board";
 
