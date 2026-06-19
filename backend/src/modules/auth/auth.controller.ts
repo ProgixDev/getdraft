@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -36,6 +37,8 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  // Brute-force guard: 5 attempts/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Login with email and password' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -43,6 +46,8 @@ export class AuthController {
 
   @Public()
   @Post('verify-email')
+  // Bounded guess: 5 OTP submissions/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Verify email with 6-digit OTP, returns session' })
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.email, dto.token);
@@ -50,6 +55,8 @@ export class AuthController {
 
   @Public()
   @Post('resend-otp')
+  // OTP send burns SMTP quota + real money — tightest budget: 3/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
   @ApiOperation({ summary: 'Resend the signup OTP email' })
   resendOtp(@Body() dto: ResendOtpDto) {
     return this.authService.resendOtp(dto.email);
@@ -64,6 +71,8 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
+  // Email send + enumeration vector: 3/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
   @ApiOperation({ summary: 'Send password reset email' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
@@ -84,6 +93,8 @@ export class AuthController {
 
   @Public()
   @Post('email/request-otp')
+  // OTP send burns SMTP quota + real money — tightest budget: 3/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
   @ApiOperation({ summary: 'Send an email OTP to begin signup' })
   requestEmailOtp(@Body() dto: RequestEmailOtpDto) {
     return this.authService.requestEmailOtp(dto.email);
@@ -91,6 +102,8 @@ export class AuthController {
 
   @Public()
   @Post('email/verify-otp')
+  // Bounded guess: 5 OTP submissions/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Verify the email OTP and receive a verification token' })
   verifyEmailOtp(@Body() dto: VerifyEmailOtpDto) {
     return this.authService.verifyEmailOtp(dto.email, dto.code);
@@ -98,6 +111,8 @@ export class AuthController {
 
   @Public()
   @Post('complete-signup')
+  // Hold a verified token — 5/min/IP is plenty for a human finishing signup.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Finalize signup with verified contact + chosen password' })
   completeSignup(@Body() dto: CompleteSignupDto) {
     return this.authService.completeSignup(dto);
@@ -105,6 +120,8 @@ export class AuthController {
 
   @Public()
   @Post('phone/request-otp')
+  // SMS send burns Twilio Verify ($) — tightest budget: 3/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
   @ApiOperation({ summary: 'Send a phone OTP via SMS or WhatsApp (Twilio Verify)' })
   requestPhoneOtp(@Body() dto: RequestPhoneOtpDto) {
     return this.authService.requestPhoneOtp(dto.phone, dto.channel);
@@ -112,6 +129,8 @@ export class AuthController {
 
   @Public()
   @Post('phone/verify-otp')
+  // Bounded guess: 5 OTP submissions/min per IP.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({
     summary:
       'Verify the phone OTP — returns a session for existing accounts (login) or a verification token for new signups',

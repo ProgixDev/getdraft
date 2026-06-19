@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import * as crypto from 'crypto';
 import { KycService } from './kyc.service';
@@ -55,6 +56,9 @@ export class KycController {
   }
 
   @Public()
+  // Didit retries failed deliveries — throttling here would drop legitimate
+  // decision updates. HMAC signature verification is the abuse defense.
+  @SkipThrottle()
   @Post('webhooks/didit')
   @ApiOperation({ summary: 'Didit webhook receiver (decision updates)' })
   async webhook(@Body() body: unknown, @Req() req: FastifyRequest) {

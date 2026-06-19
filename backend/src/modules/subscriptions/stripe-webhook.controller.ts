@@ -10,11 +10,16 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { SkipThrottle } from '@nestjs/throttler';
 import { SubscriptionsService } from './subscriptions.service';
 import { StripeService } from '../../config/stripe.config';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Webhooks')
+// Stripe retries failed deliveries with exponential backoff — throttling
+// here would drop legitimate retries and silently desync billing.
+// Signature verification (constructEvent) is the abuse defense for this route.
+@SkipThrottle()
 @Controller('webhooks')
 export class StripeWebhookController {
   private readonly logger = new Logger(StripeWebhookController.name);

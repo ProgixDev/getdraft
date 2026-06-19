@@ -1,5 +1,6 @@
 import { Module, Controller, Get } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -37,6 +38,13 @@ class HealthController {
   imports: [
     AppConfigModule,
     PrismaModule,
+    // In-memory throttler: fine on a single Render dyno. Horizontal scaling
+    // would need a shared store (e.g. @nest-lab/throttler-storage-redis)
+    // because each instance otherwise tracks its own counter.
+    // Per-route overrides via @Throttle() tighten the abuse-prone endpoints
+    // (login, request/verify-otp, complete-signup); webhooks opt out with
+    // @SkipThrottle().
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     AuthModule,
     UsersModule,
     ProfilesModule,
@@ -57,6 +65,9 @@ class HealthController {
   ],
   controllers: [HealthController],
   providers: [
+    // Throttle BEFORE auth so unauthenticated abuse (OTP-spam, brute force)
+    // is rejected before it touches Supabase/Twilio/Gmail.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     // Runs after JwtAuthGuard (needs request.user.activationStatus). Blocks
