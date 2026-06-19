@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { authService, type AuthResponse } from "@/services/auth";
 import { usersService } from "@/services/users";
 import { chatService } from "@/services/chat";
+import { notificationsService } from "@/services/notifications";
 import { saveAuth, clearAuth } from "../authStorage";
 
 export type UserRole = "athlete" | "parent" | "coach" | "recruiter" | "admin";
@@ -83,6 +84,14 @@ export const signupAsync = createAsyncThunk<
 );
 
 export const logoutAsync = createAsyncThunk("auth/logoutAsync", async () => {
+  // De-register this device's push token FIRST, while the access token is still
+  // valid — otherwise the token stays mapped to this user and they keep getting
+  // pushes after the next account logs in on the same device.
+  try {
+    await notificationsService.deregisterActiveToken();
+  } catch {
+    // best-effort; never block logout
+  }
   // Revoke the server session + clear tokens, drop the authenticated realtime
   // socket (otherwise it stays connected as the previous user and is reused
   // after the next login), then wipe persisted auth.

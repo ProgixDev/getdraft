@@ -123,12 +123,19 @@ export default function PostCreateScreen() {
     setUploading(true);
     try {
       const fileName = `${Date.now()}.${asset.ext}`;
-      const signed = await uploadsService.getSignedUploadUrl("posts", fileName);
-      const blob = await (await fetch(asset.uri)).blob();
-      await uploadsService.uploadFile(signed.signedUrl, blob, asset.mimeType);
+      // Native streaming upload (FileSystem.uploadAsync) — does NOT load the
+      // file into JS memory. fetch().blob() on a file:// video URI is
+      // unreliable / memory-heavy on-device (esp. Android) and can fail
+      // outright for 60s reels, so route video and image alike through this.
+      const { publicUrl } = await uploadsService.uploadAsset(
+        "posts",
+        asset.uri,
+        fileName,
+        asset.mimeType,
+      );
       await postsService.createPost({
         kind: asset.kind,
-        mediaUrl: signed.publicUrl,
+        mediaUrl: publicUrl,
         mediaType: asset.mediaType,
         caption: caption.trim() || undefined,
       });

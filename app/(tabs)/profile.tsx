@@ -1162,7 +1162,12 @@ function GridContent({
   return (
     <View style={styles.gridTiles}>
       {posts.map((p) => {
-        const thumb = p.thumbnailUrl ?? p.mediaUrl;
+        // A reel's mediaUrl is a video file (.mp4) — feeding it to <Image>
+        // renders a blank tile. Only show an <Image> when we have a real
+        // poster (thumbnailUrl, or a photo post's image); otherwise draw a
+        // dark placeholder so the tile reads as a reel, not a broken image.
+        const poster =
+          p.thumbnailUrl ?? (p.kind === "reel" ? undefined : p.mediaUrl);
         return (
           <Pressable
             key={p.id}
@@ -1173,11 +1178,21 @@ function GridContent({
               p.kind === "reel" ? "Open reel" : "Open post"
             }
           >
-            <Image
-              source={{ uri: thumb }}
-              style={styles.gridTileImage}
-              resizeMode="cover"
-            />
+            {poster ? (
+              <Image
+                source={{ uri: poster }}
+                style={styles.gridTileImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.gridTileImage, styles.gridTilePlaceholder]}>
+                <Ionicons
+                  name="videocam"
+                  size={26}
+                  color={theme.textMuted}
+                />
+              </View>
+            )}
             {p.kind === "reel" && (
               <View style={styles.gridTileReelBadge}>
                 <Ionicons name="play" size={14} color={brand.white} />
@@ -1582,6 +1597,11 @@ const styles = StyleSheet.create({
   },
   gridTileImage: {
     flex: 1,
+    backgroundColor: theme.surface,
+  },
+  gridTilePlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: theme.surface,
   },
   gridTileReelBadge: {

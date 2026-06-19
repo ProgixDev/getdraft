@@ -39,6 +39,12 @@ export class ConversationsService {
       throw new NotFoundException('User not found');
     }
 
+    // Block enforcement (either direction): a blocked/blocking pair must not
+    // be able to start or reopen a DM. Mirrors discover.service.swipe().
+    if (await this.isBlockedPair(meId, otherUserId)) {
+      throw new ForbiddenException('Cannot message a blocked user');
+    }
+
     const [userA, userB] = this.canonical(meId, otherUserId);
 
     // Try to find existing conversation
@@ -87,6 +93,9 @@ export class ConversationsService {
     const list = rows ?? [];
     const ids = list.map((c: any) => c.id as string);
     const unread = await this.fetchUnreadCounts(meId, ids);
+    // Drop conversations whose other participant is blocked (either direction)
+    // so a blocked user disappears from the messaging inbox.
+    const blockedIds = await this.blockedUserIds(meId);
 
     return list
       .map((row: any) => {
@@ -94,6 +103,7 @@ export class ConversationsService {
           | ParticipantRow
           | null;
         if (!otherRow) return null;
+        if (blockedIds.has(otherRow.id)) return null;
         return {
           id: row.id as string,
           otherUser: this.shapeUser(otherRow),
@@ -130,7 +140,10 @@ export class ConversationsService {
   }
 
   async sendMessage(meId: string, conversationId: string, text: string) {
-    await this.assertParticipant(meId, conversationId);
+    const otherUserId = await this.assertParticipant(meId, conversationId);
+    if (otherUserId && (await this.isBlockedPair(meId, otherUserId))) {
+      throw new ForbiddenException('Cannot message a blocked user');
+    }
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from('direct_messages')
@@ -167,7 +180,10 @@ export class ConversationsService {
 
   // ---------- helpers ----------
 
-  private async assertParticipant(meId: string, conversationId: string) {
+  private async assertParticipant(
+    meId: string,
+    conversationId: string,
+  ): Promise<string | null> {
     const supabase = this.supabaseService.getAdminClient();
     const { data } = await supabase
       .from('conversations')
@@ -178,6 +194,36 @@ export class ConversationsService {
     if (data.user_a_id !== meId && data.user_b_id !== meId) {
       throw new ForbiddenException('Not a participant');
     }
+    return data.user_a_id === meId ? data.user_b_id : data.user_a_id;
+  }
+
+  /** True if either user has blocked the other. */
+  private async isBlockedPair(a: string, b: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('blocks')
+      .select('id')
+      .or(
+        `and(blocker_id.eq.${a},blocked_id.eq.${b}),` +
+          `and(blocker_id.eq.${b},blocked_id.eq.${a})`,
+      )
+      .limit(1);
+    return (data?.length ?? 0) > 0;
+  }
+
+  /** All user ids the caller has blocked OR been blocked by. */
+  private async blockedUserIds(meId: string): Promise<Set<string>> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('blocks')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${meId},blocked_id.eq.${meId}`);
+    const set = new Set<string>();
+    for (const row of data ?? []) {
+      const r = row as { blocker_id: string; blocked_id: string };
+      set.add(r.blocker_id === meId ? r.blocked_id : r.blocker_id);
+    }
+    return set;
   }
 
   private async fetchUnreadCounts(meId: string, convIds: string[]) {

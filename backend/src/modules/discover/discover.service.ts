@@ -4,6 +4,8 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  HttpException,
+  HttpStatus,
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -533,6 +535,10 @@ export class DiscoverService {
   }
 
   async swipe(user: CurrentUserPayload, dto: SwipeDto) {
+    // Parents have no draft actions (mirrors getFeed/getMapPoints/myDrafts).
+    if (user.role === UserRole.PARENT) {
+      throw new ForbiddenException('Parents do not have draft actions');
+    }
     if (user.id === dto.targetUserId) {
       throw new BadRequestException('Cannot swipe yourself');
     }
@@ -553,8 +559,12 @@ export class DiscoverService {
 
     const remaining = await this.getSwipesRemaining(user.id);
     if (remaining === 0) {
-      throw new ForbiddenException(
+      // 429 per spec (work-plan C2 "11th basic swipe -> 429"); distinct from
+      // the 403s used for role/block rejections so the client can tell them
+      // apart and show the upgrade CTA.
+      throw new HttpException(
         'Daily swipe limit reached. Upgrade your plan for more swipes.',
+        HttpStatus.TOO_MANY_REQUESTS,
       );
     }
 

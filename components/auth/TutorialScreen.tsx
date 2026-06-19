@@ -36,31 +36,31 @@ interface TutorialSlide {
 const tutorialSlides: TutorialSlide[] = [
   {
     id: "1",
-    icon: "heart",
-    title: "Swipe Right to Like",
+    icon: "arrow-up-circle",
+    title: "Swipe Up to Draft",
     description:
-      "When you see a profile you're interested in, swipe right or tap the heart to show your interest.",
+      "When you see talent you want, swipe up to Draft them and show your interest.",
   },
   {
     id: "2",
-    icon: "close",
-    title: "Swipe Left to Pass",
+    icon: "arrow-down-circle",
+    title: "Swipe Down to Pass",
     description:
-      "Not a match? Swipe left or tap the X to pass and move on to the next profile.",
+      "Not the right fit? Swipe down to Pass and move on to the next profile.",
   },
   {
     id: "3",
     icon: "people",
-    title: "It's a Match!",
+    title: "Game On!",
     description:
-      "When both you and another user like each other, it's a match! You'll both be notified.",
+      "When you both Draft each other, it's Game On — you'll both be notified.",
   },
   {
     id: "4",
     icon: "chatbubbles",
     title: "Start Conversations",
     description:
-      "Once matched, start a conversation and take your connection to the next level.",
+      "Once it's Game On, start a conversation and take your connection to the next level.",
   },
 ];
 

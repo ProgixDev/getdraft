@@ -222,13 +222,22 @@ export class ChatGateway
   ) {
     const userId = this.requireUserId(client);
     if (!userId) return;
-    if (!(await this.userBelongsToConversation(userId, data.conversationId))) {
+    const recipientId = await this.getOtherConversationUserId(
+      userId,
+      data.conversationId,
+    );
+    if (!recipientId) {
       client.emit('error', { message: 'Not authorized for this conversation' });
       return;
     }
     try {
       const text = (data.text ?? '').toString();
       if (!text.trim()) return;
+      // Block enforcement (either direction): a blocked pair cannot DM.
+      if (await this.isBlockedPair(userId, recipientId)) {
+        client.emit('error', { message: 'Cannot message a blocked user' });
+        return;
+      }
       const supabase = this.supabaseService.getAdminClient();
       const { data: row, error } = await supabase
         .from('direct_messages')
@@ -241,6 +250,12 @@ export class ChatGateway
         .single();
       if (error || !row) throw new Error(error?.message ?? 'insert failed');
       this.broadcastDm(data.conversationId, row, userId);
+      await this.pushDmIfRecipientOffline(
+        data.conversationId,
+        userId,
+        recipientId,
+        text,
+      );
     } catch (error: any) {
       client.emit('error', {
         message: error?.message || 'Failed to send DM',
@@ -258,6 +273,48 @@ export class ChatGateway
     });
   }
 
+  /**
+   * Push a DM notification to the recipient when none of their sockets is
+   * in the conversation room (i.e. they're not actively viewing the chat).
+   * Used by both the socket and REST DM paths. Best-effort: a recipientId of
+   * null (resolved by the caller) skips the push. Never throws.
+   */
+  async pushDmIfRecipientOffline(
+    conversationId: string,
+    senderId: string,
+    recipientId: string | null,
+    text: string,
+  ): Promise<void> {
+    try {
+      if (!recipientId) return;
+      const convSockets = await this.server
+        .in(`conv:${conversationId}`)
+        .fetchSockets();
+      const recipientInRoom = convSockets.some(
+        (s) => (s.data as any).userId === recipientId,
+      );
+      if (recipientInRoom) return;
+      const senderName = await this.getUserName(senderId);
+      await this.notificationsService.sendPushToUser(
+        recipientId,
+        senderName ? `New message from ${senderName}` : 'New message',
+        text.length > 120 ? text.slice(0, 117) + '…' : text,
+        { type: 'new_dm', conversationId },
+        'messageNotifications',
+      );
+    } catch {
+      // push is best-effort; never fail the send
+    }
+  }
+
+  /** Public so REST callers can resolve the DM recipient for a push. */
+  async resolveOtherConversationUserId(
+    userId: string,
+    conversationId: string,
+  ): Promise<string | null> {
+    return this.getOtherConversationUserId(userId, conversationId);
+  }
+
   private async userBelongsToConversation(
     userId: string,
     conversationId: string,
@@ -270,6 +327,40 @@ export class ChatGateway
       .maybeSingle();
     if (!data) return false;
     return data.user_a_id === userId || data.user_b_id === userId;
+  }
+
+  /**
+   * Returns the other participant's id if the caller belongs to the
+   * conversation, otherwise null (also covers a missing conversation).
+   */
+  private async getOtherConversationUserId(
+    userId: string,
+    conversationId: string,
+  ): Promise<string | null> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('conversations')
+      .select('user_a_id, user_b_id')
+      .eq('id', conversationId)
+      .maybeSingle();
+    if (!data) return null;
+    if (data.user_a_id === userId) return data.user_b_id;
+    if (data.user_b_id === userId) return data.user_a_id;
+    return null;
+  }
+
+  /** True if either user has blocked the other. */
+  private async isBlockedPair(a: string, b: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('blocks')
+      .select('id')
+      .or(
+        `and(blocker_id.eq.${a},blocked_id.eq.${b}),` +
+          `and(blocker_id.eq.${b},blocked_id.eq.${a})`,
+      )
+      .limit(1);
+    return (data?.length ?? 0) > 0;
   }
 
   private extractToken(client: Socket): string | null {

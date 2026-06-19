@@ -45,11 +45,18 @@ export class GuardianLinksService {
   // ───────────────────────────────────────────────────────────────────
 
   private get secret(): string {
-    return (
+    const configured =
       this.configService.get<string>('GUARDIAN_QR_SECRET') ??
-      this.configService.get<string>('JWT_SECRET') ??
-      'dev-fallback-secret'
-    );
+      this.configService.get<string>('JWT_SECRET');
+    if (configured) return configured;
+    // Fail closed in production: signing guardian QR tokens with a public
+    // constant would make them forgeable. Only fall back in dev.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'GUARDIAN_QR_SECRET (or JWT_SECRET) must be set in production.',
+      );
+    }
+    return 'dev-fallback-secret';
   }
 
   /**

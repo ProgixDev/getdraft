@@ -63,8 +63,16 @@ export class ConversationsController {
         { id: msg.id, text: msg.text, created_at: msg.createdAt },
         meId,
       );
+      const recipientId =
+        await this.chatGateway.resolveOtherConversationUserId(meId, id);
+      await this.chatGateway.pushDmIfRecipientOffline(
+        id,
+        meId,
+        recipientId,
+        dto.text,
+      );
     } catch {
-      // broadcast best-effort
+      // broadcast/push best-effort
     }
     return msg;
   }

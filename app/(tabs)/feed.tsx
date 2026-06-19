@@ -842,7 +842,7 @@ function ReelItem({
             <Ionicons
               name={post.savedByMe ? "bookmark" : "bookmark-outline"}
               size={26}
-              color={brand.white}
+              color={post.savedByMe ? brand.primary : brand.white}
             />
           </Pressable>
           <Pressable

@@ -76,8 +76,16 @@ export class KycController {
   private verifyDiditSignature(req: FastifyRequest, body: unknown): void {
     const secret = this.configService.get<string>('DIDIT_WEBHOOK_SECRET');
     if (!secret) {
+      // Fail CLOSED in production: without the secret anyone could POST a
+      // forged "KYC approved" event and bypass identity verification. Only
+      // skip the check in dev (mirrors the Stripe webhook's fail-closed).
+      if (process.env.NODE_ENV === 'production') {
+        throw new UnauthorizedException(
+          'KYC webhook signature verification is not configured.',
+        );
+      }
       this.logger.warn(
-        'DIDIT_WEBHOOK_SECRET not set — webhook signature verification skipped.',
+        'DIDIT_WEBHOOK_SECRET not set — webhook signature verification skipped (dev only).',
       );
       return;
     }

@@ -646,9 +646,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           setSignupStep("role");
         }
       } catch (err: any) {
-        // Fallback to mock users only if backend is unreachable (network error, no response)
+        // Fallback to mock users only in DEV when the backend is unreachable.
+        // In production this must never authenticate against hardcoded creds —
+        // a transient network blip would let someone in with demo creds and no
+        // real JWT, so every later API call 401s.
         const isNetworkError = !err?.response;
-        if (isNetworkError) {
+        if (__DEV__ && isNetworkError) {
           const mockUser = MOCK_USERS.find(
             (u) =>
               u.email.toLowerCase() === email.toLowerCase() &&

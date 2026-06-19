@@ -732,8 +732,20 @@ export default function DiscoverScreen() {
             });
           }
         })
-        .catch(() => {
-          // Honest copy on network error — no fake "Game On!"
+        .catch((err: any) => {
+          const status = err?.response?.status;
+          // Daily quota exhausted (backend rejects the swipe). Don't fake a
+          // "Drafted" — surface the out-of-swipes lock + upgrade CTA.
+          if (status === 429 || status === 403) {
+            setSwipesRemaining(0);
+            setSnackbar({
+              visible: true,
+              message: "Out of swipes — upgrade to keep scouting",
+              canUndo: false,
+            });
+            return;
+          }
+          // Honest copy on transient network error — no fake "Game On!"
           setSnackbar({
             visible: true,
             message: name ? `Drafted ${name}` : "Drafted",
