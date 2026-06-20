@@ -1034,14 +1034,15 @@ function DetailModalContents({
           onPress={onClose}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Close"
+          accessibilityLabel="Back"
+          style={styles.detailBackButton}
         >
-          <Ionicons name="chevron-down" size={26} color={theme.text} />
+          <Ionicons name="chevron-back" size={24} color={theme.text} />
         </Pressable>
         <Text style={styles.detailTitle}>
           {isReel ? "Reel" : "Post"}
         </Text>
-        <View style={{ width: 26 }} />
+        <View style={{ width: 40 }} />
       </View>
 
       <View
@@ -1623,10 +1624,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
+  },
+  detailBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.surface,
   },
   detailTitle: {
     fontSize: 16,
