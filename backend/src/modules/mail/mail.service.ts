@@ -10,12 +10,20 @@ import * as nodemailer from 'nodemailer';
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
-  private transporter!: nodemailer.Transporter;
+  private transporter: nodemailer.Transporter | null = null;
   private fromAddress!: string;
+  // When set, sendOtp uses Resend's HTTP API instead of SMTP. Most managed
+  // platforms (Vercel/Render) block outbound port 465/587, which is why SMTP
+  // hangs in prod even though it works in dev. HTTPS to api.resend.com is
+  // always reachable.
+  private resendApiKey: string | null = null;
 
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
+    this.resendApiKey =
+      (this.configService.get<string>('RESEND_API_KEY') || '').trim() || null;
+
     const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
     const port = Number(this.configService.get<string>('SMTP_PORT') || 465);
     const user = this.configService.get<string>('SMTP_USER');
@@ -23,9 +31,18 @@ export class MailService implements OnModuleInit {
     const pass = (this.configService.get<string>('SMTP_PASS') || '').replace(/\s+/g, '');
     const from = this.configService.get<string>('MAIL_FROM');
 
+    this.fromAddress = from || (user ? `GetDraft <${user}>` : 'GetDraft <noreply@getdraft.local>');
+
+    // Resend mode wins when configured — skip SMTP setup entirely so we
+    // don't spawn a doomed verify() against a blocked port in prod.
+    if (this.resendApiKey) {
+      this.logger.log('Mail transport: Resend HTTP API');
+      return;
+    }
+
     if (!user || !pass) {
       this.logger.warn(
-        'SMTP_USER / SMTP_PASS not set — emails will fail at send time. Add them to .env.',
+        'SMTP_USER / SMTP_PASS not set and RESEND_API_KEY not set — emails will fail at send time.',
       );
     }
 
@@ -43,7 +60,6 @@ export class MailService implements OnModuleInit {
       greetingTimeout: 10_000,
       socketTimeout: 20_000,
     });
-    this.fromAddress = from || (user ? `GetDraft <${user}>` : 'GetDraft <noreply@getdraft.local>');
 
     // Verify connection in the background — surfaces auth errors at boot
     // instead of waiting for the first OTP request to discover them.
@@ -56,17 +72,74 @@ export class MailService implements OnModuleInit {
   async sendOtp(to: string, code: string): Promise<void> {
     const html = otpEmailHtml(code);
     const text = `Your GetDraft verification code is ${code}. It expires in 10 minutes. If you didn't request this, ignore this email.`;
+    const subject = `${code} is your GetDraft verification code`;
+
+    if (this.resendApiKey) {
+      await this.sendViaResend(to, subject, html, text);
+      return;
+    }
+
+    if (!this.transporter) {
+      this.logger.error(
+        'sendOtp called with neither RESEND_API_KEY nor SMTP credentials configured.',
+      );
+      throw new InternalServerErrorException('Email transport is not configured.');
+    }
 
     try {
       await this.transporter.sendMail({
         from: this.fromAddress,
         to,
-        subject: `${code} is your GetDraft verification code`,
+        subject,
         html,
         text,
       });
     } catch (err: any) {
       this.logger.error(`SMTP send failed to ${to}: ${err?.message ?? err}`);
+      throw new InternalServerErrorException('Could not send verification email.');
+    }
+  }
+
+  /**
+   * POST to Resend's REST endpoint. We use the native fetch (Node 18+ ships
+   * one — Nest's runtime is on 18/20). No SDK dependency so the SMTP-only
+   * dev path doesn't have to import it. Non-2xx => surface as 500 with the
+   * provider message logged but not echoed to the client (response bodies
+   * can leak API hints).
+   */
+  private async sendViaResend(
+    to: string,
+    subject: string,
+    html: string,
+    text: string,
+  ): Promise<void> {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: this.fromAddress,
+          to,
+          subject,
+          html,
+          text,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        this.logger.error(
+          `Resend send failed to ${to}: ${res.status} ${res.statusText} ${body}`,
+        );
+        throw new InternalServerErrorException(
+          'Could not send verification email.',
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof InternalServerErrorException) throw err;
+      this.logger.error(`Resend request failed to ${to}: ${err?.message ?? err}`);
       throw new InternalServerErrorException('Could not send verification email.');
     }
   }

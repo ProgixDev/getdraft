@@ -121,30 +121,40 @@ export default function PostCreateScreen() {
     }
     setErrorMsg(null);
     setUploading(true);
+    let uploadedPath: string | null = null;
     try {
       const fileName = `${Date.now()}.${asset.ext}`;
       // Native streaming upload (FileSystem.uploadAsync) — does NOT load the
       // file into JS memory. fetch().blob() on a file:// video URI is
       // unreliable / memory-heavy on-device (esp. Android) and can fail
       // outright for 60s reels, so route video and image alike through this.
-      const { publicUrl } = await uploadsService.uploadAsset(
+      const uploaded = await uploadsService.uploadAsset(
         "posts",
         asset.uri,
         fileName,
         asset.mimeType,
       );
+      uploadedPath = uploaded.path;
       await postsService.createPost({
         kind: asset.kind,
-        mediaUrl: publicUrl,
+        mediaUrl: uploaded.publicUrl,
         mediaType: asset.mediaType,
         caption: caption.trim() || undefined,
       });
+      // Success — keep the blob; the post row references it.
+      uploadedPath = null;
       router.replace("/(tabs)/feed");
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ?? err?.message ?? "Could not share.";
       setErrorMsg(Array.isArray(msg) ? msg.join(", ") : String(msg));
     } finally {
+      // Orphan cleanup — if createPost failed AFTER the upload succeeded,
+      // the blob is sitting in storage with no row referencing it. Best-
+      // effort delete; never blocks the UI or surfaces a secondary error.
+      if (uploadedPath) {
+        uploadsService.deleteFile("posts", uploadedPath).catch(() => {});
+      }
       setUploading(false);
     }
   };

@@ -29,6 +29,7 @@ import {
 import { brand, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { postsService, type CommentItem } from "@/services/posts";
+import { usersService } from "@/services/users";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
@@ -73,9 +74,11 @@ export default function CommentsSheet({
   onCountChange,
 }: CommentsSheetProps) {
   const me = useSelector((s: RootState) => s.auth.user);
-  const myAvatar = useSelector(
-    (s: RootState) => (s.auth.user as any)?.avatarUrl ?? null,
-  );
+  // The redux User type doesn't carry the avatar — login/signup payloads
+  // don't include it — so the previous `s.auth.user.avatarUrl` selector was
+  // always null and the composer never showed the user's photo. Fetch it on
+  // open via /users/me (the same path more.tsx/profile.tsx use) and cache it.
+  const [myAvatar, setMyAvatar] = useState<string | null>(null);
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -84,6 +87,7 @@ export default function CommentsSheet({
   });
 
   const [comments, setComments] = useState<CommentItem[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
@@ -101,6 +105,7 @@ export default function CommentsSheet({
   useEffect(() => {
     if (!visible || !postId) {
       setComments([]);
+      setLoaded(false);
       setText("");
       setReplyTo(null);
       setErrorMsg(null);
@@ -109,11 +114,13 @@ export default function CommentsSheet({
     }
     let cancelled = false;
     setLoading(true);
+    setLoaded(false);
     postsService
       .getComments(postId)
       .then((rows) => {
         if (cancelled) return;
         setComments(rows ?? []);
+        setLoaded(true);
       })
       .catch((err: any) => {
         if (cancelled) return;
@@ -128,9 +135,30 @@ export default function CommentsSheet({
     };
   }, [visible, postId]);
 
+  // Lazily fetch /users/me on first open to populate the composer avatar.
+  // Cached: only re-fetches if the avatar is still unknown next time the
+  // sheet opens (the request is cheap and we cache in state).
   useEffect(() => {
-    if (visible) onCountChange?.(totalCount);
-  }, [totalCount, visible, onCountChange]);
+    if (!visible) return;
+    if (myAvatar) return;
+    let cancelled = false;
+    usersService
+      .getMe()
+      .then((u: any) => {
+        if (!cancelled) setMyAvatar(u?.avatar_url ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, myAvatar]);
+
+  // Only propagate the count to the feed AFTER a successful load — a network
+  // failure left totalCount at 0 and clobbered the badge on the post card,
+  // making popular posts look empty whenever the comments endpoint hiccuped.
+  useEffect(() => {
+    if (visible && loaded) onCountChange?.(totalCount);
+  }, [totalCount, visible, loaded, onCountChange]);
 
   const startReply = useCallback((c: CommentItem) => {
     setReplyTo({ commentId: c.id, authorName: c.author?.name ?? "user" });

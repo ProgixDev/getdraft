@@ -41,6 +41,12 @@ export class AdminController {
     return this.adminService.banUser(id);
   }
 
+  @Put('users/:id/unban')
+  @ApiOperation({ summary: 'Unban a user' })
+  unbanUser(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.unbanUser(id);
+  }
+
   @Get('stats')
   @ApiOperation({ summary: 'Get admin dashboard stats' })
   getStats() {

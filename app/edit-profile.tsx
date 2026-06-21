@@ -494,15 +494,12 @@ export default function EditProfileScreen() {
               const next = existing.filter((u: string) => u !== url);
               if (next.length === existing.length) return; // not in array
 
-              const bucket: UploadBucket =
-                kind === "videos" ? "videos" : "photos";
-              const path = pathFromPublicUrl(url, bucket);
-              if (path) {
-                await uploadsService
-                  .deleteFile(bucket, path)
-                  .catch(() => {});
-              }
-
+              // Persist the array FIRST, then best-effort blob delete.
+              // If we removed the blob first and the upsert failed, the
+              // profile still held the (now-broken) public URL — the card
+              // would render an empty box. Flipping the order means a
+              // failed blob delete just leaves an orphan in storage that
+              // the upload-cleanup sweep can reclaim later.
               const merged = pickFields(
                 current,
                 isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
@@ -515,6 +512,15 @@ export default function EditProfileScreen() {
               }
               if (kind === "photos") setGalleryPhotos(next);
               else setGalleryVideos(next);
+
+              const bucket: UploadBucket =
+                kind === "videos" ? "videos" : "photos";
+              const path = pathFromPublicUrl(url, bucket);
+              if (path) {
+                await uploadsService
+                  .deleteFile(bucket, path)
+                  .catch(() => {});
+              }
             } catch (err: any) {
               Alert.alert(
                 "Could not delete",
@@ -558,11 +564,15 @@ export default function EditProfileScreen() {
         // which wiped the swipe-card gallery — that override is gone.
         await profilesService.upsertAthleteProfile({
           sport,
-          position: position || undefined,
-          level: level || undefined,
-          bio: bio.trim() || undefined,
-          height: height.trim() || undefined,
-          weight: weight.trim() || undefined,
+          // Empty string (not undefined) so an emptied field is actually
+          // persisted as cleared — `|| undefined` made these unclearable
+          // after first save, because Nest's PATCH drops undefined keys
+          // and keeps the previous value.
+          position: position,
+          level: level,
+          bio: bio.trim(),
+          height: height.trim(),
+          weight: weight.trim(),
           gender: gender || undefined,
           date_of_birth: dob ? toIsoDate(dob) : undefined,
         });
@@ -573,7 +583,7 @@ export default function EditProfileScreen() {
           sport,
           role_type: prev.role_type ?? (role === "coach" ? "coach" : "agent"),
           tags: prev.tags ?? [],
-          bio: bio.trim() || undefined,
+          bio: bio.trim(),
         });
       } else if (isParent) {
         const prev = existingProfile ?? {};
@@ -581,7 +591,7 @@ export default function EditProfileScreen() {
           relationship: prev.relationship ?? "Parent",
           child_athlete_id: prev.child_athlete_id ?? undefined,
           child_class_year: prev.child_class_year ?? undefined,
-          bio: bio.trim() || undefined,
+          bio: bio.trim(),
         });
       }
 

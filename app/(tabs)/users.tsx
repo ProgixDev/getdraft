@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Pressable,
@@ -252,7 +253,9 @@ export default function AdminUsersTab() {
             { paddingBottom: insets.bottom + 24 },
           ]}
           ItemSeparatorComponent={() => <View style={styles.divider} />}
-          renderItem={({ item }) => <UserRow row={item} />}
+          renderItem={({ item }) => (
+            <UserRow row={item} onChanged={() => fetchUsers(filter)} />
+          )}
           keyboardShouldPersistTaps="handled"
         />
       )}
@@ -260,8 +263,74 @@ export default function AdminUsersTab() {
   );
 }
 
-function UserRow({ row }: { row: AdminUserRow }) {
+function UserRow({
+  row,
+  onChanged,
+}: {
+  row: AdminUserRow;
+  onChanged: () => void;
+}) {
   const router = useRouter();
+  // Per-row busy guard — prevents a double-tap from firing the same admin
+  // action twice while the network round-trip is in flight. Reset by the
+  // parent list re-render after onChanged() refreshes.
+  const [busy, setBusy] = useState<null | "ban" | "unban" | "verify">(null);
+
+  const runAction = useCallback(
+    async (
+      kind: "ban" | "unban" | "verify",
+      fn: () => Promise<unknown>,
+      successMsg: string,
+    ) => {
+      if (busy) return;
+      setBusy(kind);
+      try {
+        await fn();
+        onChanged();
+      } catch (err: any) {
+        const msg =
+          err?.response?.data?.message ?? err?.message ?? "Try again.";
+        Alert.alert("Action failed", String(msg));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [busy, onChanged],
+  );
+
+  const confirmAndBan = useCallback(() => {
+    Alert.alert(
+      "Ban this user?",
+      "They lose API access immediately and disappear from discover/inbox. You can unban later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Ban",
+          style: "destructive",
+          onPress: () =>
+            runAction(
+              "ban",
+              () => adminService.banUser(row.id),
+              "User banned",
+            ),
+        },
+      ],
+    );
+  }, [row.id, runAction]);
+
+  const confirmAndUnban = useCallback(() => {
+    runAction("unban", () => adminService.unbanUser(row.id), "User unbanned");
+  }, [row.id, runAction]);
+
+  const confirmAndVerify = useCallback(() => {
+    runAction(
+      "verify",
+      () => adminService.verifyRecruiter(row.id),
+      "Recruiter verified",
+    );
+  }, [row.id, runAction]);
+
+  const showVerify = row.role === "recruiter" || row.role === "coach";
   const initials = (row.name ?? row.email ?? "?")
     .split(/\s+/)
     .filter(Boolean)
@@ -315,7 +384,7 @@ function UserRow({ row }: { row: AdminUserRow }) {
           {row.email ?? row.phone ?? "—"}
         </Text>
       </View>
-      <View style={{ alignItems: "flex-end", gap: 2 }}>
+      <View style={{ alignItems: "flex-end", gap: 4 }}>
         <View style={[styles.rolePill, { borderColor: theme.cardBorder }]}>
           <Text style={styles.rolePillText}>{roleLabel(row.role)}</Text>
         </View>
@@ -325,6 +394,76 @@ function UserRow({ row }: { row: AdminUserRow }) {
             {kyc ?? "none"}
             {row.created_at ? ` · ${timeAgo(row.created_at)}` : ""}
           </Text>
+        </View>
+        <View style={styles.actionRow}>
+          {showVerify && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                confirmAndVerify();
+              }}
+              hitSlop={6}
+              disabled={!!busy}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionVerify,
+                (pressed || !!busy) && styles.actionPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Verify ${row.name ?? "recruiter"}`}
+            >
+              {busy === "verify" ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <Text style={styles.actionVerifyText}>Verify</Text>
+              )}
+            </Pressable>
+          )}
+          {row.is_banned ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                confirmAndUnban();
+              }}
+              hitSlop={6}
+              disabled={!!busy}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionUnban,
+                (pressed || !!busy) && styles.actionPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Unban ${row.name ?? "user"}`}
+            >
+              {busy === "unban" ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <Text style={styles.actionUnbanText}>Unban</Text>
+              )}
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                confirmAndBan();
+              }}
+              hitSlop={6}
+              disabled={!!busy}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                styles.actionBan,
+                (pressed || !!busy) && styles.actionPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Ban ${row.name ?? "user"}`}
+            >
+              {busy === "ban" ? (
+                <ActivityIndicator size="small" color={theme.text} />
+              ) : (
+                <Text style={styles.actionBanText}>Ban</Text>
+              )}
+            </Pressable>
+          )}
         </View>
       </View>
     </Pressable>
@@ -464,6 +603,51 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_700Bold",
     color: semantic.errorLight,
     letterSpacing: 1,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: 4,
+    marginTop: 2,
+  },
+  actionBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    minWidth: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionPressed: { opacity: 0.65 },
+  actionBan: {
+    backgroundColor: "rgba(231,76,60,0.12)",
+    borderColor: "rgba(231,76,60,0.4)",
+  },
+  actionBanText: {
+    fontSize: 10,
+    fontFamily: "Poppins_700Bold",
+    color: semantic.errorLight,
+    letterSpacing: 0.5,
+  },
+  actionUnban: {
+    backgroundColor: "rgba(46,204,113,0.12)",
+    borderColor: "rgba(46,204,113,0.4)",
+  },
+  actionUnbanText: {
+    fontSize: 10,
+    fontFamily: "Poppins_700Bold",
+    color: semantic.success,
+    letterSpacing: 0.5,
+  },
+  actionVerify: {
+    backgroundColor: theme.surface,
+    borderColor: theme.cardBorder,
+  },
+  actionVerifyText: {
+    fontSize: 10,
+    fontFamily: "Poppins_700Bold",
+    color: theme.text,
+    letterSpacing: 0.5,
   },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 6 },

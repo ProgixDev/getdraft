@@ -74,4 +74,19 @@ export const adminService = {
     });
     return data.data;
   },
+
+  async banUser(userId: string): Promise<{ message: string }> {
+    const { data } = await api.put(`/admin/users/${userId}/ban`);
+    return data.data;
+  },
+
+  async unbanUser(userId: string): Promise<{ message: string }> {
+    const { data } = await api.put(`/admin/users/${userId}/unban`);
+    return data.data;
+  },
+
+  async verifyRecruiter(userId: string): Promise<{ message: string }> {
+    const { data } = await api.put(`/admin/users/${userId}/verify`);
+    return data.data;
+  },
 };

@@ -105,6 +105,41 @@ export class AdminService {
     return { message: 'User banned' };
   }
 
+  async unbanUser(userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ is_banned: false })
+      .eq('id', userId)
+      .select('id');
+
+    if (error) throw new BadRequestException(error.message);
+    if (!data || data.length === 0) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Mirror of banUser: clear the JWT-side flag so JwtAuthGuard accepts
+    // the next request again. We don't sign existing sessions in — the
+    // user has to log in again to get a fresh token (banUser revoked
+    // every session, so they have none).
+    try {
+      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+      const meta = { ...(authUser?.user?.user_metadata ?? {}) } as Record<
+        string,
+        unknown
+      >;
+      delete meta.is_banned;
+      await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: meta,
+      });
+    } catch {
+      // DB flag is authoritative; metadata mirror is a refresh on next login.
+    }
+
+    return { message: 'User unbanned' };
+  }
+
   async getStats() {
     const supabase = this.supabaseService.getAdminClient();
 

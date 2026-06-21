@@ -100,18 +100,29 @@ export class ChatGateway
     const userId = this.requireUserId(client);
     if (!userId) return;
 
+    // Mirror SendMessageDto's constraints (REST path), so a socket client
+    // can't bypass them. Empty whitespace messages are dropped silently
+    // (matches send_dm); messages over 2000 chars are rejected.
+    const text = (data?.text ?? '').toString();
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 2000) {
+      client.emit('error', { message: 'Message is too long (max 2000 chars).' });
+      return;
+    }
+
     try {
       const message = await this.chatService.sendMessage(
         data.matchId,
         userId,
-        data.text,
+        trimmed,
       );
 
       this.server.to(`thread:${data.matchId}`).emit('new_message', {
         id: message.id,
         matchId: data.matchId,
         senderId: userId,
-        text: data.text,
+        text: trimmed,
         createdAt: message.created_at,
       });
 
@@ -131,7 +142,7 @@ export class ChatGateway
           await this.notificationsService.sendPushToUser(
             recipientId,
             senderName ? `New message from ${senderName}` : 'New message',
-            data.text.length > 120 ? data.text.slice(0, 117) + '…' : data.text,
+            trimmed.length > 120 ? trimmed.slice(0, 117) + '…' : trimmed,
             { type: 'new_message', matchId: data.matchId },
             'messageNotifications',
           );
@@ -238,8 +249,15 @@ export class ChatGateway
       return;
     }
     try {
-      const text = (data.text ?? '').toString();
-      if (!text.trim()) return;
+      // Mirror SendDmDto (REST path) — trim, drop empty, cap at 2000 so the
+      // socket route can't bypass DTO validation. Persist the trimmed value
+      // so the inbox preview and recipient see exactly what we broadcast.
+      const trimmed = (data?.text ?? '').toString().trim();
+      if (!trimmed) return;
+      if (trimmed.length > 2000) {
+        client.emit('error', { message: 'Message is too long (max 2000 chars).' });
+        return;
+      }
       // Block enforcement (either direction): a blocked pair cannot DM.
       if (await this.isBlockedPair(userId, recipientId)) {
         client.emit('error', { message: 'Cannot message a blocked user' });
@@ -251,7 +269,7 @@ export class ChatGateway
         .insert({
           conversation_id: data.conversationId,
           sender_id: userId,
-          text,
+          text: trimmed,
         })
         .select('id, text, created_at')
         .single();
@@ -261,7 +279,7 @@ export class ChatGateway
         data.conversationId,
         userId,
         recipientId,
-        text,
+        trimmed,
       );
     } catch (error: any) {
       client.emit('error', {
