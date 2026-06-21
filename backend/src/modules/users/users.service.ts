@@ -248,6 +248,26 @@ export class UsersService {
 
     const supabase = this.supabaseService.getAdminClient();
 
+    // Dedupe: athlete_profiles.profile_views must count UNIQUE viewers, so a
+    // repeat open by the same viewer must NOT call increment_profile_views.
+    // Refresh the existing event's timestamp so the "Profile viewers" list
+    // still surfaces the most-recent viewer at the top.
+    const { data: existing } = await supabase
+      .from('profile_views')
+      .select('id')
+      .eq('viewer_id', viewerId)
+      .eq('viewed_id', viewedId)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('profile_views')
+        .update({ created_at: new Date().toISOString() })
+        .eq('id', existing.id);
+      return { tracked: false };
+    }
+
     await supabase
       .from('profile_views')
       .insert({ viewer_id: viewerId, viewed_id: viewedId });

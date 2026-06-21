@@ -9,11 +9,16 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSelector } from 'react-redux';
 import {
   useFonts,
   Poppins_400Regular,
@@ -25,6 +30,8 @@ import { brand, semantic, theme } from '@/config/colors';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
+import { outreachService } from '@/services/outreach';
+import type { RootState } from '@/store';
 import {
   rankingsService,
   starsForRank,
@@ -79,6 +86,10 @@ interface PublicProfile {
   location?: string | null;
   country?: string | null;
   profile?: AthleteSubProfile | RecruiterSubProfile | ParentSubProfile | null;
+  // Server-resolved approved guardian of an athlete. Drives whether a
+  // recruiter/coach can see the "Send outreach" entry point on this screen
+  // — the outreach DTO requires the parent's user id, not the athlete's.
+  parent_user_id?: string | null;
 }
 
 interface ProfileStats {
@@ -116,6 +127,11 @@ export default function PublicProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blocking, setBlocking] = useState(false);
+  const [outreachOpen, setOutreachOpen] = useState(false);
+  const [outreachMessage, setOutreachMessage] = useState('');
+  const [outreachSending, setOutreachSending] = useState(false);
+
+  const viewerRole = useSelector((state: RootState) => state.auth.user?.role);
 
   useFocusEffect(
     useCallback(() => {
@@ -193,12 +209,41 @@ export default function PublicProfileScreen() {
     );
   }, [handleBlock]);
 
+  const handleSendOutreach = useCallback(async () => {
+    const parentId = profile?.parent_user_id;
+    const athleteId = profile?.id;
+    const trimmed = outreachMessage.trim();
+    if (!parentId || !athleteId || trimmed.length === 0 || outreachSending) return;
+    setOutreachSending(true);
+    try {
+      await outreachService.createOutreach(parentId, athleteId, trimmed);
+      setOutreachOpen(false);
+      setOutreachMessage('');
+      Alert.alert('Outreach sent', "The parent will see your message in their Outreach inbox.");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 409) {
+        Alert.alert(
+          'Already sent',
+          'You already have an outreach thread open with this parent. Open Outreach to continue the conversation.',
+        );
+      } else {
+        const msg = err?.response?.data?.message ?? err?.message ?? 'Try again in a moment.';
+        Alert.alert('Could not send', String(msg));
+      }
+    } finally {
+      setOutreachSending(false);
+    }
+  }, [profile?.parent_user_id, profile?.id, outreachMessage, outreachSending]);
+
   if (!fontsLoaded) return null;
 
   const sub = (profile?.profile ?? {}) as any;
   const role = profile?.role;
   const isAthlete = role === 'athlete';
   const isRecruiter = role === 'recruiter' || role === 'coach';
+  const viewerIsRecruiter = viewerRole === 'recruiter' || viewerRole === 'coach';
+  const canSendOutreach = viewerIsRecruiter && isAthlete && !!profile?.parent_user_id;
   const photos: string[] = Array.isArray(sub.photos) ? sub.photos : [];
   const videos: string[] = Array.isArray(sub.videos) ? sub.videos : [];
   const displayLocation = profile?.location ?? null;
@@ -317,6 +362,17 @@ export default function PublicProfileScreen() {
                 <Text style={styles.rankChipScore}>score {Math.round(rank.score)}</Text>
               </Pressable>
             )}
+            {canSendOutreach && (
+              <Pressable
+                style={({ pressed }) => [styles.outreachButton, pressed && styles.outreachButtonPressed]}
+                onPress={() => setOutreachOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Send outreach about ${profile?.name ?? 'this athlete'} to their parent`}
+              >
+                <Ionicons name="mail" size={16} color={theme.accentText} />
+                <Text style={styles.outreachButtonText}>Send outreach to parent</Text>
+              </Pressable>
+            )}
           </View>
 
           {isAthlete && (
@@ -432,6 +488,74 @@ export default function PublicProfileScreen() {
           )}
         </ScrollView>
       ) : null}
+
+      <Modal
+        visible={outreachOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          if (outreachSending) return;
+          setOutreachOpen(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.outreachBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (!outreachSending) setOutreachOpen(false);
+            }}
+            accessibilityLabel="Close outreach"
+          />
+          <View style={styles.outreachSheet}>
+            <View style={styles.outreachHandle} />
+            <Text style={styles.outreachTitle}>
+              Send outreach
+            </Text>
+            <Text style={styles.outreachSubtitle}>
+              Your message goes to {profile?.name ?? "this athlete"}'s parent — they decide whether to respond.
+            </Text>
+            <TextInput
+              style={styles.outreachInput}
+              value={outreachMessage}
+              onChangeText={setOutreachMessage}
+              placeholder="Hi, I'd like to invite your athlete to our program…"
+              placeholderTextColor={theme.textMuted}
+              multiline
+              maxLength={800}
+              editable={!outreachSending}
+              autoFocus
+            />
+            <Text style={styles.outreachCount}>{outreachMessage.length}/800</Text>
+            <View style={styles.outreachActions}>
+              <Pressable
+                style={({ pressed }) => [styles.outreachCancel, pressed && styles.outreachPressed]}
+                onPress={() => setOutreachOpen(false)}
+                disabled={outreachSending}
+              >
+                <Text style={styles.outreachCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.outreachSend,
+                  (outreachSending || outreachMessage.trim().length === 0) && styles.outreachSendDisabled,
+                  pressed && styles.outreachPressed,
+                ]}
+                onPress={handleSendOutreach}
+                disabled={outreachSending || outreachMessage.trim().length === 0}
+              >
+                {outreachSending ? (
+                  <ActivityIndicator size="small" color={theme.accentText} />
+                ) : (
+                  <Text style={styles.outreachSendText}>Send</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -730,4 +854,104 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     color: 'rgba(255,255,255,0.8)',
   },
+  outreachButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    marginHorizontal: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: theme.accent,
+  },
+  outreachButtonPressed: { opacity: 0.85 },
+  outreachButtonText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.accentText,
+  },
+  outreachBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  outreachSheet: {
+    backgroundColor: theme.cardBg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+    gap: 12,
+  },
+  outreachHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.border,
+    alignSelf: 'center',
+    marginBottom: 4,
+  },
+  outreachTitle: {
+    fontSize: 18,
+    fontFamily: 'Poppins_700Bold',
+    color: theme.text,
+  },
+  outreachSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Poppins_400Regular',
+    color: theme.textSecondary,
+    lineHeight: 19,
+  },
+  outreachInput: {
+    minHeight: 120,
+    maxHeight: 220,
+    backgroundColor: theme.surface,
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: theme.text,
+    textAlignVertical: 'top',
+  },
+  outreachCount: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: theme.textMuted,
+    textAlign: 'right',
+  },
+  outreachActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  outreachCancel: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 22,
+    backgroundColor: theme.surface,
+    alignItems: 'center',
+  },
+  outreachCancelText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.text,
+  },
+  outreachSend: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 22,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  outreachSendDisabled: { opacity: 0.5 },
+  outreachSendText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.accentText,
+  },
+  outreachPressed: { opacity: 0.8 },
 });

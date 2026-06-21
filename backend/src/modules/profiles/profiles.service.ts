@@ -30,15 +30,20 @@ export class ProfilesService {
 
   async upsertAthleteProfile(userId: string, dto: UpsertAthleteProfileDto) {
     const supabase = this.supabaseService.getAdminClient();
-    const profileCompletion = this.calculateAthleteCompletion(dto);
 
+    // Pull the full existing row (not just the id) so a partial save can
+    // recompute completion against the MERGED state. Without this, an edit
+    // of a single field would drop completion to the % of that one field
+    // and overwrite a previously-higher number.
     const { data: existing } = await supabase
       .from('athlete_profiles')
-      .select('id')
+      .select('*')
       .eq('user_id', userId)
       .single();
 
     if (existing) {
+      const merged = { ...existing, ...dto } as UpsertAthleteProfileDto;
+      const profileCompletion = this.calculateAthleteCompletion(merged);
       const { data, error } = await supabase
         .from('athlete_profiles')
         .update({
@@ -52,6 +57,7 @@ export class ProfilesService {
       return data;
     }
 
+    const profileCompletion = this.calculateAthleteCompletion(dto);
     const { data, error } = await supabase
       .from('athlete_profiles')
       .insert({
@@ -173,6 +179,12 @@ export class ProfilesService {
     if (!user) throw new NotFoundException('User not found');
 
     let profile = null;
+    // Surfaced only for athletes so a recruiter/coach knows which parent
+    // to address via POST /outreach. Picks the first approved guardian
+    // link; non-athletes and athletes without an approved guardian get
+    // null and the frontend hides the "Send outreach" affordance.
+    let parent_user_id: string | null = null;
+
     if (user.role === 'athlete') {
       const { data } = await supabase
         .from('athlete_profiles')
@@ -180,6 +192,15 @@ export class ProfilesService {
         .eq('user_id', userId)
         .single();
       profile = data;
+
+      const { data: guardianLink } = await supabase
+        .from('guardian_links')
+        .select('guardian_user_id')
+        .eq('athlete_user_id', userId)
+        .eq('status', 'approved')
+        .limit(1)
+        .maybeSingle();
+      parent_user_id = guardianLink?.guardian_user_id ?? null;
     } else if (user.role === 'coach' || user.role === 'recruiter') {
       const { data } = await supabase
         .from('recruiter_profiles')
@@ -196,7 +217,7 @@ export class ProfilesService {
       profile = data;
     }
 
-    return { ...user, profile };
+    return { ...user, profile, parent_user_id };
   }
 
   // --- Helpers ---
