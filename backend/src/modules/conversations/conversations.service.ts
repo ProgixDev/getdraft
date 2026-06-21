@@ -11,6 +11,7 @@ interface ParticipantRow {
   name: string | null;
   avatar_url: string | null;
   role: string | null;
+  is_banned?: boolean | null;
 }
 
 @Injectable()
@@ -104,6 +105,11 @@ export class ConversationsService {
           | null;
         if (!otherRow) return null;
         if (blockedIds.has(otherRow.id)) return null;
+        // Hide conversations whose other participant is banned, so a banned
+        // user no longer surfaces in the inbox (mirrors the REST auth-guard
+        // ban check). Already-running threads stay queryable by id; the
+        // gateway/socket layer enforces the deeper sends.
+        if (otherRow.is_banned === true) return null;
         return {
           id: row.id as string,
           otherUser: this.shapeUser(otherRow),

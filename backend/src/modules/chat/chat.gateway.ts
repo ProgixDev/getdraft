@@ -49,6 +49,13 @@ export class ChatGateway
         this.logger.warn(`WS handshake refused: invalid token (${socket.id})`);
         return next(new Error('invalid token'));
       }
+      // Mirror the REST jwt-auth guard's ban check (jwt-auth.guard.ts:52):
+      // a banned user must not be able to open a chat socket — otherwise
+      // they can still send messages and trigger pushes while banned.
+      if ((user.user_metadata as any)?.is_banned === true) {
+        this.logger.warn(`WS handshake refused: banned user (${socket.id})`);
+        return next(new Error('account suspended'));
+      }
       socket.data.userId = user.id;
       next();
     });

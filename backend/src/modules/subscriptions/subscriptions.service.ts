@@ -424,16 +424,27 @@ export class SubscriptionsService {
 
     // Audit row — `status: pending` until the webhook lands. We use
     // payment_intent.id as the idempotency key so duplicate webhook
-    // fires don't double-credit.
-    await supabase.from('swipe_pack_purchases').insert({
-      user_id: userId,
-      stripe_payment_intent_id: intent.id,
-      pack_id: packId,
-      swipes_granted: pack.swipes,
-      amount_cents: pack.amountCents,
-      currency: 'usd',
-      status: 'pending',
-    });
+    // fires don't double-credit. If THIS insert fails, the
+    // creditSwipePackFromIntent webhook handler has nothing to claim
+    // (it filters on status='pending'), so the user pays but never gets
+    // the swipes. Surface the failure BEFORE returning a client secret.
+    const { error: auditErr } = await supabase
+      .from('swipe_pack_purchases')
+      .insert({
+        user_id: userId,
+        stripe_payment_intent_id: intent.id,
+        pack_id: packId,
+        swipes_granted: pack.swipes,
+        amount_cents: pack.amountCents,
+        currency: 'usd',
+        status: 'pending',
+      });
+    if (auditErr) {
+      this.logger.error(
+        `swipe_pack audit insert failed for ${intent.id}: ${auditErr.message}`,
+      );
+      throw new BadRequestException('Could not initialize swipe pack payment.');
+    }
 
     if (!intent.client_secret) {
       throw new BadRequestException('Could not initialize swipe pack payment.');
@@ -738,6 +749,11 @@ export class SubscriptionsService {
    */
   private async creditSwipePackFromIntent(intent: any): Promise<boolean> {
     const supabase = this.supabaseService.getAdminClient();
+    // Belt-and-braces — the webhook switch only invokes us for
+    // `payment_intent.succeeded`, but a caller (e.g. confirm-on-return)
+    // could re-use this helper with a not-yet-paid intent and silently
+    // credit free swipes. Hard-gate on intent.status before any work.
+    if (intent?.status !== 'succeeded') return false;
     const meta = intent?.metadata ?? {};
     if (meta.type !== 'swipe_pack') return false;
 

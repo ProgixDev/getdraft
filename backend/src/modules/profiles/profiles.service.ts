@@ -164,6 +164,10 @@ export class ProfilesService {
       .from('users')
       .select('id, name, role, avatar_url, location, country')
       .eq('id', userId)
+      // Banned users disappear from public lookups (matches users.service.ts
+      // getPublicProfile + searchUsers). Returns 404 so the client can't
+      // distinguish "doesn't exist" from "suspended".
+      .eq('is_banned', false)
       .single();
 
     if (!user) throw new NotFoundException('User not found');

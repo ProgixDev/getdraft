@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   UnauthorizedException,
   InternalServerErrorException,
   Logger,
@@ -81,6 +82,12 @@ export class AuthService {
   }
 
   async signup(dto: SignupDto) {
+    // Belt-and-braces — the DTO already rejects ADMIN, but a future change
+    // to the validator must not silently re-open the privilege-escalation
+    // path. Mirrors users.service.ts:90-92.
+    if (dto.role === UserRole.ADMIN) {
+      throw new ForbiddenException('The admin role cannot be self-assigned.');
+    }
     const supabase = this.supabaseService.getClient();
 
     const { data, error } = await supabase.auth.signUp({
@@ -290,6 +297,12 @@ export class AuthService {
    * write that introduces the user into auth.users.
    */
   async completeSignup(dto: CompleteSignupDto) {
+    // Belt-and-braces — the DTO already rejects ADMIN, but a future change
+    // to the validator must not silently re-open the privilege-escalation
+    // path. Mirrors users.service.ts:90-92.
+    if (dto.role === UserRole.ADMIN) {
+      throw new ForbiddenException('The admin role cannot be self-assigned.');
+    }
     const { contact, contactType } = this.verificationTokenService.verify(dto.verificationToken);
     const admin = this.supabaseService.getAdminClient();
     const anon = this.supabaseService.getClient();

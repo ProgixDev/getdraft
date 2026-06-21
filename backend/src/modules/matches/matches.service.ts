@@ -26,12 +26,16 @@ export class MatchesService {
         const otherUserId =
           match.user_1_id === userId ? match.user_2_id : match.user_1_id;
 
-        // Get other user info
+        // Get other user info — include the ban flag so we can hide the
+        // match below (mirrors the REST/socket ban guards). The row still
+        // exists in matches; we just don't surface it to either side while
+        // the other party is suspended.
         const { data: otherUser } = await supabase
           .from('users')
-          .select('id, name, role, avatar_url, location')
+          .select('id, name, role, avatar_url, location, is_banned')
           .eq('id', otherUserId)
           .single();
+        if (otherUser?.is_banned === true) return null;
 
         // Get recruiter profile if applicable
         let recruiterRole = 'agent';
@@ -80,7 +84,7 @@ export class MatchesService {
       }),
     );
 
-    return results;
+    return results.filter((r): r is NonNullable<typeof r> => r !== null);
   }
 
   async getMatch(matchId: string, userId: string) {

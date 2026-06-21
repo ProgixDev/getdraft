@@ -30,8 +30,15 @@ export class CompleteSignupDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ enum: UserRole, example: UserRole.ATHLETE })
-  @IsIn(Object.values(UserRole) as string[])
+  // ADMIN is provisioned out-of-band (DB-only) and must never be assignable
+  // through self-service signup — otherwise any caller could promote
+  // themselves and reach the admin console. Mirrors the guard in
+  // users.service.ts updateMe and the defensive throw in AuthService.
+  @ApiProperty({
+    enum: [UserRole.ATHLETE, UserRole.PARENT, UserRole.COACH, UserRole.RECRUITER],
+    example: UserRole.ATHLETE,
+  })
+  @IsIn([UserRole.ATHLETE, UserRole.PARENT, UserRole.COACH, UserRole.RECRUITER])
   role: UserRole;
 
   @ApiPropertyOptional({ example: 'Marcus Johnson' })

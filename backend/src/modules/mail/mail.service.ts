@@ -35,6 +35,13 @@ export class MailService implements OnModuleInit {
       // Implicit TLS on 465; STARTTLS on 587. We default to 465.
       secure: port === 465,
       auth: user && pass ? { user, pass } : undefined,
+      // Fail fast instead of hanging an OTP request for ~2 min (nodemailer's
+      // default connectionTimeout) when the SMTP host is unreachable — e.g. a
+      // platform that blocks outbound SMTP egress. Turns a hung request into a
+      // quick, logged 500 and surfaces the real cause at boot via verify().
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
     this.fromAddress = from || (user ? `GetDraft <${user}>` : 'GetDraft <noreply@getdraft.local>');
 

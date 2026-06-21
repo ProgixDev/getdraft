@@ -1,6 +1,6 @@
 import {
   IsEmail,
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsString,
   MinLength,
@@ -23,8 +23,11 @@ export class SignupDto {
   @IsNotEmpty()
   name: string;
 
+  // ADMIN is provisioned out-of-band (DB-only) and must never be assignable
+  // through self-service signup. Mirrors the guard in users.service.ts
+  // updateMe and the defensive throw in AuthService.
   @ApiProperty({ enum: ['athlete', 'parent', 'coach', 'recruiter'] })
-  @IsEnum(UserRole, {
+  @IsIn([UserRole.ATHLETE, UserRole.PARENT, UserRole.COACH, UserRole.RECRUITER], {
     message: 'role must be one of: athlete, parent, coach, recruiter',
   })
   role: UserRole;

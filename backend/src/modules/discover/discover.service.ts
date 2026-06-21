@@ -557,6 +557,17 @@ export class DiscoverService {
       throw new ForbiddenException('Cannot swipe a blocked user');
     }
 
+    // Mirror the feed filter: a banned target must never accept a swipe,
+    // otherwise a banned user can still be "matched" via a deep-linked id
+    // and end up in the swiper's matches/messages.
+    const target = await this.prisma.public_users.findUnique({
+      where: { id: dto.targetUserId },
+      select: { is_banned: true },
+    });
+    if (!target || target.is_banned) {
+      throw new NotFoundException('User not found');
+    }
+
     const remaining = await this.getSwipesRemaining(user.id);
     if (remaining === 0) {
       // 429 per spec (work-plan C2 "11th basic swipe -> 429"); distinct from
@@ -815,6 +826,10 @@ export class DiscoverService {
         swiped_id: userId,
         direction: SwipeDirection.DRAFT,
         swiper_id: { notIn: excludeSwiperIds },
+        // A banned swiper must not appear in the "who drafted me" list —
+        // mirrors the feed/match ban filters so a suspended account can't
+        // influence the recipient's discover funnel.
+        users_swipes_swiper_idTousers: { is_banned: false },
       },
       select: {
         swiped_id: true,
