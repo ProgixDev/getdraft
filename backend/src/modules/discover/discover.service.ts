@@ -240,6 +240,18 @@ export class DiscoverService {
     return this.getEveryoneFeed(user.id, query, offset, limit, swipesRemaining);
   }
 
+  /**
+   * Parse the optional client-supplied cursor (ISO timestamp). Bad strings
+   * are treated as "no cursor" — never as "epoch 0" which would silently
+   * empty the feed. Kept private so the same parser is used by every
+   * cursor-aware list.
+   */
+  private parseCursor(raw: string | undefined): Date | null {
+    if (!raw) return null;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
   private athleteCardFromUser(u: any) {
     const p = u.athlete_profiles;
     return {
@@ -299,6 +311,26 @@ export class DiscoverService {
       id: { notIn: excluded },
     };
     if (query.country && !query.includeInternational) where.country = query.country;
+    // City is a free-text user input matched against the free-text
+    // public_users.location column (e.g. "Boston, MA" or "Montreal, QC").
+    // There is no separate city column today — see migration 001. We use
+    // case-insensitive contains so "boston" matches "Boston, MA".
+    // International toggle stays orthogonal: city narrows within whatever
+    // country scope is in effect.
+    const cityFilter = (query.city ?? '').trim();
+    if (cityFilter.length > 0) {
+      where.location = { contains: cityFilter, mode: 'insensitive' };
+    }
+
+    // Cursor-paging (preferred over offset): on the client we send the
+    // created_at of the last card we received. New signups landing between
+    // fetches no longer shift the page boundary and make us skip a card.
+    // When cursor is set we ignore page (skip:0); when absent we keep the
+    // offset path for the first fetch and for any caller not yet migrated.
+    const cursorDate = this.parseCursor(query.cursor);
+    if (cursorDate) {
+      where.created_at = { lt: cursorDate };
+    }
 
     // Normalise "all"/empty sentinels to "no filter".
     const sport =
@@ -356,6 +388,7 @@ export class DiscoverService {
         country: true,
         latitude: true,
         longitude: true,
+        created_at: true,
         athlete_profiles: {
           select: {
             sport: true,
@@ -386,7 +419,10 @@ export class DiscoverService {
         },
       },
       orderBy: { created_at: 'desc' },
-      skip: offset,
+      // When the caller sent a cursor we already filtered by it — paging
+      // is "everything < cursor", no offset. Without a cursor we keep the
+      // legacy page * limit math so first-fetch clients still work.
+      skip: cursorDate ? 0 : offset,
       take: limit,
     });
 
@@ -402,7 +438,21 @@ export class DiscoverService {
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
 
-    return { cards, hasMore: users.length === limit, swipesRemaining };
+    // Cursor for the next page = created_at of the LAST row we returned.
+    // null when the page didn't fill (hasMore=false), so the client knows
+    // to stop. ISO string so it survives JSON + the DTO's IsString check.
+    const last = users[users.length - 1];
+    const nextCursor =
+      users.length === limit && last?.created_at
+        ? last.created_at.toISOString()
+        : null;
+
+    return {
+      cards,
+      hasMore: users.length === limit,
+      swipesRemaining,
+      nextCursor,
+    };
   }
 
   // Globe = talent map of athletes shown to EVERY viewer (recruiters and
@@ -411,19 +461,27 @@ export class DiscoverService {
   // 'athlete'. Each athlete is placed by precise lat/lng when set, else by
   // their country center — so real athletes appear even before signup
   // captures coordinates. Parents stay 403 — they don't draft.
-  async getMapPoints(user: CurrentUserPayload) {
+  async getMapPoints(user: CurrentUserPayload, query: DiscoverQueryDto = {}) {
     if (user.role === UserRole.PARENT) {
       throw new ForbiddenException('Parents do not have a discover feed');
     }
 
     const excluded = await this.excludedUserIds(user.id);
 
+    const where: Prisma.public_usersWhereInput = {
+      role: 'athlete',
+      is_banned: false,
+      id: { notIn: [...excluded, user.id] },
+    };
+    if (query.country && !query.includeInternational) where.country = query.country;
+    // Same free-text city match the feed uses (see getEveryoneFeed).
+    const cityFilter = (query.city ?? '').trim();
+    if (cityFilter.length > 0) {
+      where.location = { contains: cityFilter, mode: 'insensitive' };
+    }
+
     const users = await this.prisma.public_users.findMany({
-      where: {
-        role: 'athlete',
-        is_banned: false,
-        id: { notIn: [...excluded, user.id] },
-      },
+      where,
       select: {
         id: true,
         email: true,

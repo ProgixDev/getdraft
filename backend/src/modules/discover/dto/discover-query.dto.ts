@@ -71,6 +71,15 @@ export class DiscoverQueryDto {
   @Min(1)
   page?: number = 1;
 
+  // Created-at cursor — when set, the service filters `created_at < cursor`
+  // and ignores `page`. Prefer this over offset-paging on the client so a
+  // new signup landing between fetches can't shift everyone by one row and
+  // make us skip a card. The response echoes `nextCursor` for the next call.
+  @ApiPropertyOptional({ example: '2026-06-21T10:15:00.000Z' })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
   @ApiPropertyOptional({ example: 20 })
   @IsOptional()
   @Type(() => Number)

@@ -20,17 +20,26 @@ Notifications.setNotificationHandler({
  * Route the user to the right screen based on the notification's `data` payload.
  * Backend schema:
  *   { type: 'new_match' | 'new_message', matchId: string }
+ *   { type: 'new_dm', conversationId: string }
  *   { type: 'outreach', outreachId: string }
  */
 function routeFromNotificationData(data: unknown) {
   if (!data || typeof data !== 'object') return;
-  const { type, matchId, outreachId } = data as {
+  const { type, matchId, conversationId, outreachId } = data as {
     type?: string;
     matchId?: string;
+    conversationId?: string;
     outreachId?: string;
   };
   if ((type === 'new_match' || type === 'new_message') && matchId) {
     router.push(`/chat/${matchId}` as never);
+    return;
+  }
+  // Open-DM push (conversations module). Lands on the DM thread directly so
+  // the tap-to-open lifecycle matches matches/chat — without this the user
+  // hits a no-op and the notification feels broken.
+  if (type === 'new_dm' && conversationId) {
+    router.push(`/dm/${conversationId}` as never);
     return;
   }
   if (type === 'outreach' && outreachId) {

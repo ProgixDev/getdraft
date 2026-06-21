@@ -33,8 +33,11 @@ export class DiscoverController {
 
   @Get('map')
   @ApiOperation({ summary: 'Minimal feed candidates with coordinates for the globe' })
-  getMapPoints(@CurrentUser() user: CurrentUserPayload) {
-    return this.discoverService.getMapPoints(user);
+  getMapPoints(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: DiscoverQueryDto,
+  ) {
+    return this.discoverService.getMapPoints(user, query);
   }
 
   @Post('swipe')

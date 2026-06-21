@@ -12,12 +12,18 @@ export interface DiscoverQuery {
   verifiedRecruitersOnly?: boolean;
   page?: number;
   limit?: number;
+  // ISO timestamp from a previous response's nextCursor. When set the
+  // backend ignores `page` and returns rows strictly older than this.
+  cursor?: string;
 }
 
 export interface FeedResponse {
   cards: any[];
   hasMore: boolean;
   swipesRemaining: number;
+  // ISO created_at of the last card on this page, or null when there
+  // are no more pages. Send back on the next call as `cursor`.
+  nextCursor?: string | null;
 }
 
 export interface SwipeResponse {

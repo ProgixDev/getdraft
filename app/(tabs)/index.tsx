@@ -511,6 +511,12 @@ export default function DiscoverScreen() {
   });
   const [apiCards, setApiCards] = useState<any[] | null>(null);
   const [swipesRemaining, setSwipesRemaining] = useState<number | null>(null);
+  // Cursor-paging state. nextCursor=null after the last page; isFetchingMore
+  // gates concurrent loads (another deck-near-end fire while one is in flight
+  // would duplicate-fetch and waste an API round-trip). Both reset on every
+  // preference/filter change in the effect below.
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const isFetchingMoreRef = useRef(false);
   const [lastSwipe, setLastSwipe] = useState<LastSwipe>(null);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     visible: false,
@@ -566,6 +572,7 @@ export default function DiscoverScreen() {
         distanceKm: preferences.distanceKm ?? undefined,
         includeInternational: preferences.includeInternational,
         country: preferences.country || undefined,
+        city: preferences.city || undefined,
         recruiterType:
           preferences.recruiterType !== "all"
             ? preferences.recruiterType
@@ -583,6 +590,7 @@ export default function DiscoverScreen() {
       .then((res) => {
         setApiCards(res.cards);
         setSwipesRemaining(res.swipesRemaining);
+        setNextCursor(res.hasMore ? (res.nextCursor ?? null) : null);
         // Prefetch every card's image up front so browsing to neighbor cards is
         // instant (no per-card network wait). Only ~5-9 small images.
         const urls = (res.cards || [])
@@ -594,8 +602,63 @@ export default function DiscoverScreen() {
         // No mock fallback — show the empty state when the backend is unreachable.
         setApiCards([]);
         setSwipesRemaining(null);
+        setNextCursor(null);
       });
   }, [isParent, preferences]);
+
+  // Fetch the next page. De-duped by id so a row that appears on two pages
+  // (the boundary row is `<= cursor` on one side, never the other — but if
+  // a new signup lands AT exactly the cursor we still guard). Concurrent
+  // calls are suppressed via isFetchingMoreRef so a fast burst of "near end"
+  // ticks doesn't double-fetch.
+  const loadMore = useCallback(() => {
+    if (isFetchingMoreRef.current) return;
+    if (!nextCursor) return;
+    isFetchingMoreRef.current = true;
+    discoverService
+      .getFeed({
+        sport: preferences.sport !== "all" ? preferences.sport : undefined,
+        distanceKm: preferences.distanceKm ?? undefined,
+        includeInternational: preferences.includeInternational,
+        country: preferences.country || undefined,
+        city: preferences.city || undefined,
+        recruiterType:
+          preferences.recruiterType !== "all"
+            ? preferences.recruiterType
+            : undefined,
+        athletePosition:
+          preferences.athletePosition !== "all"
+            ? preferences.athletePosition
+            : undefined,
+        athleteLevel:
+          preferences.athleteLevel !== "all"
+            ? preferences.athleteLevel
+            : undefined,
+        verifiedRecruitersOnly: preferences.verifiedRecruitersOnly || undefined,
+        cursor: nextCursor,
+      })
+      .then((res) => {
+        setApiCards((prev) => {
+          const base = prev ?? [];
+          const seen = new Set(base.map((c: any) => c.id));
+          const fresh = (res.cards || []).filter((c: any) => !seen.has(c.id));
+          return [...base, ...fresh];
+        });
+        setSwipesRemaining(res.swipesRemaining);
+        setNextCursor(res.hasMore ? (res.nextCursor ?? null) : null);
+        const urls = (res.cards || [])
+          .map((c: any) => c.imageUrl || c.photos?.[0])
+          .filter((u: any) => typeof u === "string");
+        if (urls.length) ExpoImage.prefetch(urls);
+      })
+      .catch(() => {
+        // Swallow — we keep the cards we already have; the empty-state copy
+        // covers the "you've seen everyone" terminal case.
+      })
+      .finally(() => {
+        isFetchingMoreRef.current = false;
+      });
+  }, [nextCursor, preferences]);
 
   const displayName = user?.name?.split(" ")[0] || "Player";
   // Parents redirect to /matches before render, so this screen only shows for
@@ -901,6 +964,18 @@ export default function DiscoverScreen() {
     }
     if (urls.length) ExpoImage.prefetch(urls);
   }, [currentIndex, apiCards]);
+
+  // Incremental load — fire when there are <= 4 cards left after the focused
+  // index AND the backend signalled another page exists. loadMore() guards
+  // against concurrent invocations so a rapid swipe burst won't double-fetch.
+  useEffect(() => {
+    if (!apiCards) return;
+    if (!nextCursor) return;
+    const remainingAhead = apiCards.length - currentIndex;
+    if (remainingAhead <= 4) {
+      loadMore();
+    }
+  }, [currentIndex, apiCards, nextCursor, loadMore]);
 
   const hasMoreCards = currentIndex < discoverItems.length;
   const remaining = discoverItems.length - currentIndex;
