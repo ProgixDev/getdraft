@@ -95,12 +95,12 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7a6c8405-e237-49b1-b5be-b2334b70080c"
+        "projectId": "f3052b6d-b222-4ec5-bae3-58aecd8d4448"
       },
       "supabaseUrl": "https://jzzsnputbvzxssbraetl.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6enNucHV0YnZ6eHNzYnJhZXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODg5MzUsImV4cCI6MjA5NjM2NDkzNX0.C-naQs22KGxDPQcBa7k5JLpozmhwEcEr6YX0fQpmecA",
       "stripePublishableKey": "pk_test_51TVSj4RxpA5KOrrI4p1A7H6IFU1lB9oqeoR2TUJsy4ofEcqJtou3GXLAer3tl6JO1MoJudupbHGqbmEOxxBbTDKD00os6ktadq"
     },
-    "owner": "achrafbenamrane"
+    "owner": "expoborz"
   }
 }
