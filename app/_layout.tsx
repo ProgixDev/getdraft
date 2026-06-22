@@ -270,7 +270,6 @@ function RootLayoutContent() {
         />
         <Stack.Screen name="chat/[threadId]" options={{ headerShown: false }} />
         <Stack.Screen name="dm/[conversationId]" options={{ headerShown: false }} />
-        <Stack.Screen name="new-message" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
         <Stack.Screen name="buy-swipes" options={{ headerShown: false }} />

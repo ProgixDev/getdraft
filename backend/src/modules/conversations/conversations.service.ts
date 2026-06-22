@@ -46,6 +46,15 @@ export class ConversationsService {
       throw new ForbiddenException('Cannot message a blocked user');
     }
 
+    // Chat is gated on a mutual match: a DM can only be opened once the two
+    // users have matched (one drafted the other and the draft was accepted).
+    // No match => no conversation.
+    if (!(await this.hasActiveMatch(meId, otherUserId))) {
+      throw new ForbiddenException(
+        'You can only message someone after you match with them.',
+      );
+    }
+
     const [userA, userB] = this.canonical(meId, otherUserId);
 
     // Try to find existing conversation
@@ -150,6 +159,13 @@ export class ConversationsService {
     if (otherUserId && (await this.isBlockedPair(meId, otherUserId))) {
       throw new ForbiddenException('Cannot message a blocked user');
     }
+    // Chat is gated on a mutual match (defense-in-depth alongside getOrCreate,
+    // also covers any pre-existing conversation rows from before this rule).
+    if (otherUserId && !(await this.hasActiveMatch(meId, otherUserId))) {
+      throw new ForbiddenException(
+        'You can only message someone after you match with them.',
+      );
+    }
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from('direct_messages')
@@ -201,6 +217,20 @@ export class ConversationsService {
       throw new ForbiddenException('Not a participant');
     }
     return data.user_a_id === meId ? data.user_b_id : data.user_a_id;
+  }
+
+  /** True if an active match exists between the two users (the chat gate). */
+  async hasActiveMatch(a: string, b: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const [u1, u2] = this.canonical(a, b);
+    const { data } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('user_1_id', u1)
+      .eq('user_2_id', u2)
+      .eq('is_active', true)
+      .limit(1);
+    return (data?.length ?? 0) > 0;
   }
 
   /** True if either user has blocked the other. */

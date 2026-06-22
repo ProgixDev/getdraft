@@ -263,6 +263,13 @@ export class ChatGateway
         client.emit('error', { message: 'Cannot message a blocked user' });
         return;
       }
+      // Chat is gated on a mutual match — no DM without an active match.
+      if (!(await this.hasActiveMatch(userId, recipientId))) {
+        client.emit('error', {
+          message: 'You can only message someone after you match.',
+        });
+        return;
+      }
       const supabase = this.supabaseService.getAdminClient();
       const { data: row, error } = await supabase
         .from('direct_messages')
@@ -296,6 +303,20 @@ export class ChatGateway
       text: message.text,
       createdAt: message.created_at,
     });
+  }
+
+  /** True if an active match exists between the two users (the chat gate). */
+  private async hasActiveMatch(a: string, b: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const [u1, u2] = a < b ? [a, b] : [b, a];
+    const { data } = await supabase
+      .from('matches')
+      .select('id')
+      .eq('user_1_id', u1)
+      .eq('user_2_id', u2)
+      .eq('is_active', true)
+      .limit(1);
+    return (data?.length ?? 0) > 0;
   }
 
   /**

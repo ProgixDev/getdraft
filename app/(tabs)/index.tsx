@@ -1303,23 +1303,6 @@ export default function DiscoverScreen() {
                 </Pressable>
                 <Pressable
                   style={({ pressed }) => [
-                    styles.messageButton,
-                    { height: messageHeight, borderRadius: messageHeight / 2 },
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={handleSendMessage}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open messages"
-                >
-                  <Ionicons
-                    name="chatbubble-outline"
-                    size={20}
-                    color={theme.text}
-                  />
-                  <Text style={styles.messageButtonText}>Messages</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
                     styles.circleButton,
                     styles.draftButton,
                     {

@@ -408,18 +408,6 @@ export default function MatchesScreen() {
             <Text style={styles.headerBadgeText}>{totalUnread} new</Text>
           </View>
         )}
-        {view === "messages" && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.composeBtn,
-              pressed && { opacity: 0.85 },
-            ]}
-            onPress={() => router.push("/new-message")}
-            accessibilityLabel="New message"
-          >
-            <Ionicons name="create-outline" size={18} color={brand.white} />
-          </Pressable>
-        )}
       </View>
 
       <ScrollView
@@ -488,7 +476,6 @@ export default function MatchesScreen() {
           error={inboxError}
           insetsBottom={insets.bottom}
           onRefresh={() => loadInbox("refresh")}
-          onCompose={() => router.push("/new-message")}
           onOpen={(c) =>
             router.push({
               pathname: "/dm/[conversationId]",
@@ -1012,22 +999,6 @@ function ReceivedList({
                   />
                   <Text style={styles.actionDangerText}>Refuse</Text>
                 </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.actionGhost,
-                    pressed && { opacity: 0.85 },
-                    isPending && { opacity: 0.7 },
-                  ]}
-                  onPress={() => onChat(r.swiper)}
-                  disabled={isPending}
-                >
-                  <Ionicons
-                    name="chatbubbles-outline"
-                    size={14}
-                    color={theme.text}
-                  />
-                  <Text style={styles.actionGhostText}>Chat</Text>
-                </Pressable>
               </View>
             </View>
           );
@@ -1139,22 +1110,6 @@ function SentList({
               <View style={styles.actionRow}>
                 <Pressable
                   style={({ pressed }) => [
-                    styles.actionGhost,
-                    pressed && { opacity: 0.85 },
-                    isPending && { opacity: 0.7 },
-                  ]}
-                  onPress={() => onChat(r.swiped)}
-                  disabled={isPending}
-                >
-                  <Ionicons
-                    name="chatbubbles-outline"
-                    size={14}
-                    color={theme.text}
-                  />
-                  <Text style={styles.actionGhostText}>Chat</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
                     styles.actionDanger,
                     pressed && { opacity: 0.85 },
                     isPending && { opacity: 0.7 },
@@ -1191,7 +1146,6 @@ function MessagesInbox({
   error,
   insetsBottom,
   onRefresh,
-  onCompose,
   onOpen,
 }: {
   inbox: ConversationItem[];
@@ -1200,7 +1154,6 @@ function MessagesInbox({
   error: boolean;
   insetsBottom: number;
   onRefresh: () => void;
-  onCompose: () => void;
   onOpen: (c: ConversationItem) => void;
 }) {
   if (loading) {
@@ -1223,11 +1176,9 @@ function MessagesInbox({
       <View style={styles.content}>
         <Ionicons name="mail-outline" size={64} color={theme.textMuted} />
         <Text style={styles.emptyTitle}>No messages yet</Text>
-        <Text style={styles.emptySubtitle}>Start a conversation.</Text>
-        <Pressable style={styles.discoverButton} onPress={onCompose}>
-          <Ionicons name="create-outline" size={18} color={theme.accentText} />
-          <Text style={styles.discoverButtonText}>New message</Text>
-        </Pressable>
+        <Text style={styles.emptySubtitle}>
+          Chats open once you match — draft someone and have them draft you back.
+        </Text>
       </View>
     );
   }
