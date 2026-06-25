@@ -11,13 +11,13 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://getdraft-api.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production.up.railway.app/api"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://getdraft-api.onrender.com/api"
+        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production.up.railway.app/api"
       }
     }
   },
