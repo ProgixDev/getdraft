@@ -32,6 +32,16 @@ class HealthController {
   health() {
     return { status: 'ok' };
   }
+
+  @Public()
+  @Get('version')
+  version() {
+    return {
+      commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.RENDER_GIT_COMMIT ?? null,
+      branch: process.env.RAILWAY_GIT_BRANCH ?? process.env.RENDER_GIT_BRANCH ?? null,
+      env: process.env.NODE_ENV ?? null,
+    };
+  }
 }
 
 @Module({
