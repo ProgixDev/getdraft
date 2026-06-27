@@ -51,6 +51,7 @@ import type {
   AthleteProfile,
 } from "@/constants/discoverData";
 import { AthleteCard } from "@/components/discover/AthleteCard";
+import { MatchCelebration } from "@/components/match/MatchCelebration";
 import { RootState } from "@/store";
 import { discoverService } from "@/services/discover";
 import {
@@ -308,56 +309,6 @@ function DiscoverCardImpl({
 const DiscoverCard = React.memo(DiscoverCardImpl);
 
 // ------------------------------------------------------------------
-// Match celebration overlay
-// ------------------------------------------------------------------
-function MatchOverlay({
-  recruiterName,
-  onDismiss,
-  onMessage,
-}: {
-  recruiterName: string;
-  onDismiss: () => void;
-  onMessage: () => void;
-}) {
-  return (
-    <Animated.View
-      entering={FadeIn.duration(300)}
-      exiting={FadeOut.duration(300)}
-      style={styles.matchOverlay}
-      accessibilityViewIsModal
-    >
-      <LinearGradient
-        colors={["rgba(0,0,0,0.85)", "rgba(18,18,18,0.97)"]}
-        style={styles.matchOverlayInner}
-      >
-        <Text style={styles.matchEmoji}>🤝</Text>
-        <Text style={styles.matchTitle}>Game On!</Text>
-        <Text style={styles.matchSubtitle}>
-          You and {recruiterName} are ready to connect.
-        </Text>
-        <Pressable
-          style={styles.matchMessageButton}
-          onPress={onMessage}
-          accessibilityRole="button"
-          accessibilityLabel={`Send a message to ${recruiterName}`}
-        >
-          <Ionicons name="chatbubble-outline" size={18} color={brand.white} />
-          <Text style={styles.matchMessageButtonText}>Send a Message</Text>
-        </Pressable>
-        <Pressable
-          style={styles.matchKeepButton}
-          onPress={onDismiss}
-          accessibilityRole="button"
-          accessibilityLabel="Keep scouting"
-        >
-          <Text style={styles.matchKeepButtonText}>Keep Scouting</Text>
-        </Pressable>
-      </LinearGradient>
-    </Animated.View>
-  );
-}
-
-// ------------------------------------------------------------------
 // DiscoverBackground — full-page sport-themed backdrop.
 //
 // Renders the centred card's sport gradient + bundled blurred hero, edge to
@@ -505,9 +456,14 @@ export default function DiscoverScreen() {
   const [matchOverlay, setMatchOverlay] = useState<{
     visible: boolean;
     name: string;
+    matchId: string | null;
+    avatar: string | null;
+    cardType?: "athlete" | "recruiter";
   }>({
     visible: false,
     name: "",
+    matchId: null,
+    avatar: null,
   });
   const [apiCards, setApiCards] = useState<any[] | null>(null);
   const [swipesRemaining, setSwipesRemaining] = useState<number | null>(null);
@@ -777,6 +733,18 @@ export default function DiscoverScreen() {
       (current as AthleteProfile)?.name ??
       "";
     const targetId = current?.id;
+    // Best-effort avatar for the celebration: recruiter cards carry `imageUrl`,
+    // athlete cards carry `photos[0]`. Only real (string URL) media is passed —
+    // bundled require()'d fallbacks (numbers) resolve to initials instead.
+    const cardType = (current as any)?.cardType as
+      | "athlete"
+      | "recruiter"
+      | undefined;
+    const rawAvatar =
+      cardType === "athlete"
+        ? (current as AthleteProfile)?.photos?.[0]
+        : (current as RecruiterCard)?.imageUrl;
+    const avatar = typeof rawAvatar === "string" ? rawAvatar : null;
     setLastSwipe({ index: cur, action: "draft", name });
 
     if (targetId) {
@@ -785,7 +753,13 @@ export default function DiscoverScreen() {
         .then((res) => {
           setSwipesRemaining(res.swipesRemaining);
           if (res.matched) {
-            setMatchOverlay({ visible: true, name });
+            setMatchOverlay({
+              visible: true,
+              name,
+              matchId: res.matchId,
+              avatar,
+              cardType,
+            });
             successNotify();
           } else {
             setSnackbar({
@@ -831,14 +805,21 @@ export default function DiscoverScreen() {
   }, [discoverItems, focusedIndexSV, carouselTranslateX]);
 
   const handleMatchDismiss = useCallback(() => {
-    setMatchOverlay({ visible: false, name: "" });
+    setMatchOverlay({ visible: false, name: "", matchId: null, avatar: null });
   }, []);
 
   const handleSendMessage = useCallback(() => {
-    // Dismiss any open match overlay so the screen is clean when user returns
-    setMatchOverlay({ visible: false, name: "" });
-    router.push("/(tabs)/matches");
-  }, [router]);
+    // Chat is only reachable after a match — open the match thread directly.
+    // The chat route's [threadId] param IS the matchId.
+    const id = matchOverlay.matchId;
+    setMatchOverlay({ visible: false, name: "", matchId: null, avatar: null });
+    if (id) {
+      router.push({ pathname: "/chat/[threadId]", params: { threadId: id } });
+    } else {
+      // Defensive: a match with no id (shouldn't happen) still lands somewhere useful.
+      router.push("/(tabs)/matches");
+    }
+  }, [router, matchOverlay.matchId]);
 
   const triggerPass = useCallback(() => {
     if (swipeLock || pendingAction) return;
@@ -909,7 +890,7 @@ export default function DiscoverScreen() {
     focusedIndexSV.value = lastSwipe.index;
     carouselTranslateX.value = 0;
     setCurrentIndex(lastSwipe.index);
-    setMatchOverlay({ visible: false, name: "" });
+    setMatchOverlay({ visible: false, name: "", matchId: null, avatar: null });
     setLastSwipe(null);
     setSnackbar({ visible: false, message: "", canUndo: false });
   }, [lastSwipe, focusedIndexSV, carouselTranslateX]);
@@ -1338,13 +1319,17 @@ export default function DiscoverScreen() {
         reducedMotion={reducedMotion}
       />
 
-      {matchOverlay.visible && (
-        <MatchOverlay
-          recruiterName={matchOverlay.name}
-          onDismiss={handleMatchDismiss}
-          onMessage={handleSendMessage}
-        />
-      )}
+      <MatchCelebration
+        visible={matchOverlay.visible}
+        matchId={matchOverlay.matchId}
+        otherName={matchOverlay.name}
+        otherAvatar={matchOverlay.avatar}
+        otherCardType={matchOverlay.cardType}
+        myName={user?.name}
+        myRole={user?.role}
+        onMessage={handleSendMessage}
+        onDismiss={handleMatchDismiss}
+      />
     </View>
   );
 }
@@ -1934,59 +1919,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     transform: [{ scale: 0.96 }],
-  },
-  // Match celebration overlay
-  matchOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 100,
-  },
-  matchOverlayInner: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 40,
-  },
-  matchEmoji: {
-    fontSize: 72,
-    marginBottom: 16,
-  },
-  matchTitle: {
-    fontSize: 36,
-    fontFamily: "Poppins_800ExtraBold",
-    color: brand.white,
-    textAlign: "center",
-  },
-  matchSubtitle: {
-    fontSize: 16,
-    fontFamily: "Poppins_400Regular",
-    color: "rgba(255,255,255,0.85)",
-    textAlign: "center",
-    marginTop: 12,
-    lineHeight: 24,
-  },
-  matchMessageButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: 40,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    backgroundColor: brand.white,
-    borderRadius: 30,
-  },
-  matchMessageButtonText: {
-    fontSize: 16,
-    fontFamily: "Poppins_700Bold",
-    color: brand.primary,
-  },
-  matchKeepButton: {
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  matchKeepButtonText: {
-    fontSize: 15,
-    fontFamily: "Poppins_500Medium",
-    color: "rgba(255,255,255,0.7)",
   },
 });
