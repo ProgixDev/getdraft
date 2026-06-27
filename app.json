@@ -95,12 +95,12 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f61b649d-3d18-4cd0-9b69-27d53ef5504e"
+        "projectId": "5caaadb2-fc65-404a-87ef-cca68dde9138"
       },
       "supabaseUrl": "https://jzzsnputbvzxssbraetl.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6enNucHV0YnZ6eHNzYnJhZXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODg5MzUsImV4cCI6MjA5NjM2NDkzNX0.C-naQs22KGxDPQcBa7k5JLpozmhwEcEr6YX0fQpmecA",
       "stripePublishableKey": "pk_test_51TVSj4RxpA5KOrrI4p1A7H6IFU1lB9oqeoR2TUJsy4ofEcqJtou3GXLAer3tl6JO1MoJudupbHGqbmEOxxBbTDKD00os6ktadq"
     },
-    "owner": "ichouqlf"
+    "owner": "borzvalor"
   }
 }
