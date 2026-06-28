@@ -94,6 +94,7 @@
     },
     "extra": {
       "router": {},
+      "allowKycSkip": true,
       "eas": {
         "projectId": "5caaadb2-fc65-404a-87ef-cca68dde9138"
       },

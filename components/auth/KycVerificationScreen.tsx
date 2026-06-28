@@ -13,6 +13,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useFonts,
@@ -25,6 +26,15 @@ import { brand, neutral, semantic } from '@/config/colors';
 import { kycService, KycStatus } from '@/services/kyc';
 
 WebBrowser.maybeCompleteAuthSession();
+
+// Show the KYC skip in dev builds OR when the app-config flag
+// `extra.allowKycSkip` is true (testing phase only). The backend's
+// /kyc/dev-approve is the real gate (ALLOW_KYC_DEV_SKIP on Railway).
+// MUST be turned off (app.json flag + Railway var) before public launch.
+const ALLOW_KYC_SKIP =
+  __DEV__ ||
+  (Constants.expoConfig?.extra as { allowKycSkip?: boolean } | undefined)
+    ?.allowKycSkip === true;
 
 interface KycVerificationScreenProps {
   onComplete: () => void;
@@ -238,7 +248,7 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
             We only keep the approval status.
           </Text>
 
-          {__DEV__ && status !== 'approved' && (
+          {ALLOW_KYC_SKIP && status !== 'approved' && (
             <Pressable style={styles.devSkipButton} onPress={handleDevSkip}>
               <Ionicons name="bug-outline" size={14} color={neutral.gray500} />
               <Text style={styles.devSkipText}>Skip verification (dev)</Text>

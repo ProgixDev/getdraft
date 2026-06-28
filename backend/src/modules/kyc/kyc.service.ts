@@ -31,7 +31,11 @@ export class KycService {
    */
   async devApprove(userId: string): Promise<{ kycStatus: KycStatus }> {
     const env = this.configService.get<string>('NODE_ENV') ?? 'development';
-    if (env === 'production') {
+    // Testing override: allow in production ONLY when ALLOW_KYC_DEV_SKIP=true.
+    // MUST be turned off (unset this Railway var) before public launch.
+    const allowOverride =
+      this.configService.get<string>('ALLOW_KYC_DEV_SKIP') === 'true';
+    if (env === 'production' && !allowOverride) {
       throw new BadRequestException('Dev approve is disabled in production.');
     }
     const admin = this.supabaseService.getAdminClient();
