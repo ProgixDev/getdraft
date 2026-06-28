@@ -99,7 +99,7 @@
       },
       "supabaseUrl": "https://jzzsnputbvzxssbraetl.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6enNucHV0YnZ6eHNzYnJhZXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODg5MzUsImV4cCI6MjA5NjM2NDkzNX0.C-naQs22KGxDPQcBa7k5JLpozmhwEcEr6YX0fQpmecA",
-      "stripePublishableKey": "pk_test_51TVSj4RxpA5KOrrI4p1A7H6IFU1lB9oqeoR2TUJsy4ofEcqJtou3GXLAer3tl6JO1MoJudupbHGqbmEOxxBbTDKD00os6ktadq"
+      "stripePublishableKey": "pk_live_51TkmbzAw76WJBP45otMLEZJK7fRguOEM2vNwf2KE0vIlssXk78LhcRCLsEHbJm1FgjPgZADOxjY4Nbj9FZJtY9IF00eehPGTmc"
     },
     "owner": "borzvalor"
   }
