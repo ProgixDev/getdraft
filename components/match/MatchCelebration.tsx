@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Modal,
   Pressable,
@@ -32,7 +32,6 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, semantic } from "@/config/colors";
 import type { UserRole } from "@/store/slices/authSlice";
-import { MatchHandshake } from "./MatchHandshake";
 
 const ACCENT = semantic.success; // #00B894 brand green
 const CONFETTI_COLORS = [
@@ -204,17 +203,9 @@ function Avatar({ uri, name }: { uri?: string | null; name?: string }) {
   );
 }
 
-// ── Static handshake (reduced-motion / WebGL failure fallback) ─────
-function StaticHandshake() {
-  return (
-    <View style={styles.staticWrap}>
-      <View style={styles.staticGlow} />
-      <View style={styles.staticCircle}>
-        <Text style={styles.staticEmoji}>🤝</Text>
-      </View>
-    </View>
-  );
-}
+// On-brand 3D handshake (replaces the procedural WebGL hands). Transparent
+// PNG — the green glow is drawn behind it by styles.middleGlow.
+const HANDSHAKE_IMG = require("../../assets/images/handshake.png");
 
 export function MatchCelebration({
   visible,
@@ -231,7 +222,6 @@ export function MatchCelebration({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
-  const [webglFailed, setWebglFailed] = useState(false);
 
   useFonts({
     Poppins_400Regular,
@@ -253,12 +243,12 @@ export function MatchCelebration({
   const linkScale = useSharedValue(0);
   const subtitleOpacity = useSharedValue(0);
   const middleOpacity = useSharedValue(0);
+  const handshakeScale = useSharedValue(0.7);
   const bottomY = useSharedValue(28);
   const bottomOpacity = useSharedValue(0);
 
   useEffect(() => {
     if (!visible) return;
-    setWebglFailed(false);
 
     if (reducedMotion) {
       // Land everything at its final value instantly.
@@ -271,6 +261,7 @@ export function MatchCelebration({
       linkScale.value = 1;
       subtitleOpacity.value = 1;
       middleOpacity.value = 1;
+      handshakeScale.value = 1;
       bottomY.value = 0;
       bottomOpacity.value = 1;
       return;
@@ -286,6 +277,7 @@ export function MatchCelebration({
     linkScale.value = 0;
     subtitleOpacity.value = 0;
     middleOpacity.value = 0;
+    handshakeScale.value = 0.7;
     bottomY.value = 28;
     bottomOpacity.value = 0;
 
@@ -318,6 +310,13 @@ export function MatchCelebration({
     );
     subtitleOpacity.value = withDelay(560, withTiming(1, { duration: 380 }));
     middleOpacity.value = withDelay(420, withTiming(1, { duration: 520 }));
+    handshakeScale.value = withDelay(
+      420,
+      withSequence(
+        withTiming(1.06, { duration: 380, easing: easeOut }),
+        withTiming(1, { duration: 240, easing: Easing.inOut(Easing.ease) }),
+      ),
+    );
     bottomOpacity.value = withDelay(620, withTiming(1, { duration: 420 }));
     bottomY.value = withDelay(
       620,
@@ -334,6 +333,7 @@ export function MatchCelebration({
       cancelAnimation(linkScale);
       cancelAnimation(subtitleOpacity);
       cancelAnimation(middleOpacity);
+      cancelAnimation(handshakeScale);
       cancelAnimation(bottomY);
       cancelAnimation(bottomOpacity);
     };
@@ -358,6 +358,9 @@ export function MatchCelebration({
   }));
   const subtitleStyle = useAnimatedStyle(() => ({ opacity: subtitleOpacity.value }));
   const middleStyle = useAnimatedStyle(() => ({ opacity: middleOpacity.value }));
+  const handshakeStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: handshakeScale.value }],
+  }));
   const bottomStyle = useAnimatedStyle(() => ({
     opacity: bottomOpacity.value,
     transform: [{ translateY: bottomY.value }],
@@ -369,7 +372,6 @@ export function MatchCelebration({
   );
 
   const middleHeight = Math.max(238, Math.min(Math.round(height * 0.34), 360));
-  const showStatic = reducedMotion || webglFailed;
 
   return (
     <Modal
@@ -399,7 +401,7 @@ export function MatchCelebration({
           />
         </Animated.View>
 
-        {!showStatic && <Confetti width={width} height={height} />}
+        {!reducedMotion && <Confetti width={width} height={height} />}
 
         <View
           style={[
@@ -457,21 +459,20 @@ export function MatchCelebration({
             </Animated.Text>
           </View>
 
-          {/* ── MIDDLE: 3D handshake ── */}
+          {/* ── MIDDLE: handshake ── */}
           <Animated.View
             style={[styles.middle, { height: middleHeight }, middleStyle]}
           >
             <View style={styles.middleGlow} />
-            {showStatic ? (
-              <StaticHandshake />
-            ) : (
-              <MatchHandshake
-                accent={ACCENT}
-                accent2={semantic.info}
-                accent3={semantic.warning}
-                onError={() => setWebglFailed(true)}
+            <Animated.View style={[styles.handshakeWrap, handshakeStyle]}>
+              <ExpoImage
+                source={HANDSHAKE_IMG}
+                style={styles.handshakeImg}
+                contentFit="contain"
+                transition={200}
+                accessibilityLabel="It's a match — handshake"
               />
-            )}
+            </Animated.View>
           </Animated.View>
 
           {/* ── BOTTOM: what's unlocked + CTAs ── */}
@@ -670,29 +671,15 @@ const styles = StyleSheet.create({
     borderRadius: 120,
     backgroundColor: "rgba(0,184,148,0.10)",
   },
-  staticWrap: {
+  handshakeWrap: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
-  staticGlow: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "rgba(0,184,148,0.14)",
-  },
-  staticCircle: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 2,
-    borderColor: "rgba(0,184,148,0.5)",
-  },
-  staticEmoji: {
-    fontSize: 76,
+  handshakeImg: {
+    width: "92%",
+    height: "92%",
   },
   // ── BOTTOM ──
   bottom: {
