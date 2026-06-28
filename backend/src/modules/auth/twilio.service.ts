@@ -75,7 +75,9 @@ export class TwilioService implements OnModuleInit {
       if (code === 60203) {
         throw new BadRequestException('Too many attempts. Please wait a few minutes.');
       }
-      throw new BadRequestException(message);
+      // Fall-through: never surface raw Twilio text to users (it can include
+      // trial-mode / dashboard URLs). Real reason is logged above.
+      throw new BadRequestException("Couldn't send the code — please try again.");
     }
   }
 
@@ -104,7 +106,7 @@ export class TwilioService implements OnModuleInit {
       if (code === 60202) {
         throw new BadRequestException('Too many failed attempts. Request a new code.');
       }
-      throw new BadRequestException(message);
+      throw new BadRequestException("Couldn't verify the code — please try again.");
     }
   }
 }
