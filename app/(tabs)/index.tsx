@@ -771,13 +771,13 @@ export default function DiscoverScreen() {
         })
         .catch((err: any) => {
           const status = err?.response?.status;
-          // Daily quota exhausted (backend rejects the swipe). Don't fake a
-          // "Drafted" — surface the out-of-swipes lock + upgrade CTA.
+          // Monthly Draft quota exhausted (backend rejects the Draft). Don't
+          // fake a "Drafted" — surface the out-of-Drafts lock + upgrade CTA.
           if (status === 429 || status === 403) {
             setSwipesRemaining(0);
             setSnackbar({
               visible: true,
-              message: "Out of swipes — upgrade to keep scouting",
+              message: "Out of Drafts this month — upgrade for unlimited",
               canUndo: false,
             });
             return;
@@ -1205,11 +1205,11 @@ export default function DiscoverScreen() {
               ]}
               onPress={goToSubscription}
               accessibilityRole="button"
-              accessibilityLabel="Out of swipes. Upgrade to keep scouting."
+              accessibilityLabel="Out of Drafts this month. Upgrade for unlimited Drafts."
             >
               <Ionicons name="lock-closed" size={18} color={brand.white} />
               <Text style={styles.lockedCtaText}>
-                Out of swipes — Upgrade to keep scouting
+                Out of Drafts this month — Upgrade for unlimited
               </Text>
             </Pressable>
           ) : (

@@ -16,6 +16,8 @@ import {
   CurrentUserPayload,
   UserRole,
   SwipeDirection,
+  PlanId,
+  PLAN_SWIPE_LIMITS,
 } from '../../common/types';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -626,15 +628,17 @@ export class DiscoverService {
       throw new NotFoundException('User not found');
     }
 
-    const remaining = await this.getSwipesRemaining(user.id);
-    if (remaining === 0) {
-      // 429 per spec (work-plan C2 "11th basic swipe -> 429"); distinct from
-      // the 403s used for role/block rejections so the client can tell them
-      // apart and show the upgrade CTA.
-      throw new HttpException(
-        'Daily swipe limit reached. Upgrade your plan for more swipes.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    // Passes are always free; only Drafts (right-swipes) consume the monthly
+    // allowance. Block a Draft only when its quota is exhausted — the 429 lets
+    // the client show the upgrade CTA (distinct from the 403 role/block paths).
+    if (dto.direction === SwipeDirection.DRAFT) {
+      const remaining = await this.getSwipesRemaining(user.id);
+      if (remaining === 0) {
+        throw new HttpException(
+          'Monthly Draft limit reached. Upgrade for unlimited Drafts.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
     }
 
     try {
@@ -652,33 +656,39 @@ export class DiscoverService {
       throw new BadRequestException((e as Error).message);
     }
 
-    // Spend daily quota first; if it's exhausted, dip into bonus_swipes.
-    const subForSpend = await this.prisma.subscriptions.findUnique({
-      where: { user_id: user.id },
-      select: {
-        daily_swipe_limit: true,
-        swipes_used_today: true,
-        bonus_swipes: true,
-      },
-    });
-    const dailyLeft = subForSpend
-      ? subForSpend.daily_swipe_limit === -1
-        ? 999
-        : Math.max(
-            0,
-            subForSpend.daily_swipe_limit - (subForSpend.swipes_used_today ?? 0),
-          )
-      : 0;
-    if (dailyLeft > 0) {
-      await this.prisma.$executeRawUnsafe(
-        'select public.increment_swipes_used($1::uuid)',
-        user.id,
-      );
-    } else if (subForSpend && subForSpend.bonus_swipes > 0) {
-      await this.prisma.subscriptions.update({
+    // Only Drafts consume the monthly allowance (passes are free). Spend the
+    // plan quota first; if exhausted, dip into bonus_swipes (from swipe-packs).
+    // swipes_used_today is reused as the month-to-date Draft counter.
+    if (dto.direction === SwipeDirection.DRAFT) {
+      const subForSpend = await this.prisma.subscriptions.findUnique({
         where: { user_id: user.id },
-        data: { bonus_swipes: { decrement: 1 } },
+        select: {
+          plan_id: true,
+          swipes_used_today: true,
+          bonus_swipes: true,
+        },
       });
+      const limit = subForSpend
+        ? PLAN_SWIPE_LIMITS[String(subForSpend.plan_id) as PlanId] ??
+          PLAN_SWIPE_LIMITS[PlanId.BASIC]
+        : PLAN_SWIPE_LIMITS[PlanId.BASIC];
+      if (limit !== -1) {
+        const quotaLeft = Math.max(
+          0,
+          limit - (subForSpend?.swipes_used_today ?? 0),
+        );
+        if (quotaLeft > 0) {
+          await this.prisma.$executeRawUnsafe(
+            'select public.increment_swipes_used($1::uuid)',
+            user.id,
+          );
+        } else if (subForSpend && subForSpend.bonus_swipes > 0) {
+          await this.prisma.subscriptions.update({
+            where: { user_id: user.id },
+            data: { bonus_swipes: { decrement: 1 } },
+          });
+        }
+      }
     }
 
     let matched = false;
@@ -913,37 +923,46 @@ export class DiscoverService {
     }));
   }
 
+  // Remaining DRAFTS this month. Passes are free; the monthly allowance comes
+  // from the plan (PLAN_SWIPE_LIMITS) and resets on the 1st. -1 = unlimited.
+  // swipes_used_today/swipes_reset_at are reused as the month-to-date counter.
   private async getSwipesRemaining(userId: string): Promise<number> {
     const sub = await this.prisma.subscriptions.findUnique({
       where: { user_id: userId },
       select: {
-        daily_swipe_limit: true,
+        plan_id: true,
         swipes_used_today: true,
         swipes_reset_at: true,
         bonus_swipes: true,
       },
     });
 
-    if (!sub) return 10;
+    if (!sub) return PLAN_SWIPE_LIMITS[PlanId.BASIC];
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const resetAtStr = sub.swipes_reset_at
-      ? sub.swipes_reset_at.toISOString().split('T')[0]
-      : null;
-
+    const limit =
+      PLAN_SWIPE_LIMITS[String(sub.plan_id) as PlanId] ??
+      PLAN_SWIPE_LIMITS[PlanId.BASIC];
     const bonus = sub.bonus_swipes ?? 0;
-    if (resetAtStr !== todayStr) {
+    const UNLIMITED = 9999;
+
+    // Monthly reset: compare YYYY-MM.
+    const now = new Date();
+    const monthKey = (d: Date) =>
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const resetMonth = sub.swipes_reset_at ? monthKey(sub.swipes_reset_at) : null;
+
+    if (resetMonth !== monthKey(now)) {
+      const firstOfMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      );
       await this.prisma.subscriptions.update({
         where: { user_id: userId },
-        data: { swipes_used_today: 0, swipes_reset_at: new Date(todayStr) },
+        data: { swipes_used_today: 0, swipes_reset_at: firstOfMonth },
       });
-      const daily = sub.daily_swipe_limit === -1 ? 999 : sub.daily_swipe_limit;
-      return daily + bonus;
+      return (limit === -1 ? UNLIMITED : limit) + bonus;
     }
 
-    if (sub.daily_swipe_limit === -1) return 999 + bonus;
-    return (
-      Math.max(0, sub.daily_swipe_limit - (sub.swipes_used_today ?? 0)) + bonus
-    );
+    if (limit === -1) return UNLIMITED + bonus;
+    return Math.max(0, limit - (sub.swipes_used_today ?? 0)) + bonus;
   }
 }

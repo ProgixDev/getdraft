@@ -42,11 +42,14 @@ export enum PushPlatform {
   ANDROID = 'android',
 }
 
+// Monthly DRAFT allowance per plan. Passes are always free; only Drafts
+// (right-swipes) count against this. -1 = unlimited. The free tier is
+// intentionally limited so users upgrade; paid tiers get unlimited Drafts.
 export const PLAN_SWIPE_LIMITS: Record<PlanId, number> = {
-  [PlanId.BASIC]: 10,
-  [PlanId.STARTER]: 30,
-  [PlanId.PRO]: 70,
-  [PlanId.PREMIUM]: 70, // legacy alias for Pro
+  [PlanId.BASIC]: 20, // free: 20 Drafts / month
+  [PlanId.STARTER]: -1, // unlimited Drafts
+  [PlanId.PRO]: -1, // unlimited Drafts
+  [PlanId.PREMIUM]: -1, // legacy alias for Pro
 };
 
 export class JwtPayload {
