@@ -87,7 +87,7 @@ function unlockRows(
     {
       icon: "chatbubble-ellipses",
       title: "Message each other",
-      sub: "Chat unlocks only after a match",
+      sub: "Chat unlocks once you both Draft",
     },
     {
       icon: "person-circle",
@@ -427,13 +427,13 @@ export function MatchCelebration({
               <Text style={styles.kickerText}>GAME ON</Text>
             </Animated.View>
             <Animated.Text style={[styles.title, titleStyle]}>
-              It&apos;s a Match!
+              It&apos;s a Draft!
             </Animated.Text>
 
             <View
               style={styles.avatarRow}
               accessible
-              accessibilityLabel={`You matched with ${otherName}`}
+              accessibilityLabel={`You and ${otherName} drafted each other`}
             >
               <Animated.View style={[styles.avatarCol, leftAvatarStyle]}>
                 <Avatar uri={myAvatar} name={myName} />
@@ -470,7 +470,7 @@ export function MatchCelebration({
                 style={styles.handshakeImg}
                 contentFit="contain"
                 transition={200}
-                accessibilityLabel="It's a match — handshake"
+                accessibilityLabel="It's a Draft — handshake"
               />
             </Animated.View>
           </Animated.View>
