@@ -43,7 +43,36 @@ export class UsersService {
     const activationStatus = (data.activation_status ?? 'active') as
       | 'active'
       | 'pending_guardian';
-    return { ...data, activation_status: activationStatus, isActivated: activationStatus === 'active' };
+
+    // profileCompleted: the profile step is done once the role-specific profile
+    // row exists. handle_new_user() only seeds users + subscriptions — the role
+    // profile is created at the profile step — so its existence is a reliable
+    // signal. Replaces the old resume heuristic that checked a non-existent
+    // users.bio column (which bounced avatar-less users back to the profile step).
+    const profileTable =
+      data.role === 'athlete'
+        ? 'athlete_profiles'
+        : data.role === 'coach' || data.role === 'recruiter'
+          ? 'recruiter_profiles'
+          : data.role === 'parent'
+            ? 'parent_profiles'
+            : null;
+    let profileCompleted = true; // admin / unknown roles have no profile step
+    if (profileTable) {
+      const { data: prof } = await supabase
+        .from(profileTable)
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      profileCompleted = !!prof;
+    }
+
+    return {
+      ...data,
+      activation_status: activationStatus,
+      isActivated: activationStatus === 'active',
+      profileCompleted,
+    };
   }
 
   async updateMe(user: CurrentUserPayload, dto: UpdateUserDto) {

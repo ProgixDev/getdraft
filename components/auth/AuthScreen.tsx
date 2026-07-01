@@ -251,7 +251,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           );
         }
         const hasLocation = !!me?.location;
-        const hasProfileBio = !!me?.bio || !!me?.avatar_url;
+        // Profile step is done when the role-specific profile row exists (the
+        // server computes `profileCompleted`). Fall back to the old avatar
+        // heuristic only for API responses that predate the flag.
+        const hasProfileBio =
+          (me as { profileCompleted?: boolean })?.profileCompleted ??
+          (!!me?.bio || !!me?.avatar_url);
         const kycApproved = kyc?.kycStatus === "approved";
         // guardian-done MUST come from the server (the guardian_links row),
         // not from a client-writable preference. preferences is a free-form
