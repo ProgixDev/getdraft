@@ -94,6 +94,11 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
     [dispatch, onLogin],
   );
 
+  // Google/Apple OAuth providers aren't enabled in Supabase yet, so hide the
+  // social buttons for launch (phone + email work). Flip to true once the
+  // providers are configured (Supabase → Auth → Providers).
+  const SOCIAL_LOGIN_ENABLED = false;
+
   const handleOAuth = useCallback(
     async (provider: OAuthProvider) => {
       if (pendingOauth) return;
@@ -199,43 +204,47 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
           </View>
 
           {/* SECONDARIES */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.appleButton,
-              pressed && styles.pressed,
-              pendingOauth && styles.buttonDisabled,
-            ]}
-            onPress={() => handleOAuth('apple')}
-            disabled={pendingOauth !== null}
-          >
-            {pendingOauth === 'apple' ? (
-              <ActivityIndicator color={brand.white} />
-            ) : (
-              <>
-                <Ionicons name="logo-apple" size={20} color={brand.white} />
-                <Text style={styles.appleButtonText}>Apple</Text>
-              </>
-            )}
-          </Pressable>
+          {SOCIAL_LOGIN_ENABLED && (
+            <>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.appleButton,
+                  pressed && styles.pressed,
+                  pendingOauth && styles.buttonDisabled,
+                ]}
+                onPress={() => handleOAuth('apple')}
+                disabled={pendingOauth !== null}
+              >
+                {pendingOauth === 'apple' ? (
+                  <ActivityIndicator color={brand.white} />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color={brand.white} />
+                    <Text style={styles.appleButtonText}>Apple</Text>
+                  </>
+                )}
+              </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.googleButton,
-              pressed && styles.pressed,
-              pendingOauth && styles.buttonDisabled,
-            ]}
-            onPress={() => handleOAuth('google')}
-            disabled={pendingOauth !== null}
-          >
-            {pendingOauth === 'google' ? (
-              <ActivityIndicator color="#1f1f1f" />
-            ) : (
-              <>
-                <Ionicons name="logo-google" size={20} color="#1f1f1f" />
-                <Text style={styles.googleButtonText}>Google</Text>
-              </>
-            )}
-          </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.googleButton,
+                  pressed && styles.pressed,
+                  pendingOauth && styles.buttonDisabled,
+                ]}
+                onPress={() => handleOAuth('google')}
+                disabled={pendingOauth !== null}
+              >
+                {pendingOauth === 'google' ? (
+                  <ActivityIndicator color="#1f1f1f" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-google" size={20} color="#1f1f1f" />
+                    <Text style={styles.googleButtonText}>Google</Text>
+                  </>
+                )}
+              </Pressable>
+            </>
+          )}
 
           <Pressable
             style={({ pressed }) => [styles.emailButton, pressed && styles.pressed]}

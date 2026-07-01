@@ -311,6 +311,13 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     d.setFullYear(d.getFullYear() - 18);
     return d;
   });
+  // Little-league floor: no one under 6 can sign up — the DOB picker caps its
+  // most-recent selectable date here.
+  const maxAllowedDob = () => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 6);
+    return d;
+  };
   const [heightUnit, setHeightUnit] = useState<"in" | "cm">("in");
   const [weightUnit, setWeightUnit] = useState<"lbs" | "kg">("lbs");
 
@@ -422,7 +429,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
       DateTimePickerAndroid.open({
         value: initial,
         mode: "date",
-        maximumDate: new Date(),
+        maximumDate: maxAllowedDob(),
         minimumDate: new Date(1900, 0, 1),
         onChange: handleDateChange,
       });
@@ -1021,7 +1028,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                       mode="date"
                       display="spinner"
                       onChange={handleDateChange}
-                      maximumDate={new Date()}
+                      maximumDate={maxAllowedDob()}
                       minimumDate={new Date(1900, 0, 1)}
                       themeVariant="light"
                     />
