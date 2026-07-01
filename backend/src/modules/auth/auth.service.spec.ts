@@ -2,6 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SupabaseService } from '../../config/supabase.config';
+import { ConfigService } from '@nestjs/config';
+import { MailService } from '../mail/mail.service';
+import { SignupOtpService } from './signup-otp.service';
+import { VerificationTokenService } from './verification-token.service';
+import { TwilioService } from './twilio.service';
 import { UserRole } from '../../common/types';
 
 // Mock Supabase client chain builder
@@ -47,6 +52,30 @@ describe('AuthService', () => {
           useValue: {
             getClient: () => mockClient,
             getAdminClient: () => mockAdminClient,
+          },
+        },
+        // Deps added since this spec was first written — mocked so the module
+        // resolves; the existing tests exercise the Supabase-based paths only.
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        { provide: MailService, useValue: { sendOtp: jest.fn() } },
+        {
+          provide: SignupOtpService,
+          useValue: {
+            requestOtp: jest.fn(),
+            verifyOtp: jest.fn(),
+            createAndSend: jest.fn(),
+          },
+        },
+        {
+          provide: VerificationTokenService,
+          useValue: { issue: jest.fn(), verify: jest.fn(), consume: jest.fn() },
+        },
+        {
+          provide: TwilioService,
+          useValue: {
+            startVerification: jest.fn(),
+            checkVerification: jest.fn(),
+            isConfigured: jest.fn().mockReturnValue(false),
           },
         },
       ],
