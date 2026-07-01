@@ -11,6 +11,7 @@ import {
   DiditDecisionResponse,
   normalizeDiditStatus,
 } from './didit.service';
+import { isMinor } from '../../common/utils/age';
 
 export type KycStatus = 'none' | 'pending' | 'in_review' | 'approved' | 'declined';
 
@@ -143,10 +144,25 @@ export class KycService {
 
     const { data: user } = await admin
       .from('users')
-      .select('kyc_status')
+      .select('kyc_status, role')
       .eq('id', userId)
       .maybeSingle();
     if (!user) throw new NotFoundException('User not found.');
+
+    // Minors are KYC-exempt: young athletes have no government ID, and the
+    // guardian-consent flow (parent video + QR + the guardian's own KYC) is
+    // their verification. Report as "approved" so onboarding skips the ID
+    // step — the guardian-activation gate still applies. Adults are unaffected.
+    if (user.role === 'athlete') {
+      const { data: prof } = await admin
+        .from('athlete_profiles')
+        .select('date_of_birth')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (isMinor(prof?.date_of_birth)) {
+        return { kycStatus: 'approved', sessionId: null, decisionPreview: null };
+      }
+    }
 
     const { data: latest } = await admin
       .from('kyc_sessions')
