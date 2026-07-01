@@ -38,6 +38,10 @@ export type UseCarouselGestureArgs = {
   carouselTranslateX: SharedValue<number>;
   onSwipeLeft: () => void; // PASS (down)
   onSwipeRight: () => void; // DRAFT (up)
+  /** When true, a Draft (up) is blocked: the card snaps back and
+   *  onDraftBlocked fires instead. Passing (down) still works. */
+  draftLocked?: boolean;
+  onDraftBlocked?: () => void;
   goNext: () => void; // browse forward (left swipe)
   goPrev: () => void; // browse backward (right swipe)
   canGoNext: boolean;
@@ -59,6 +63,8 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     carouselTranslateX,
     onSwipeLeft,
     onSwipeRight,
+    draftLocked,
+    onDraftBlocked,
     goNext,
     goPrev,
     canGoNext,
@@ -167,17 +173,24 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
 
       if (shouldDraft) {
         runOnJS(lightImpact)();
-        // Advance the index NOW — the new card becomes focused/interactive
-        // on the JS thread immediately, while the old card's translateY
-        // continues animating off-screen on the UI thread.
-        runOnJS(onSwipeRight)();
-        if (reducedMotion) {
-          translateY.value = withTiming(-screenHeight * 0.3, { duration: 180 });
+        if (draftLocked) {
+          // Out of Drafts: block the Draft, snap the card back, surface the
+          // upgrade CTA. Passing (below) stays free.
+          if (onDraftBlocked) runOnJS(onDraftBlocked)();
+          translateY.value = withSpring(0, { damping: 15 });
         } else {
-          translateY.value = withSpring(-screenHeight * 1.2, {
-            damping: 22,
-            stiffness: 200,
-          });
+          // Advance the index NOW — the new card becomes focused/interactive
+          // on the JS thread immediately, while the old card's translateY
+          // continues animating off-screen on the UI thread.
+          runOnJS(onSwipeRight)();
+          if (reducedMotion) {
+            translateY.value = withTiming(-screenHeight * 0.3, { duration: 180 });
+          } else {
+            translateY.value = withSpring(-screenHeight * 1.2, {
+              damping: 22,
+              stiffness: 200,
+            });
+          }
         }
       } else if (shouldPass) {
         runOnJS(lightImpact)();
@@ -204,6 +217,11 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     onTriggerHandled?.();
     lightImpact();
     const isDraft = trigger === "draft";
+    if (isDraft && draftLocked) {
+      // Out of Drafts — surface the upgrade CTA instead of drafting.
+      onDraftBlocked?.();
+      return;
+    }
     if (isDraft) onSwipeRight();
     else onSwipeLeft();
     if (reducedMotion) {

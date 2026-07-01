@@ -100,6 +100,8 @@ function DiscoverCardImpl({
   carouselTranslateX,
   onSwipeLeft,
   onSwipeRight,
+  draftLocked,
+  onDraftBlocked,
   goNext,
   goPrev,
   canGoNext,
@@ -119,6 +121,8 @@ function DiscoverCardImpl({
   carouselTranslateX: SharedValue<number>;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  draftLocked?: boolean;
+  onDraftBlocked?: () => void;
   goNext: () => void;
   goPrev: () => void;
   canGoNext: boolean;
@@ -148,6 +152,8 @@ function DiscoverCardImpl({
     carouselTranslateX,
     onSwipeLeft,
     onSwipeRight,
+    draftLocked,
+    onDraftBlocked,
     goNext,
     goPrev,
     canGoNext,
@@ -831,6 +837,16 @@ export default function DiscoverScreen() {
     setPendingAction("draft");
   }, [swipeLock, pendingAction]);
 
+  // Out of monthly Drafts: a Draft is blocked (card snaps back) but passing
+  // stays free. Surface the upgrade nudge without locking the deck.
+  const handleDraftBlocked = useCallback(() => {
+    setSnackbar({
+      visible: true,
+      message: "Out of Drafts this month — upgrade for unlimited",
+      canUndo: false,
+    });
+  }, []);
+
   const handleTriggerHandled = useCallback(() => {
     setPendingAction(null);
   }, []);
@@ -1105,8 +1121,9 @@ export default function DiscoverScreen() {
             >
               {visibleCards.map(({ item, absoluteIndex }) => {
                 const isFocused = absoluteIndex === currentIndex;
-                const cardCanGesture =
-                  isFocused && !swipeLock && !outOfSwipes;
+                // Gesture stays live when out of Drafts so PASS still works;
+                // the Draft (up) is intercepted per-card via draftLocked.
+                const cardCanGesture = isFocused && !swipeLock;
                 return (item as any).cardType === "athlete" ? (
                   <AthleteCard
                     key={item.id}
@@ -1122,6 +1139,8 @@ export default function DiscoverScreen() {
                     carouselTranslateX={carouselTranslateX}
                     onSwipeLeft={handleSwipeLeft}
                     onSwipeRight={handleSwipeRight}
+                    draftLocked={outOfSwipes}
+                    onDraftBlocked={handleDraftBlocked}
                     goNext={goNext}
                     goPrev={goPrev}
                     canGoNext={canGoNext}
@@ -1145,6 +1164,8 @@ export default function DiscoverScreen() {
                     carouselTranslateX={carouselTranslateX}
                     onSwipeLeft={handleSwipeLeft}
                     onSwipeRight={handleSwipeRight}
+                    draftLocked={outOfSwipes}
+                    onDraftBlocked={handleDraftBlocked}
                     goNext={goNext}
                     goPrev={goPrev}
                     canGoNext={canGoNext}
@@ -1198,20 +1219,46 @@ export default function DiscoverScreen() {
             pointerEvents="none"
           />
           {outOfSwipes ? (
-            <Pressable
-              style={({ pressed }) => [
-                styles.lockedCta,
-                pressed && styles.pressed,
-              ]}
-              onPress={goToSubscription}
-              accessibilityRole="button"
-              accessibilityLabel="Out of Drafts this month. Upgrade for unlimited Drafts."
-            >
-              <Ionicons name="lock-closed" size={18} color={brand.white} />
-              <Text style={styles.lockedCtaText}>
-                Out of Drafts this month — Upgrade for unlimited
-              </Text>
-            </Pressable>
+            <>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.lockedCta,
+                  pressed && styles.pressed,
+                ]}
+                onPress={goToSubscription}
+                accessibilityRole="button"
+                accessibilityLabel="Out of Drafts this month. Upgrade for unlimited Drafts."
+              >
+                <Ionicons name="lock-closed" size={18} color={brand.white} />
+                <Text style={styles.lockedCtaText}>
+                  Out of Drafts this month — Upgrade for unlimited
+                </Text>
+              </Pressable>
+              {/* Passing stays free even when Drafts are used up. */}
+              <View style={styles.actions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.circleButton,
+                    styles.passButton,
+                    {
+                      width: circleSize,
+                      height: circleSize,
+                      borderRadius: circleSize / 2,
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={triggerPass}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pass on ${topCardName}`}
+                >
+                  <Ionicons
+                    name="arrow-down"
+                    size={actionIconSize}
+                    color={brand.white}
+                  />
+                </Pressable>
+              </View>
+            </>
           ) : (
             <>
               <View style={styles.hintRow}>

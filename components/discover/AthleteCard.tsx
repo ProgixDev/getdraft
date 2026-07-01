@@ -32,6 +32,8 @@ interface AthleteCardProps {
   carouselTranslateX: SharedValue<number>;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  draftLocked?: boolean;
+  onDraftBlocked?: () => void;
   goNext: () => void;
   goPrev: () => void;
   canGoNext: boolean;
@@ -54,6 +56,8 @@ function AthleteCardImpl({
   carouselTranslateX,
   onSwipeLeft,
   onSwipeRight,
+  draftLocked,
+  onDraftBlocked,
   goNext,
   goPrev,
   canGoNext,
@@ -124,6 +128,8 @@ function AthleteCardImpl({
     carouselTranslateX,
     onSwipeLeft,
     onSwipeRight,
+    draftLocked,
+    onDraftBlocked,
     goNext,
     goPrev,
     canGoNext,
