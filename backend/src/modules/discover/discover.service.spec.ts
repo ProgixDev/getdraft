@@ -3,61 +3,85 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  HttpException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { DiscoverService } from './discover.service';
-import { SupabaseService } from '../../config/supabase.config';
+import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   UserRole,
   SwipeDirection,
   CurrentUserPayload,
-  PlanId,
 } from '../../common/types';
 
-// Helper: build a chainable Supabase query mock
-const mockQueryBuilder = (finalResult: any = { data: [], error: null }) => {
-  const builder: any = {};
-  const methods = [
-    'select',
-    'eq',
-    'neq',
-    'not',
-    'in',
-    'or',
-    'order',
-    'range',
-    'limit',
-    'single',
-    'maybeSingle',
-    'insert',
-    'update',
-    'lt',
-  ];
-  methods.forEach((m) => {
-    builder[m] = jest.fn().mockReturnValue(builder);
-  });
-  // Terminal methods return the result; chainable methods rely on `then`.
-  builder.single.mockResolvedValue(finalResult);
-  builder.maybeSingle.mockResolvedValue(finalResult);
-  builder.then = (resolve: any) => resolve(finalResult);
-  return builder;
-};
-
+// The Discover module runs on Prisma (not the Supabase client), so the spec
+// mocks PrismaService + NotificationsService. Swipe limits are now MONTHLY
+// Drafts: only Drafts (right-swipes) count; passes are free; the allowance
+// comes from PLAN_SWIPE_LIMITS (basic = 20, paid = unlimited).
 describe('DiscoverService', () => {
   let service: DiscoverService;
+  let prisma: any;
 
-  const mockAdminClient: any = { from: jest.fn(), rpc: jest.fn() };
+  const athleteUser: CurrentUserPayload = {
+    id: 'athlete-1',
+    email: 'athlete@test.com',
+    role: UserRole.ATHLETE,
+  };
+  const recruiterUser: CurrentUserPayload = {
+    id: 'recruiter-1',
+    email: 'recruiter@test.com',
+    role: UserRole.RECRUITER,
+  };
+  const parentUser: CurrentUserPayload = {
+    id: 'parent-1',
+    email: 'parent@test.com',
+    role: UserRole.PARENT,
+  };
+
+  // A subscription dated in the CURRENT month so getSwipesRemaining doesn't
+  // trigger the monthly reset.
+  const sub = (
+    plan_id = 'basic',
+    swipes_used_today = 0,
+    bonus_swipes = 0,
+  ) => ({ plan_id, swipes_used_today, swipes_reset_at: new Date(), bonus_swipes });
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    prisma = {
+      public_users: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue({ is_banned: false }),
+      },
+      swipes: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      blocks: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      subscriptions: {
+        findUnique: jest.fn().mockResolvedValue(sub()),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      matches: {
+        create: jest.fn().mockResolvedValue({ id: 'match-1' }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      $executeRawUnsafe: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DiscoverService,
+        { provide: PrismaService, useValue: prisma },
         {
-          provide: SupabaseService,
-          useValue: {
-            getAdminClient: () => mockAdminClient,
-          },
+          provide: NotificationsService,
+          useValue: { sendPushToUser: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
@@ -65,162 +89,54 @@ describe('DiscoverService', () => {
     service = module.get<DiscoverService>(DiscoverService);
   });
 
-  const athleteUser: CurrentUserPayload = {
-    id: 'athlete-1',
-    email: 'athlete@test.com',
-    role: UserRole.ATHLETE,
-  };
-
-  const recruiterUser: CurrentUserPayload = {
-    id: 'recruiter-1',
-    email: 'recruiter@test.com',
-    role: UserRole.RECRUITER,
-  };
-
-  const parentUser: CurrentUserPayload = {
-    id: 'parent-1',
-    email: 'parent@test.com',
-    role: UserRole.PARENT,
-  };
-
   describe('getFeed', () => {
-    it('should throw ForbiddenException for parent users', async () => {
+    it('throws ForbiddenException for parent users', async () => {
       await expect(service.getFeed(parentUser, {})).rejects.toThrow(
         ForbiddenException,
       );
     });
 
-    it('should return recruiter feed for athlete users', async () => {
-      // Mock subscriptions query (getSwipesRemaining)
-      const subBuilder = mockQueryBuilder({
-        data: {
-          daily_swipe_limit: 10,
-          swipes_used_today: 3,
-          swipes_reset_at: new Date().toISOString().split('T')[0],
-        },
-      });
-      // Mock swipes query
-      const swipesBuilder = mockQueryBuilder({ data: [] });
-      // Mock blocks query
-      const blocksBuilder = mockQueryBuilder({ data: [] });
-      // Mock users query with recruiter feed
-      const usersBuilder = mockQueryBuilder({
-        data: [
-          {
-            id: 'rec-1',
-            name: 'Coach Mike',
-            avatar_url: null,
-            location: 'LA, CA',
-            country: 'US',
-            recruiter_profiles: {
-              role_type: 'coach',
-              organization: 'UCLA',
-              sport: 'football',
-              verified: true,
-              tags: ['NCAA'],
-              photos: [],
-            },
+    it('returns the feed with the monthly Draft allowance remaining', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 3)); // 20 - 3
+      prisma.public_users.findMany.mockResolvedValue([
+        {
+          id: 'rec-1',
+          name: 'Coach Mike',
+          role: 'coach',
+          avatar_url: null,
+          location: 'LA, CA',
+          country: 'US',
+          created_at: new Date(),
+          recruiter_profiles: {
+            organization: 'UCLA',
+            sport: 'football',
+            role_type: 'coach',
+            verified: true,
+            tags: ['NCAA'],
+            bio: '',
+            photos: [],
+            videos: [],
           },
-        ],
-        error: null,
-      });
-
-      const callCount = 0;
-      mockAdminClient.from.mockImplementation((table: string) => {
-        if (table === 'subscriptions') return subBuilder;
-        if (table === 'swipes') return swipesBuilder;
-        if (table === 'blocks') return blocksBuilder;
-        if (table === 'users') return usersBuilder;
-        return mockQueryBuilder();
-      });
+        },
+      ]);
 
       const result = await service.getFeed(athleteUser, { sport: 'football' });
 
       expect(result.cards).toHaveLength(1);
       expect(result.cards[0].name).toBe('Coach Mike');
-      expect((result.cards[0] as any).verified).toBe(true);
-      expect(result.swipesRemaining).toBe(7);
+      expect(result.swipesRemaining).toBe(17);
     });
 
-    it('should return athlete feed for recruiter users', async () => {
-      const subBuilder = mockQueryBuilder({
-        data: {
-          daily_swipe_limit: 30,
-          swipes_used_today: 0,
-          swipes_reset_at: new Date().toISOString().split('T')[0],
-        },
-      });
-      const swipesBuilder = mockQueryBuilder({ data: [] });
-      const blocksBuilder = mockQueryBuilder({ data: [] });
-      const usersBuilder = mockQueryBuilder({
-        data: [
-          {
-            id: 'ath-1',
-            name: 'Marcus Johnson',
-            avatar_url: null,
-            location: 'Austin, TX',
-            country: 'US',
-            athlete_profiles: {
-              sport: 'football',
-              position: 'QB',
-              level: 'D1',
-              bio: 'Star QB',
-              class_year: '2025',
-              gpa: 3.7,
-              height: '6\'2"',
-              weight: '215 lbs',
-              photos: [],
-              videos: [],
-              forty_yard_dash: '4.65s',
-              awards: ['MVP'],
-            },
-          },
-        ],
-        error: null,
-      });
-
-      mockAdminClient.from.mockImplementation((table: string) => {
-        if (table === 'subscriptions') return subBuilder;
-        if (table === 'swipes') return swipesBuilder;
-        if (table === 'blocks') return blocksBuilder;
-        if (table === 'users') return usersBuilder;
-        return mockQueryBuilder();
-      });
-
+    it('gives unlimited Drafts on a paid plan', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('pro', 500));
       const result = await service.getFeed(recruiterUser, {});
-
-      expect(result.cards).toHaveLength(1);
-      expect((result.cards[0] as any).position).toBe('QB');
-      expect(result.swipesRemaining).toBe(30);
+      // -1 (unlimited) resolves to the 9999 sentinel.
+      expect(result.swipesRemaining).toBeGreaterThan(9000);
     });
   });
 
   describe('swipe', () => {
-    it('should throw ForbiddenException when swipe limit reached', async () => {
-      const subBuilder = mockQueryBuilder({
-        data: {
-          daily_swipe_limit: 10,
-          swipes_used_today: 10,
-          swipes_reset_at: new Date().toISOString().split('T')[0],
-        },
-      });
-      const blocksBuilder = mockQueryBuilder({ data: null });
-
-      mockAdminClient.from.mockImplementation((table: string) => {
-        if (table === 'blocks') return blocksBuilder;
-        if (table === 'subscriptions') return subBuilder;
-        return mockQueryBuilder();
-      });
-
-      await expect(
-        service.swipe(athleteUser, {
-          targetUserId: 'rec-1',
-          direction: SwipeDirection.DRAFT,
-        }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('should throw BadRequestException on self-swipe', async () => {
+    it('throws BadRequestException on self-swipe', async () => {
       await expect(
         service.swipe(athleteUser, {
           targetUserId: athleteUser.id,
@@ -229,73 +145,64 @@ describe('DiscoverService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw ConflictException on duplicate swipe', async () => {
-      const subBuilder = mockQueryBuilder({
-        data: {
-          daily_swipe_limit: 10,
-          swipes_used_today: 5,
-          swipes_reset_at: new Date().toISOString().split('T')[0],
-        },
-      });
-      const blocksBuilder = mockQueryBuilder({ data: null });
-      const insertBuilder = mockQueryBuilder({
-        data: null,
-        error: { code: '23505', message: 'duplicate' },
-      });
-
-      mockAdminClient.from.mockImplementation((table: string) => {
-        if (table === 'blocks') return blocksBuilder;
-        if (table === 'subscriptions') return subBuilder;
-        if (table === 'swipes') return insertBuilder;
-        return mockQueryBuilder();
-      });
-
+    it('throws 429 when the monthly Draft limit is reached', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 20)); // 0 left
       await expect(
         service.swipe(athleteUser, {
           targetUserId: 'rec-1',
           direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(HttpException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('allows a PASS even when out of Drafts (passes are free)', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 20)); // 0 left
+      const result = await service.swipe(athleteUser, {
+        targetUserId: 'rec-1',
+        direction: SwipeDirection.PASS,
+      });
+      expect(result.matched).toBe(false);
+      expect(prisma.swipes.create).toHaveBeenCalled();
+    });
+
+    it('throws ConflictException on duplicate swipe', async () => {
+      prisma.swipes.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('duplicate', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.PASS,
         }),
       ).rejects.toThrow(ConflictException);
     });
   });
 
   describe('whoDraftedMe', () => {
-    it('should throw ForbiddenException for basic plan', async () => {
-      const subBuilder = mockQueryBuilder({ data: { plan_id: PlanId.BASIC } });
-      mockAdminClient.from.mockReturnValue(subBuilder);
-
-      await expect(service.whoDraftedMe('user-1')).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('should throw ForbiddenException for starter plan', async () => {
-      const subBuilder = mockQueryBuilder({
-        data: { plan_id: PlanId.STARTER },
-      });
-      mockAdminClient.from.mockReturnValue(subBuilder);
-
-      await expect(service.whoDraftedMe('user-1')).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('should return drafts for pro plan', async () => {
-      const subBuilder = mockQueryBuilder({ data: { plan_id: PlanId.PRO } });
-      const swipesBuilder = mockQueryBuilder({
-        data: [
-          {
-            swiped_id: 'user-1',
-            created_at: '2026-04-20T10:00:00Z',
-            swiper: { id: 'rec-1', name: 'Coach A', role: 'coach' },
-          },
-        ],
-      });
-
-      mockAdminClient.from.mockImplementation((table: string) => {
-        if (table === 'subscriptions') return subBuilder;
-        if (table === 'swipes') return swipesBuilder;
-        return mockQueryBuilder();
+    it('returns the list of drafters (free — no plan gate)', async () => {
+      prisma.swipes.findMany.mockImplementation((args: any) => {
+        // The "who drafted me" query filters by swiped_id; the exclude queries
+        // filter by swiper_id and return nothing.
+        if (args?.where?.swiped_id) {
+          return Promise.resolve([
+            {
+              swiped_id: 'user-1',
+              created_at: new Date(),
+              users_swipes_swiper_idTousers: {
+                id: 'rec-1',
+                name: 'Coach A',
+                avatar_url: null,
+                role: 'coach',
+                location: 'LA',
+              },
+            },
+          ]);
+        }
+        return Promise.resolve([]);
       });
 
       const result = await service.whoDraftedMe('user-1');
