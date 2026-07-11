@@ -1,4 +1,6 @@
-import { Module, Controller, Get } from '@nestjs/common';
+import { Module, Controller, Get, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
+import { PRIVACY_HTML } from './privacy.page';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
@@ -31,6 +33,14 @@ class HealthController {
   @Get('health')
   health() {
     return { status: 'ok' };
+  }
+
+  // Public privacy policy page (Google Play requires a public URL).
+  // Served via the raw reply so the global JSON envelope doesn't wrap it.
+  @Public()
+  @Get('privacy')
+  privacy(@Res() res: FastifyReply) {
+    res.type('text/html; charset=utf-8').send(PRIVACY_HTML);
   }
 
   @Public()
