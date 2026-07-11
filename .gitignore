@@ -62,3 +62,7 @@ app-example
 # stops NEW .md/.pdf from being added. Force one in with `git add -f <file>`.
 *.md
 *.pdf
+
+# Firebase service-account keys (secrets - never commit)
+*firebase-adminsdk*.json
+firebase-admin-key.json
