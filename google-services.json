@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "575951810581",
+    "project_id": "draftme-caff9",
+    "storage_bucket": "draftme-caff9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:575951810581:android:fc08ab8b0f8b16bf6f1e1c",
+        "android_client_info": {
+          "package_name": "com.getdraft.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDeL2_rFXupqgG1vUz62_7iH-kwp04y1PA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
