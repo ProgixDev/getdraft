@@ -70,10 +70,25 @@ export class MailService implements OnModuleInit {
   }
 
   async sendOtp(to: string, code: string): Promise<void> {
-    const html = otpEmailHtml(code);
+    const html = otpEmailHtml(code, "Confirm it's you", 'Use this code to finish signing up. It expires in 10 minutes.');
     const text = `Your GetDraft verification code is ${code}. It expires in 10 minutes. If you didn't request this, ignore this email.`;
     const subject = `${code} is your GetDraft verification code`;
+    await this.deliver(to, subject, html, text);
+  }
 
+  /** Password reset — same branded shell, reset copy. */
+  async sendPasswordReset(to: string, code: string): Promise<void> {
+    const html = otpEmailHtml(
+      code,
+      'Reset your password',
+      'Use this code in the app to set a new password. It expires in 10 minutes.',
+    );
+    const text = `Your GetDraft password reset code is ${code}. It expires in 10 minutes. If you didn't request this, ignore this email — your password stays unchanged.`;
+    const subject = `${code} is your GetDraft password reset code`;
+    await this.deliver(to, subject, html, text);
+  }
+
+  private async deliver(to: string, subject: string, html: string, text: string): Promise<void> {
     if (this.resendApiKey) {
       await this.sendViaResend(to, subject, html, text);
       return;
@@ -81,7 +96,7 @@ export class MailService implements OnModuleInit {
 
     if (!this.transporter) {
       this.logger.error(
-        'sendOtp called with neither RESEND_API_KEY nor SMTP credentials configured.',
+        'deliver called with neither RESEND_API_KEY nor SMTP credentials configured.',
       );
       throw new InternalServerErrorException('Email transport is not configured.');
     }
@@ -149,7 +164,7 @@ export class MailService implements OnModuleInit {
  * Inline HTML — modern minimal, GetDraft-branded.
  * Centered card on dark canvas, big code, short copy.
  */
-function otpEmailHtml(code: string): string {
+function otpEmailHtml(code: string, heading = "Confirm it's you", sub = 'Use this code to finish signing up. It expires in 10 minutes.'): string {
   const safeCode = String(code).replace(/[^0-9A-Za-z]/g, '');
   return `<!doctype html>
 <html lang="en">
@@ -170,12 +185,12 @@ function otpEmailHtml(code: string): string {
           </tr>
           <tr>
             <td style="font-size:22px;font-weight:700;color:#ffffff;line-height:1.3;padding-bottom:8px;">
-              Confirm it's you
+              ${heading}
             </td>
           </tr>
           <tr>
             <td style="font-size:15px;color:rgba(255,255,255,0.7);line-height:1.55;padding-bottom:24px;">
-              Use this code to finish signing up. It expires in 10 minutes.
+              ${sub}
             </td>
           </tr>
           <tr>

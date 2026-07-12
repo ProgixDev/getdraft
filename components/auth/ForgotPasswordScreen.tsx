@@ -39,7 +39,11 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
 
   const [email, setEmail] = useState(initialEmail);
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  // 'email' → request the code · 'code' → enter code + new password · 'done'
+  const [step, setStep] = useState<'email' | 'code' | 'done'>('email');
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
@@ -59,7 +63,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
     setLoading(true);
     try {
       await authService.forgotPassword(trimmed);
-      setSubmitted(true);
+      setStep('code');
     } catch (err: any) {
       // Even on error, prefer the "if exists" success message to avoid
       // leaking which emails are registered. Only surface a hard error
@@ -67,8 +71,42 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
       if (err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
         setError('Cannot reach the server. Try again in a moment.');
       } else {
-        setSubmitted(true);
+        setStep('code');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (loading) return;
+    setError(null);
+
+    const trimmedCode = code.trim();
+    if (!/^\d{6}$/.test(trimmedCode)) {
+      setError('Enter the 6-digit code from the email.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authService.resetPassword(email.trim(), trimmedCode, newPassword);
+      setStep('done');
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ??
+        (err?.message === 'Network Error'
+          ? 'Cannot reach the server. Try again in a moment.'
+          : 'Invalid or expired code.');
+      setError(String(msg));
     } finally {
       setLoading(false);
     }
@@ -95,7 +133,13 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
           <Animated.View entering={FadeIn.duration(500)} style={styles.iconWrap}>
             <View style={styles.iconCircle}>
               <Ionicons
-                name={submitted ? 'mail-open-outline' : 'lock-closed-outline'}
+                name={
+                  step === 'done'
+                    ? 'checkmark-circle-outline'
+                    : step === 'code'
+                      ? 'mail-open-outline'
+                      : 'lock-closed-outline'
+                }
                 size={36}
                 color={brand.white}
               />
@@ -103,33 +147,111 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(600).delay(150)} style={styles.card}>
-            {submitted ? (
+            {step === 'done' ? (
+              <>
+                <Text style={styles.title}>Password updated</Text>
+                <Text style={styles.subtitle}>
+                  Your new password is set. Sign in with it now.
+                </Text>
+                <Pressable style={styles.primaryButton} onPress={onBack}>
+                  <Text style={styles.primaryButtonText}>Back to sign in</Text>
+                </Pressable>
+              </>
+            ) : step === 'code' ? (
               <>
                 <Text style={styles.title}>Check your email</Text>
                 <Text style={styles.subtitle}>
                   If an account exists for{' '}
                   <Text style={styles.email}>{email.trim()}</Text>, we’ve sent a
-                  link to reset your password. The link expires in 1 hour.
+                  6-digit code. Enter it below with your new password.
                 </Text>
-                <Pressable style={styles.primaryButton} onPress={onBack}>
-                  <Text style={styles.primaryButtonText}>Back to sign in</Text>
+
+                <View style={styles.fieldWrap}>
+                  <Ionicons name="keypad-outline" size={20} color={neutral.gray400} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={code}
+                    onChangeText={(v) => {
+                      setCode(v.replace(/[^0-9]/g, '').slice(0, 6));
+                      if (error) setError(null);
+                    }}
+                    placeholder="6-digit code"
+                    placeholderTextColor={neutral.gray500}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.fieldWrap}>
+                  <Ionicons name="lock-closed-outline" size={20} color={neutral.gray400} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={newPassword}
+                    onChangeText={(v) => {
+                      setNewPassword(v);
+                      if (error) setError(null);
+                    }}
+                    placeholder="New password (min 8 characters)"
+                    placeholderTextColor={neutral.gray500}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+                </View>
+
+                <View style={styles.fieldWrap}>
+                  <Ionicons name="lock-closed-outline" size={20} color={neutral.gray400} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={confirmPassword}
+                    onChangeText={(v) => {
+                      setConfirmPassword(v);
+                      if (error) setError(null);
+                    }}
+                    placeholder="Confirm new password"
+                    placeholderTextColor={neutral.gray500}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                    returnKeyType="done"
+                    onSubmitEditing={handleReset}
+                  />
+                </View>
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                <Pressable
+                  style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
+                  onPress={handleReset}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={brand.white} />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Set new password</Text>
+                  )}
                 </Pressable>
+
                 <Pressable
                   style={styles.secondaryButton}
                   onPress={() => {
-                    setSubmitted(false);
+                    setStep('email');
+                    setCode('');
+                    setNewPassword('');
+                    setConfirmPassword('');
                     setError(null);
                   }}
                 >
-                  <Text style={styles.secondaryButtonText}>Use a different email</Text>
+                  <Text style={styles.secondaryButtonText}>Send a new code</Text>
                 </Pressable>
               </>
             ) : (
               <>
                 <Text style={styles.title}>Forgot password?</Text>
                 <Text style={styles.subtitle}>
-                  Enter the email you used to sign up. We’ll send a link to reset
-                  your password.
+                  Enter the email you used to sign up. We’ll send a 6-digit code
+                  to reset your password.
                 </Text>
 
                 <View style={styles.fieldWrap}>
@@ -167,7 +289,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
                   {loading ? (
                     <ActivityIndicator color={brand.white} />
                   ) : (
-                    <Text style={styles.primaryButtonText}>Send reset link</Text>
+                    <Text style={styles.primaryButtonText}>Send reset code</Text>
                   )}
                 </Pressable>
 

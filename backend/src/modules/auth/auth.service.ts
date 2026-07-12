@@ -225,16 +225,61 @@ export class AuthService {
     };
   }
 
+  /**
+   * Code-based reset (no web link): Supabase's resetPasswordForEmail sends
+   * a link to the project Site URL — useless in a mobile-only app (it
+   * pointed at localhost:3000 in prod). Instead we email a 6-digit code
+   * through our own branded transport and verify it in-app.
+   */
   async forgotPassword(email: string) {
-    const supabase = this.supabaseService.getClient();
+    const normalized = email.trim().toLowerCase();
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    // Silent no-op for unknown emails — never leak which addresses exist.
+    const admin = this.supabaseService.getAdminClient();
+    const { data: existing } = await admin
+      .from('users')
+      .select('id')
+      .eq('email', normalized)
+      .maybeSingle();
 
-    if (error) {
-      throw new BadRequestException(error.message);
+    if (existing) {
+      const code = this.signupOtpService.generateCode();
+      // 'reset:' prefix keeps reset codes in their own (contact, type)
+      // slot so they never collide with a signup OTP for the same email.
+      await this.signupOtpService.upsert(`reset:${normalized}`, 'email', code);
+      await this.mailService.sendPasswordReset(normalized, code);
     }
 
-    return { message: 'Password reset email sent' };
+    return { message: 'If an account exists, a reset code has been sent.' };
+  }
+
+  /** Verify the emailed code and set the new password. */
+  async resetPassword(email: string, code: string, newPassword: string) {
+    const normalized = email.trim().toLowerCase();
+
+    // Throws on wrong/expired code; burns the code on success so it
+    // can't be replayed.
+    await this.signupOtpService.verify(`reset:${normalized}`, 'email', code);
+
+    const admin = this.supabaseService.getAdminClient();
+    const { data: user } = await admin
+      .from('users')
+      .select('id')
+      .eq('email', normalized)
+      .maybeSingle();
+    if (!user) {
+      // Same shape as a bad-code failure — no account enumeration.
+      throw new BadRequestException('Invalid or expired code.');
+    }
+
+    const { error } = await admin.auth.admin.updateUserById(user.id, {
+      password: newPassword,
+    });
+    if (error) {
+      throw new BadRequestException('Could not update the password. Try again.');
+    }
+
+    return { message: 'Password updated. You can sign in now.' };
   }
 
   async logout(accessToken: string | null) {

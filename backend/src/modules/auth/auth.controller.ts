@@ -9,6 +9,7 @@ import {
   ResendOtpDto,
   RefreshTokenDto,
   ForgotPasswordDto,
+  ResetPasswordDto,
 } from './dto/verify-email.dto';
 import {
   RequestEmailOtpDto,
@@ -73,9 +74,19 @@ export class AuthController {
   @Post('forgot-password')
   // Email send + enumeration vector: 3/min per IP.
   @Throttle({ default: { ttl: 60_000, limit: 3 } })
-  @ApiOperation({ summary: 'Send password reset email' })
+  @ApiOperation({ summary: 'Email a 6-digit password-reset code' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  // Brute-force vector on the 6-digit code: 5/min per IP (the OTP row
+  // itself also locks after 5 wrong attempts).
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @ApiOperation({ summary: 'Verify the reset code and set a new password' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.email, dto.code, dto.newPassword);
   }
 
   @Post('logout')

@@ -37,8 +37,29 @@ describe('AuthService', () => {
   const mockAdminClient: any = {
     from: jest.fn(),
     auth: {
-      admin: { signOut: jest.fn() },
+      admin: { signOut: jest.fn(), updateUserById: jest.fn() },
     },
+  };
+
+  const mailMock = { sendOtp: jest.fn(), sendPasswordReset: jest.fn() };
+  const otpMock = {
+    requestOtp: jest.fn(),
+    verifyOtp: jest.fn(),
+    createAndSend: jest.fn(),
+    generateCode: jest.fn(),
+    upsert: jest.fn(),
+    verify: jest.fn(),
+  };
+
+  /** users-table lookup chain: .from().select().eq().maybeSingle() */
+  const mockUserLookup = (row: { id: string } | null) => {
+    mockAdminClient.from.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          maybeSingle: jest.fn().mockResolvedValue({ data: row, error: null }),
+        }),
+      }),
+    });
   };
 
   beforeEach(async () => {
@@ -57,15 +78,8 @@ describe('AuthService', () => {
         // Deps added since this spec was first written — mocked so the module
         // resolves; the existing tests exercise the Supabase-based paths only.
         { provide: ConfigService, useValue: { get: jest.fn() } },
-        { provide: MailService, useValue: { sendOtp: jest.fn() } },
-        {
-          provide: SignupOtpService,
-          useValue: {
-            requestOtp: jest.fn(),
-            verifyOtp: jest.fn(),
-            createAndSend: jest.fn(),
-          },
-        },
+        { provide: MailService, useValue: mailMock },
+        { provide: SignupOtpService, useValue: otpMock },
         {
           provide: VerificationTokenService,
           useValue: { issue: jest.fn(), verify: jest.fn(), consume: jest.fn() },
@@ -245,11 +259,65 @@ describe('AuthService', () => {
   });
 
   describe('forgotPassword', () => {
-    it('should send reset email', async () => {
-      mockClient.auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+    it('emails a reset code when the account exists', async () => {
+      mockUserLookup({ id: 'user-1' });
+      otpMock.generateCode.mockReturnValue('123456');
 
-      const result = await service.forgotPassword('test@example.com');
-      expect(result.message).toBe('Password reset email sent');
+      const result = await service.forgotPassword('Test@Example.com');
+      expect(result.message).toBe(
+        'If an account exists, a reset code has been sent.',
+      );
+      expect(otpMock.upsert).toHaveBeenCalledWith(
+        'reset:test@example.com',
+        'email',
+        '123456',
+      );
+      expect(mailMock.sendPasswordReset).toHaveBeenCalledWith(
+        'test@example.com',
+        '123456',
+      );
+    });
+
+    it('silently no-ops for unknown emails (no enumeration)', async () => {
+      mockUserLookup(null);
+
+      const result = await service.forgotPassword('ghost@example.com');
+      expect(result.message).toBe(
+        'If an account exists, a reset code has been sent.',
+      );
+      expect(mailMock.sendPasswordReset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('verifies the code and updates the password', async () => {
+      mockUserLookup({ id: 'user-1' });
+      mockAdminClient.auth.admin.updateUserById.mockResolvedValue({ error: null });
+
+      const result = await service.resetPassword(
+        'test@example.com',
+        '123456',
+        'NewPassw0rd!',
+      );
+      expect(result.message).toBe('Password updated. You can sign in now.');
+      expect(otpMock.verify).toHaveBeenCalledWith(
+        'reset:test@example.com',
+        'email',
+        '123456',
+      );
+      expect(mockAdminClient.auth.admin.updateUserById).toHaveBeenCalledWith(
+        'user-1',
+        { password: 'NewPassw0rd!' },
+      );
+    });
+
+    it('rejects a wrong code without touching the password', async () => {
+      otpMock.verify.mockRejectedValue(new BadRequestException('Invalid code'));
+
+      await expect(
+        service.resetPassword('test@example.com', '000000', 'NewPassw0rd!'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockAdminClient.auth.admin.updateUserById).not.toHaveBeenCalled();
     });
   });
 

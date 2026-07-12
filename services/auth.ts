@@ -68,6 +68,10 @@ export const authService = {
     await api.post("/auth/forgot-password", { email });
   },
 
+  async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    await api.post("/auth/reset-password", { email, code, newPassword });
+  },
+
   // --- OTP-driven signup (backend owns email + creates Supabase user only on completion) ---
 
   async requestEmailOtp(email: string): Promise<void> {
