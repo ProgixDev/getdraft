@@ -259,14 +259,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           (!!me?.bio || !!me?.avatar_url);
         const kycApproved = kyc?.kycStatus === "approved";
         // guardian-done MUST come from the server (the guardian_links row),
-        // not from a client-writable preference. preferences is a free-form
-        // JSONB; a parent could PUT /users/me preferences.dev.guardianSkipped
-        // and walk past the QR + declaration video. The __DEV__ stub on the
-        // scan screen sets a local flag in dev builds only and is honored
-        // by the resume here ONLY in __DEV__ for the same reason.
+        // not from a client-writable preference — preferences is free-form
+        // JSONB and must never gate past the QR + declaration video.
         const guardianDone =
           meRole !== "parent" ||
-          (__DEV__ && !!me?.preferences?.dev?.guardianSkipped) ||
           (guardianLink &&
             (guardianLink.status === "pending_admin" ||
               guardianLink.status === "approved"));

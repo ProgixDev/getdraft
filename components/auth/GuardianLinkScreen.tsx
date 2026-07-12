@@ -38,7 +38,6 @@ import {
     GuardianLink,
     GuardianRelationship,
 } from '@/services/guardianLinks';
-import { usersService } from '@/services/users';
 
 type Step =
     | 'scan'
@@ -158,22 +157,6 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
         setStep('questions');
     }, [scannedToken, busy]);
 
-    /**
-     * Dev-only escape hatch for the QR step. Pretends the scan +
-     * questionnaire succeeded so testers in the simulator can still
-     * walk through the video tutorial + recording UI without a real
-     * athlete account on hand. No link row is created server-side —
-     * the upload step short-circuits when it sees the dev-stub id.
-     */
-    const handleDevSkip = useCallback(() => {
-        if (busy) return;
-        setScannedToken('dev-stub');
-        setRelationship('parent');
-        setAthleteFullName('Demo Athlete');
-        setLink({ id: 'dev-stub', relationship: 'parent', status: 'pending_video' } as GuardianLink);
-        setStep('video-explain');
-    }, [busy]);
-
     // ─── Step 2: questionnaire submit ──────────────────────────────────
     const handleSubmitQuestionnaire = useCallback(async () => {
         if (!scannedToken || !relationship || busy) return;
@@ -249,17 +232,6 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
         if (!link || !recordedUri || busy) return;
         setBusy(true);
         try {
-            // Dev-stub link from the QR-skip path — no real row exists
-            // on the backend. Mark the flag so resume-on-reload doesn't
-            // bounce the parent back here, and jump to the success state.
-            if (link.id === 'dev-stub') {
-                await usersService.updateMe({
-                    preferences: { dev: { guardianSkipped: true, at: new Date().toISOString() } },
-                });
-                setStep('submitted');
-                return;
-            }
-
             // Derive the extension from the recorded file (Android tends to
             // produce .mp4, iOS .mov). Hardcoding .mp4 / video/mp4 on an
             // iOS .mov silently misnamed the object and broke the
@@ -427,8 +399,6 @@ export const GuardianLinkScreen: React.FC<GuardianLinkScreenProps> = ({
                         }}
                         onScanned={handleBarcodeScanned}
                         cameraRef={cameraRef}
-                        onDevSkip={handleDevSkip}
-                        busy={busy}
                     />
                 )}
 
@@ -477,8 +447,6 @@ function ScanStep(props: {
     onRequestPermission: () => Promise<void> | void;
     onScanned: (e: { data: string }) => void;
     cameraRef: React.MutableRefObject<CameraViewType | null>;
-    onDevSkip?: () => void;
-    busy?: boolean;
 }) {
     return (
         <Animated.View entering={FadeIn.duration(400)}>
@@ -521,18 +489,6 @@ function ScanStep(props: {
                 )}
             </View>
 
-            {__DEV__ && props.onDevSkip && (
-                <Pressable
-                    style={styles.devSkipButton}
-                    onPress={props.onDevSkip}
-                    disabled={props.busy}
-                >
-                    <Ionicons name="bug-outline" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.devSkipText}>
-                        {props.busy ? 'Skipping…' : 'Skip in dev (no link)'}
-                    </Text>
-                </Pressable>
-            )}
         </Animated.View>
     );
 }
@@ -1235,21 +1191,6 @@ const styles = StyleSheet.create({
     },
     recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E54B4B' },
     recText: { color: brand.white, fontFamily: 'Poppins_700Bold', fontSize: 10, letterSpacing: 1 },
-    devSkipButton: {
-        marginTop: 14,
-        alignSelf: 'center',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: 'rgba(255,255,255,0.4)',
-    },
-    devSkipText: { fontSize: 11, fontFamily: 'Poppins_500Medium', color: 'rgba(255,255,255,0.7)' },
-
     // ── Approved state — verification seal ─────────────────────────
     sealOuter: {
         width: 96, height: 96, borderRadius: 48,

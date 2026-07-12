@@ -238,23 +238,6 @@ export class UsersService {
     };
   }
 
-  /**
-   * Dev-only escape hatch — flips the current user straight to 'active'
-   * without waiting for a guardian/admin. Mirrors the kyc dev-approve
-   * pattern and is hard-disabled in production. Powers the __DEV__
-   * "skip activation" button on the pending-activation screen.
-   */
-  async devActivate(userId: string): Promise<{ activationStatus: 'active' }> {
-    const env = this.configService.get<string>('NODE_ENV') ?? 'development';
-    if (env === 'production') {
-      throw new BadRequestException('Dev activate is disabled in production.');
-    }
-    const supabase = this.supabaseService.getAdminClient();
-    await setActivationStatus(supabase, userId, 'active');
-    this.logger.warn(`[dev] activation bypassed for user ${userId}`);
-    return { activationStatus: 'active' };
-  }
-
   async getPublicProfile(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
 

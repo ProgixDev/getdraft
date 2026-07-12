@@ -46,15 +46,6 @@ export class KycController {
     return this.kycService.getStatus(userId);
   }
 
-  @Post('dev-approve')
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: '[DEV ONLY] Bypass Didit and mark current user approved.',
-  })
-  devApprove(@CurrentUser('id') userId: string) {
-    return this.kycService.devApprove(userId);
-  }
-
   @Public()
   // Didit retries failed deliveries — throttling here would drop legitimate
   // decision updates. HMAC signature verification is the abuse defense.

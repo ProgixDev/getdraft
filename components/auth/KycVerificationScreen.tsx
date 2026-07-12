@@ -13,7 +13,6 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
-import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import {
   useFonts,
@@ -24,17 +23,10 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, neutral, semantic } from '@/config/colors';
 import { kycService, KycStatus } from '@/services/kyc';
+import { useAppDispatch } from '@/store/hooks';
+import { logoutAsync } from '@/store/slices/authSlice';
 
 WebBrowser.maybeCompleteAuthSession();
-
-// Show the KYC skip in dev builds OR when the app-config flag
-// `extra.allowKycSkip` is true (testing phase only). The backend's
-// /kyc/dev-approve is the real gate (ALLOW_KYC_DEV_SKIP on Railway).
-// MUST be turned off (app.json flag + Railway var) before public launch.
-const ALLOW_KYC_SKIP =
-  __DEV__ ||
-  (Constants.expoConfig?.extra as { allowKycSkip?: boolean } | undefined)
-    ?.allowKycSkip === true;
 
 interface KycVerificationScreenProps {
   onComplete: () => void;
@@ -46,6 +38,7 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
   onBack,
 }) => {
   const insets = useSafeAreaInsets();
+  const dispatch = useAppDispatch();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -56,6 +49,7 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
   const [status, setStatus] = useState<KycStatus>('none');
   const [isStarting, setIsStarting] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -79,6 +73,7 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
 
   const pollStatus = useCallback(async () => {
     setIsPolling(true);
+    setPollTimedOut(false);
     const startedAt = Date.now();
     const TIMEOUT_MS = 45_000;
     const INTERVAL_MS = 2_000;
@@ -98,27 +93,11 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
         pollTimerRef.current = setTimeout(tick, INTERVAL_MS);
       } else {
         setIsPolling(false);
+        setPollTimedOut(true);
       }
     };
     await tick();
   }, []);
-
-  /**
-   * Dev-only skip for the iOS simulator (and any non-prod build). The
-   * backend's /kyc/dev-approve endpoint is itself gated by NODE_ENV so
-   * even if this button leaks into a prod bundle it would be rejected.
-   */
-  const handleDevSkip = useCallback(async () => {
-    if (isStarting || isPolling) return;
-    try {
-      const r = await kycService.devApprove();
-      setStatus(r.kycStatus);
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.message ?? err?.message ?? 'Dev bypass failed.';
-      Alert.alert('Could not skip', String(message));
-    }
-  }, [isStarting, isPolling]);
 
   const handleStart = useCallback(async () => {
     if (isStarting) return;
@@ -142,6 +121,19 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
     }
   }, [isStarting, pollStatus]);
 
+  // Back stays usable while we poll — just cancel the timer on the way out.
+  const handleBack = useCallback(() => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    setIsPolling(false);
+    onBack?.();
+  }, [onBack]);
+
+  // Stuck in manual review — let the user leave and come back later.
+  const handleLogout = useCallback(() => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    dispatch(logoutAsync());
+  }, [dispatch]);
+
   if (!fontsLoaded) return null;
 
   return (
@@ -155,7 +147,7 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
       >
         {onBack && (
           <View style={styles.headerRow}>
-            <Pressable style={styles.backButton} onPress={onBack} disabled={isStarting || isPolling}>
+            <Pressable style={styles.backButton} onPress={handleBack} disabled={isStarting}>
               <Ionicons name="chevron-back" size={22} color={brand.white} />
               <Text style={styles.backText}>Back</Text>
             </Pressable>
@@ -198,7 +190,7 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
             <View style={styles.statusPill}>
               <ActivityIndicator size="small" color={brand.primary} />
               <Text style={styles.statusPillText}>
-                Your verification is in manual review. We'll text you when it's done.
+                Your verification is in manual review. We'll notify you when it's done.
               </Text>
             </View>
           )}
@@ -226,7 +218,11 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
               styles.primaryButton,
               (isStarting || isPolling || status === 'approved') && styles.buttonDisabled,
             ]}
-            onPress={handleStart}
+            // After a poll timeout, re-check the existing session's status —
+            // a fresh Didit session is only for declined (or first) attempts.
+            onPress={
+              pollTimedOut && status !== 'declined' ? pollStatus : handleStart
+            }
             disabled={isStarting || isPolling || status === 'approved'}
           >
             {isStarting ? (
@@ -238,22 +234,24 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
               </>
             ) : status === 'declined' ? (
               <Text style={styles.primaryButtonText}>Try again</Text>
+            ) : pollTimedOut ? (
+              <Text style={styles.primaryButtonText}>Check status again</Text>
             ) : (
               <Text style={styles.primaryButtonText}>Verify with Didit</Text>
             )}
           </Pressable>
+
+          {status === 'in_review' && (
+            <Pressable onPress={handleLogout} style={styles.logoutLink}>
+              <Text style={styles.logoutLinkText}>Finish later — log out</Text>
+            </Pressable>
+          )}
 
           <Text style={styles.legal}>
             Your ID is processed by Didit and never stored on GetDraft's servers.
             We only keep the approval status.
           </Text>
 
-          {ALLOW_KYC_SKIP && status !== 'approved' && (
-            <Pressable style={styles.devSkipButton} onPress={handleDevSkip}>
-              <Ionicons name="bug-outline" size={14} color={neutral.gray500} />
-              <Text style={styles.devSkipText}>Skip verification (dev)</Text>
-            </Pressable>
-          )}
         </Animated.View>
       </ScrollView>
     </LinearGradient>
@@ -404,6 +402,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
   },
+  logoutLink: {
+    marginTop: 14,
+    alignSelf: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  logoutLinkText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: neutral.gray600,
+    textDecorationLine: 'underline',
+  },
   legal: {
     marginTop: 16,
     textAlign: 'center',
@@ -411,24 +421,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: neutral.gray500,
     lineHeight: 16,
-  },
-  devSkipButton: {
-    marginTop: 14,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: neutral.gray300,
-  },
-  devSkipText: {
-    fontSize: 11,
-    fontFamily: 'Poppins_500Medium',
-    color: neutral.gray500,
   },
 });
 

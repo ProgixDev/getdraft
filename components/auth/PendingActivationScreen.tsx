@@ -131,17 +131,6 @@ export function PendingActivationScreen({
     }
   }, [token]);
 
-  const handleDevActivate = useCallback(async () => {
-    try {
-      await usersService.devActivate();
-      await checkActivation();
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ?? err?.message ?? "Dev activate failed.";
-      Alert.alert("Dev activate", String(msg));
-    }
-  }, [checkActivation]);
-
   // Mint the first QR on mount.
   useEffect(() => {
     issueToken();
@@ -264,13 +253,6 @@ export function PendingActivationScreen({
             approved.
           </Text>
         </View>
-
-        {__DEV__ && (
-          <Pressable style={styles.devButton} onPress={handleDevActivate}>
-            <Ionicons name="bug-outline" size={16} color={theme.textSecondary} />
-            <Text style={styles.devButtonText}>[DEV] Skip & activate</Text>
-          </Pressable>
-        )}
 
         <Pressable style={styles.logoutButton} onPress={onLogout}>
           <Text style={styles.logoutText}>Log out</Text>
@@ -425,18 +407,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     fontFamily: "Poppins_400Regular",
-    color: theme.textSecondary,
-  },
-  devButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-  },
-  devButtonText: {
-    fontSize: 12,
-    fontFamily: "Poppins_500Medium",
     color: theme.textSecondary,
   },
   logoutButton: { alignItems: "center", paddingVertical: 8 },

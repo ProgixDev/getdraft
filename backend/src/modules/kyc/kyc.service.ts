@@ -26,33 +26,6 @@ export class KycService {
   ) {}
 
   /**
-   * Dev-only escape hatch — flips the user to approved without going
-   * through Didit. Guarded by NODE_ENV so production never has this.
-   * Used by the simulator/dev-build "Skip verification" button.
-   */
-  async devApprove(userId: string): Promise<{ kycStatus: KycStatus }> {
-    const env = this.configService.get<string>('NODE_ENV') ?? 'development';
-    // Testing override: allow in production ONLY when ALLOW_KYC_DEV_SKIP=true.
-    // MUST be turned off (unset this Railway var) before public launch.
-    const allowOverride =
-      this.configService.get<string>('ALLOW_KYC_DEV_SKIP') === 'true';
-    if (env === 'production' && !allowOverride) {
-      throw new BadRequestException('Dev approve is disabled in production.');
-    }
-    const admin = this.supabaseService.getAdminClient();
-    const { error } = await admin
-      .from('users')
-      .update({
-        kyc_status: 'approved',
-        kyc_completed_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-    if (error) throw new BadRequestException(error.message);
-    this.logger.warn(`[dev] KYC bypassed for user ${userId}`);
-    return { kycStatus: 'approved' };
-  }
-
-  /**
    * Start (or restart) a verification session for the given user. If
    * the user has an existing approved session, we no-op and return the
    * cached info. For 'pending'/'in_review' we return the existing

@@ -15,11 +15,6 @@ export const usersService = {
     await api.delete("/users/me");
   },
 
-  /** [DEV ONLY] Activate the current account without guardian/admin. */
-  async devActivate(): Promise<void> {
-    await api.post("/users/me/dev-activate");
-  },
-
   async completeOnboarding(): Promise<{
     is_onboarded?: boolean;
     activation_status?: "active" | "pending_guardian";

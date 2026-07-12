@@ -56,15 +56,6 @@ export class UsersController {
     return this.usersService.completeOnboarding(userId);
   }
 
-  @Post('me/dev-activate')
-  @AllowPending()
-  @ApiOperation({
-    summary: '[DEV ONLY] Activate current account without guardian/admin.',
-  })
-  devActivate(@CurrentUser('id') userId: string) {
-    return this.usersService.devActivate(userId);
-  }
-
   @Get('me/blocks')
   @ApiOperation({ summary: 'List users I have blocked' })
   listMyBlocks(@CurrentUser('id') userId: string) {
