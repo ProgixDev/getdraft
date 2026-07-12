@@ -161,13 +161,17 @@ function StatColumn({
 // ── Main ──
 interface SplashExperienceProps {
   onAnimationComplete?: () => void;
-  fadeInDuration?: number;
-  animationDelay?: number;
-  displayDuration?: number;
+  /**
+   * Logo-only fast path for returning (signed-in + onboarded) users:
+   * finishes right after the logo beat (~2.6s) and never mounts the
+   * globe WebView or the stats reel.
+   */
+  short?: boolean;
 }
 
 export const SplashExperience: React.FC<SplashExperienceProps> = ({
   onAnimationComplete,
+  short = false,
 }) => {
   useFonts({ Poppins_500Medium, Poppins_700Bold, Poppins_800ExtraBold });
 
@@ -266,10 +270,13 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
       withTiming(0, { duration: FADE_OUT_DURATION }),
     );
 
-    // ── FINISH ──
-    const timer = setTimeout(() => {
-      onAnimationComplete?.();
-    }, FINISH);
+    // ── FINISH ── (short = logo beat only, for returning users)
+    const timer = setTimeout(
+      () => {
+        onAnimationComplete?.();
+      },
+      short ? LOGO_TOTAL + 150 : FINISH,
+    );
 
     return () => clearTimeout(timer);
   }, []);
@@ -299,7 +306,9 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
         />
       </View>
 
-      {/* Content that fades out together at the end */}
+      {/* Content that fades out together at the end (never mounted on the
+          short path — avoids the globe WebView + its CDN fetch entirely) */}
+      {!short && (
       <Animated.View
         style={[StyleSheet.absoluteFill, fadeStyle]}
         pointerEvents="box-none"
@@ -348,11 +357,13 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
         {/* Skip */}
         <Pressable
           style={styles.skipButton}
+          hitSlop={12}
           onPress={() => onAnimationComplete?.()}
         >
           <Text style={styles.skipText}>Skip</Text>
         </Pressable>
       </Animated.View>
+      )}
     </View>
   );
 };

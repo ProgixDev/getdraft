@@ -167,6 +167,12 @@ function RootLayoutContent() {
   }, [appState, isAuthenticated]);
 
   const handleSplashComplete = useCallback(() => {
+    // Returning users (signed in + onboarded) skip the welcome carousel
+    // entirely — logo beat → straight into the app.
+    if (isAuthenticated && isOnboarded) {
+      setAppState("app");
+      return;
+    }
     transitionOpacity.value = 1;
     setIsTransitioning(true);
     setAppState("welcome");
@@ -176,7 +182,7 @@ function RootLayoutContent() {
     setTimeout(() => {
       setIsTransitioning(false);
     }, 900);
-  }, []);
+  }, [isAuthenticated, isOnboarded]);
 
   const handleWelcomeComplete = useCallback(() => {
     // After the intro: a fully-onboarded signed-in user goes straight into
@@ -202,14 +208,13 @@ function RootLayoutContent() {
     );
   }
 
-  // Show splash screen on initial load
+  // Show splash screen on initial load. Returning users get the
+  // logo-only fast path (~2.6s, no globe/stats).
   if (appState === "splash") {
     return (
       <SplashScreen
         onAnimationComplete={handleSplashComplete}
-        fadeInDuration={800}
-        animationDelay={200}
-        displayDuration={2500}
+        short={isAuthenticated && isOnboarded}
       />
     );
   }
@@ -218,7 +223,8 @@ function RootLayoutContent() {
   if (appState === "welcome") {
     return (
       <View style={{ flex: 1 }}>
-        <StatusBar style="light" />
+        {/* Welcome slides are light-background — dark status icons */}
+        <StatusBar style="dark" />
         <WelcomeScreen onComplete={handleWelcomeComplete} />
         {isTransitioning && (
           <Animated.View

@@ -24,7 +24,7 @@
       "package": "com.getdraft.app",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#121212",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -95,7 +95,6 @@
     },
     "extra": {
       "router": {},
-      "allowKycSkip": false,
       "eas": {
         "projectId": "5caaadb2-fc65-404a-87ef-cca68dde9138"
       },
