@@ -32,18 +32,13 @@ if (Platform.OS === "android") {
     () => () => new Promise<void>(() => {}),
   );
 }
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-} from "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { theme } from "@/config/colors";
 import { store, RootState } from "@/store";
 import { useAppDispatch } from "@/store/hooks";
-import { SplashScreen, WelcomeScreen } from "@/components";
+import { WelcomeScreen } from "@/components";
 import { AuthLanding, PendingActivationScreen } from "@/components/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
@@ -62,7 +57,7 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-type AppState = "loading" | "splash" | "welcome" | "auth" | "app";
+type AppState = "loading" | "welcome" | "auth" | "app";
 
 function RootLayoutContent() {
   const colorScheme = useColorScheme();
@@ -74,8 +69,6 @@ function RootLayoutContent() {
   const user = useSelector((state: RootState) => state.auth.user);
 
   const [appState, setAppState] = useState<AppState>("loading");
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const transitionOpacity = useSharedValue(1);
 
   // Register the Expo push token + handle notification taps once the
   // user is authenticated. Physical device required.
@@ -111,17 +104,20 @@ function RootLayoutContent() {
   // skip straight to home and leave them unverified.
   useEffect(() => {
     loadAuth().then((persisted) => {
-      // Restore any saved session into Redux, but ALWAYS open on the logo
-      // splash → welcome intro. Where we land AFTER the intro is decided in
-      // handleWelcomeComplete from the restored auth state — so a returning
-      // user (or a leftover, not-yet-cleared session) still sees the branded
-      // intro on a cold launch instead of being dropped onto the auth landing.
+      // No JS splash step: the native splash (G/D logo) covers the load,
+      // and the Welcome carousel opens with the logo anyway. Returning
+      // fully-onboarded users go straight into the app; everyone else
+      // lands on the welcome intro.
       if (persisted?.user) {
         dispatch(
           login({ user: persisted.user, isOnboarded: persisted.isOnboarded }),
         );
+        if (persisted.isOnboarded) {
+          setAppState("app");
+          return;
+        }
       }
-      setAppState("splash");
+      setAppState("welcome");
     });
   }, [dispatch]);
 
@@ -166,24 +162,6 @@ function RootLayoutContent() {
     }
   }, [appState, isAuthenticated]);
 
-  const handleSplashComplete = useCallback(() => {
-    // Returning users (signed in + onboarded) skip the welcome carousel
-    // entirely — logo beat → straight into the app.
-    if (isAuthenticated && isOnboarded) {
-      setAppState("app");
-      return;
-    }
-    transitionOpacity.value = 1;
-    setIsTransitioning(true);
-    setAppState("welcome");
-    setTimeout(() => {
-      transitionOpacity.value = withTiming(0, { duration: 800 });
-    }, 50);
-    setTimeout(() => {
-      setIsTransitioning(false);
-    }, 900);
-  }, [isAuthenticated, isOnboarded]);
-
   const handleWelcomeComplete = useCallback(() => {
     // After the intro: a fully-onboarded signed-in user goes straight into
     // the app; everyone else (logged out, or mid-signup) lands on the auth
@@ -195,27 +173,12 @@ function RootLayoutContent() {
     setAppState("app");
   }, []);
 
-  const transitionStyle = useAnimatedStyle(() => ({
-    opacity: transitionOpacity.value,
-  }));
-
   // Show loading while checking persisted auth
   if (appState === "loading") {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#FFFFFF" />
       </View>
-    );
-  }
-
-  // Show splash screen on initial load. Returning users get the
-  // logo-only fast path (~2.6s, no globe/stats).
-  if (appState === "splash") {
-    return (
-      <SplashScreen
-        onAnimationComplete={handleSplashComplete}
-        short={isAuthenticated && isOnboarded}
-      />
     );
   }
 
@@ -226,12 +189,6 @@ function RootLayoutContent() {
         {/* Welcome slides are light-background — dark status icons */}
         <StatusBar style="dark" />
         <WelcomeScreen onComplete={handleWelcomeComplete} />
-        {isTransitioning && (
-          <Animated.View
-            style={[styles.transitionOverlay, transitionStyle]}
-            pointerEvents="none"
-          />
-        )}
       </View>
     );
   }
@@ -337,10 +294,6 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#0A0A0A",
-  },
-  transitionOverlay: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: "#0A0A0A",
   },
 });
