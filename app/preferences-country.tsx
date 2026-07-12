@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -184,7 +186,10 @@ export default function PreferencesCountryScreen() {
       colors={["#0A1830", "#10294A", "#0A1830"]}
       style={styles.container}
     >
-      <View style={[styles.content, { paddingTop: insets.top + 8 }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={[styles.content, { paddingTop: insets.top + 8 }]}
+      >
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={20} color={brand.white} />
@@ -299,7 +304,7 @@ export default function PreferencesCountryScreen() {
             <Ionicons name="arrow-forward" size={18} color={theme.accentText} />
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Modal,
   Pressable,
@@ -118,6 +119,8 @@ function OptionPickerModal({
   onSelect: (value: string) => void;
   emptyHint?: string;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal
       visible={visible}
@@ -127,7 +130,7 @@ function OptionPickerModal({
     >
       <View style={styles.modalRoot}>
         <Pressable style={styles.modalBackdrop} onPress={onClose} />
-        <View style={styles.modalSheet}>
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
             <Pressable onPress={onClose} style={styles.modalCloseButton}>
@@ -349,6 +352,21 @@ export default function PreferencesScreen() {
       (option) => option.value === preferences.athleteLevel,
     )?.label ?? "Any Athletic Level";
 
+  const handleReset = () => {
+    Alert.alert(
+      "Reset filters?",
+      "This restores every discovery filter to its default.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => dispatch(resetDiscoverPreferences()),
+        },
+      ],
+    );
+  };
+
   if (!fontsLoaded) return null;
 
   return (
@@ -522,7 +540,7 @@ export default function PreferencesScreen() {
             styles.resetButton,
             pressed && styles.rowPressed,
           ]}
-          onPress={() => dispatch(resetDiscoverPreferences())}
+          onPress={handleReset}
         >
           <Text style={styles.resetButtonText}>Reset</Text>
         </Pressable>
@@ -793,7 +811,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 16,
   },
   modalHeader: {
     flexDirection: "row",

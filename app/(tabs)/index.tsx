@@ -14,7 +14,6 @@ import {
   Image,
   ScrollView,
   useWindowDimensions,
-  Alert,
   BackHandler,
   ActivityIndicator,
 } from "react-native";
@@ -479,6 +478,15 @@ export default function DiscoverScreen() {
   // preference/filter change in the effect below.
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const isFetchingMoreRef = useRef(false);
+  // Ids already swiped this session. The deck source is pruned against this
+  // set on every search/preference reset (and fresh fetches are filtered), so
+  // an already-actioned profile can never resurface and double-spend quota.
+  const swipedIdsRef = useRef<Set<string>>(new Set());
+  // Network-failure flag for the initial feed fetch — renders a distinct
+  // "Couldn't load" state (with Retry) instead of the terminal empty state.
+  const [feedError, setFeedError] = useState(false);
+  // Bumped by the Retry button to re-run the feed fetch effect.
+  const [fetchNonce, setFetchNonce] = useState(0);
   const [lastSwipe, setLastSwipe] = useState<LastSwipe>(null);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     visible: false,
@@ -528,6 +536,7 @@ export default function DiscoverScreen() {
   useEffect(() => {
     if (isParent) return;
     setApiCards(null); // null = loading
+    setFeedError(false);
     discoverService
       .getFeed({
         sport: preferences.sport !== "all" ? preferences.sport : undefined,
@@ -550,23 +559,30 @@ export default function DiscoverScreen() {
         verifiedRecruitersOnly: preferences.verifiedRecruitersOnly || undefined,
       })
       .then((res) => {
-        setApiCards(res.cards);
+        // Belt-and-braces: drop anything the user already actioned this
+        // session so a refetch can never resurface a swiped profile.
+        const cards = (res.cards || []).filter(
+          (c: any) => !swipedIdsRef.current.has(c.id),
+        );
+        setApiCards(cards);
         setSwipesRemaining(res.swipesRemaining);
         setNextCursor(res.hasMore ? (res.nextCursor ?? null) : null);
         // Prefetch every card's image up front so browsing to neighbor cards is
         // instant (no per-card network wait). Only ~5-9 small images.
-        const urls = (res.cards || [])
+        const urls = cards
           .map((c: any) => c.imageUrl || c.photos?.[0])
           .filter((u: any) => typeof u === "string");
         if (urls.length) ExpoImage.prefetch(urls);
       })
       .catch(() => {
-        // No mock fallback — show the empty state when the backend is unreachable.
+        // No mock fallback — flag the failure so the UI shows a "Couldn't
+        // load" + Retry state instead of the terminal empty state.
+        setFeedError(true);
         setApiCards([]);
         setSwipesRemaining(null);
         setNextCursor(null);
       });
-  }, [isParent, preferences]);
+  }, [isParent, preferences, fetchNonce]);
 
   // Fetch the next page. De-duped by id so a row that appears on two pages
   // (the boundary row is `<= cursor` on one side, never the other — but if
@@ -603,7 +619,9 @@ export default function DiscoverScreen() {
         setApiCards((prev) => {
           const base = prev ?? [];
           const seen = new Set(base.map((c: any) => c.id));
-          const fresh = (res.cards || []).filter((c: any) => !seen.has(c.id));
+          const fresh = (res.cards || []).filter(
+            (c: any) => !seen.has(c.id) && !swipedIdsRef.current.has(c.id),
+          );
           return [...base, ...fresh];
         });
         setSwipesRemaining(res.swipesRemaining);
@@ -641,6 +659,13 @@ export default function DiscoverScreen() {
   }, [apiCards, searchQuery]);
 
   useEffect(() => {
+    // Prune already-swiped profiles BEFORE resetting the index — resetting to
+    // 0 over the raw array would resurface actioned cards (quota double-spend).
+    setApiCards((prev) => {
+      if (!prev) return prev;
+      const pruned = prev.filter((c: any) => !swipedIdsRef.current.has(c.id));
+      return pruned.length === prev.length ? prev : pruned;
+    });
     setCurrentIndex(0);
     setSwipeLock(false);
     setPendingAction(null);
@@ -709,6 +734,7 @@ export default function DiscoverScreen() {
       "";
     const targetId = current?.id;
     if (targetId) {
+      swipedIdsRef.current.add(targetId);
       discoverService.swipe(targetId, "pass").catch(() => {});
     }
     setLastSwipe({ index: cur, action: "pass", name });
@@ -754,6 +780,7 @@ export default function DiscoverScreen() {
     setLastSwipe({ index: cur, action: "draft", name });
 
     if (targetId) {
+      swipedIdsRef.current.add(targetId);
       discoverService
         .swipe(targetId, "draft")
         .then((res) => {
@@ -777,6 +804,13 @@ export default function DiscoverScreen() {
         })
         .catch((err: any) => {
           const status = err?.response?.status;
+          // The Draft did NOT land — restore the deck to this card so the
+          // profile isn't silently consumed, and let it resurface later.
+          swipedIdsRef.current.delete(targetId);
+          setLastSwipe(null);
+          focusedIndexSV.value = cur;
+          carouselTranslateX.value = 0;
+          setCurrentIndex(cur);
           // Monthly Draft quota exhausted (backend rejects the Draft). Don't
           // fake a "Drafted" — surface the out-of-Drafts lock + upgrade CTA.
           if (status === 429 || status === 403) {
@@ -788,11 +822,11 @@ export default function DiscoverScreen() {
             });
             return;
           }
-          // Honest copy on transient network error — no fake "Game On!"
+          // Honest copy on transient network error — no fake "Drafted".
           setSnackbar({
             visible: true,
-            message: name ? `Drafted ${name}` : "Drafted",
-            canUndo: true,
+            message: "Couldn't send Draft — check your connection",
+            canUndo: false,
           });
         });
     } else {
@@ -918,6 +952,12 @@ export default function DiscoverScreen() {
   const goToSubscription = useCallback(() => {
     router.push("/subscription");
   }, [router]);
+
+  // Re-run the feed fetch after a network failure (nonce is a fetch-effect dep).
+  const retryFeed = useCallback(() => {
+    setFeedError(false);
+    setFetchNonce((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!matchOverlay.visible) return;
@@ -1066,9 +1106,9 @@ export default function DiscoverScreen() {
             )}
           <Pressable
             style={styles.notifyButton}
-            onPress={() =>
-              Alert.alert("Notifications", "No new notifications.")
-            }
+            onPress={() => router.push("/(tabs)/matches")}
+            accessibilityRole="button"
+            accessibilityLabel="Open your Draft Board"
           >
             <Ionicons
               name="notifications-outline"
@@ -1180,6 +1220,29 @@ export default function DiscoverScreen() {
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color={sportTheme.accent} />
               <Text style={styles.emptySubtitle}>Loading profiles…</Text>
+            </View>
+          ) : feedError ? (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="cloud-offline-outline"
+                size={64}
+                color={sportTheme.accent}
+              />
+              <Text style={styles.emptyTitle}>Couldn't load profiles</Text>
+              <Text style={styles.emptySubtitle}>
+                Check your connection and try again.
+              </Text>
+              <Pressable
+                style={styles.emptyAdjustButton}
+                onPress={retryFeed}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={16}
+                  color={theme.accentText}
+                />
+                <Text style={styles.emptyAdjustButtonText}>Retry</Text>
+              </Pressable>
             </View>
           ) : (
             <View style={styles.emptyState}>
@@ -1359,7 +1422,9 @@ export default function DiscoverScreen() {
       <Snackbar
         visible={snackbar.visible}
         message={snackbar.message}
-        canUndo={snackbar.canUndo && !!lastSwipe}
+        // UNDO removed — the swipe API call has already been sent by the time
+        // the snackbar shows, so offering an undo would be a false promise.
+        canUndo={false}
         onUndo={handleUndo}
         onHide={hideSnackbar}
         bottomOffset={insets.bottom + 96}

@@ -71,6 +71,10 @@ export default function SubscriptionScreen() {
 
   const [apiSub, setApiSub] = useState<ApiSubscription | null>(null);
   const [loading, setLoading] = useState(true);
+  // True when the fetch itself failed — distinct from "no subscription"
+  // (a successful null response), so a paying user never sees "Basic/Free"
+  // just because the request errored.
+  const [loadError, setLoadError] = useState(false);
   // Generic pending key: planId for upgrades, 'cancel'/'resume' for manage actions, 'buy-swipes' for nav.
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
@@ -80,8 +84,9 @@ export default function SubscriptionScreen() {
     try {
       const data = await subscriptionsService.getMySubscription();
       setApiSub(data ?? null);
+      setLoadError(false);
     } catch {
-      setApiSub(null);
+      setLoadError(true);
     }
   }, []);
 
@@ -90,12 +95,20 @@ export default function SubscriptionScreen() {
       let cancelled = false;
       setLoading(true);
       subscriptionsService.getMySubscription()
-        .then((data) => { if (!cancelled) setApiSub(data ?? null); })
-        .catch(() => { if (!cancelled) setApiSub(null); })
+        .then((data) => {
+          if (!cancelled) { setApiSub(data ?? null); setLoadError(false); }
+        })
+        .catch(() => { if (!cancelled) setLoadError(true); })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
     }, []),
   );
+
+  const handleRetry = useCallback(async () => {
+    setLoading(true);
+    await refresh();
+    setLoading(false);
+  }, [refresh]);
 
   /**
    * Upgrade via Stripe's native Payment Sheet (same flow as signup) —
@@ -230,6 +243,14 @@ export default function SubscriptionScreen() {
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={theme.text} />
         </View>
+      ) : loadError && !apiSub ? (
+        <View style={styles.errorWrap}>
+          <Ionicons name="cloud-offline-outline" size={40} color={theme.textMuted} />
+          <Text style={styles.errorText}>Couldn't load your plan.</Text>
+          <Pressable style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
       ) : (
         <ScrollView
           style={styles.scroll}
@@ -356,14 +377,14 @@ export default function SubscriptionScreen() {
             );
           })}
 
-          {/* Buy more swipes — always shown so free users can top up too. */}
+          {/* Buy more Drafts — always shown so free users can top up too. */}
           <Pressable
             style={[styles.swipePackButton, pendingAction !== null && styles.upgradeButtonDisabled]}
             onPress={goToBuySwipes}
             disabled={pendingAction !== null}
           >
             <Ionicons name="add-circle-outline" size={18} color={theme.accentText} />
-            <Text style={styles.swipePackButtonText}>Buy more swipes</Text>
+            <Text style={styles.swipePackButtonText}>Buy more Drafts</Text>
           </Pressable>
 
           {/* Cancel / resume (paid plans only) */}
@@ -428,6 +449,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    fontSize: 15,
+    fontFamily: 'Poppins_500Medium',
+    color: theme.textSecondary,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 4,
+    height: 44,
+    borderRadius: 22,
+    paddingHorizontal: 28,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: theme.accentText,
   },
   scroll: {
     flex: 1,

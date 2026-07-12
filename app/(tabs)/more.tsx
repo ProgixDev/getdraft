@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, Text, Pressable, Alert, Image } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Text,
+  Pressable,
+  Alert,
+  Image,
+  ScrollView,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
@@ -190,78 +198,88 @@ export default function MoreScreen() {
         <Text style={styles.title}>More</Text>
       </View>
 
-      {user && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.userCard,
-            !isAdmin && pressed && styles.menuItemPressed,
-          ]}
-          // Admin has no dedicated profile screen — their identity is shown
-          // right here and logout is below, so the card is a static info
-          // panel for them instead of a link that would only bounce back to
-          // the dashboard.
-          onPress={isAdmin ? undefined : () => router.push("/(tabs)/profile")}
-        >
-          <View style={styles.userAvatar}>
-            {avatarUrl ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                style={styles.userAvatarImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Ionicons name="person" size={28} color={brand.white} />
-            )}
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>{user.name ?? "User"}</Text>
-            <Text style={styles.userEmail}>{user.email}</Text>
-            <View style={styles.userRoleBadge}>
-              <Text style={styles.userRoleText}>{roleLabel}</Text>
-            </View>
-          </View>
-          {!isAdmin && (
-            <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
-          )}
-        </Pressable>
-      )}
-
-      <View style={styles.menuCard}>
-        {menuItems.map((item, idx) => (
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {user && (
           <Pressable
-            key={item.label}
+            style={({ pressed }) => [
+              styles.userCard,
+              !isAdmin && pressed && styles.menuItemPressed,
+            ]}
+            // Admin has no dedicated profile screen — their identity is shown
+            // right here and logout is below, so the card is a static info
+            // panel for them instead of a link that would only bounce back to
+            // the dashboard.
+            onPress={isAdmin ? undefined : () => router.push("/(tabs)/profile")}
+          >
+            <View style={styles.userAvatar}>
+              {avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.userAvatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="person" size={28} color={brand.white} />
+              )}
+            </View>
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>{user.name ?? "User"}</Text>
+              <Text style={styles.userEmail}>{user.email}</Text>
+              <View style={styles.userRoleBadge}>
+                <Text style={styles.userRoleText}>{roleLabel}</Text>
+              </View>
+            </View>
+            {!isAdmin && (
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.textMuted}
+              />
+            )}
+          </Pressable>
+        )}
+
+        <View style={styles.menuCard}>
+          {menuItems.map((item, idx) => (
+            <Pressable
+              key={item.label}
+              style={({ pressed }) => [
+                styles.menuItem,
+                idx === menuItems.length - 1 && styles.menuItemLast,
+                pressed && styles.menuItemPressed,
+              ]}
+              onPress={item.onPress}
+            >
+              <Ionicons name={item.icon as any} size={22} color={theme.text} />
+              <Text style={styles.menuLabel}>{item.label}</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={theme.textMuted}
+              />
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.logoutCard}>
+          <Pressable
             style={({ pressed }) => [
               styles.menuItem,
-              idx === menuItems.length - 1 && styles.menuItemLast,
+              styles.menuItemLast,
               pressed && styles.menuItemPressed,
             ]}
-            onPress={item.onPress}
+            onPress={handleLogout}
           >
-            <Ionicons name={item.icon as any} size={22} color={theme.text} />
-            <Text style={styles.menuLabel}>{item.label}</Text>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={theme.textMuted}
-            />
+            <Ionicons name="log-out-outline" size={22} color={semantic.error} />
+            <Text style={styles.logoutLabel}>Log out</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
           </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.logoutCard}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.menuItem,
-            styles.menuItemLast,
-            pressed && styles.menuItemPressed,
-          ]}
-          onPress={handleLogout}
-        >
-          <Ionicons name="log-out-outline" size={22} color={semantic.error} />
-          <Text style={styles.logoutLabel}>Log out</Text>
-          <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
-        </Pressable>
-      </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -282,6 +300,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: "Poppins_600SemiBold",
     color: theme.text,
+  },
+  scroll: {
+    flex: 1,
   },
   userCard: {
     flexDirection: "row",

@@ -8,8 +8,10 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { useSelector } from "react-redux";
@@ -56,6 +58,13 @@ interface SentRow {
   swiped: PeerSummary;
   created_at: string;
   matched: boolean;
+}
+
+interface OutreachMessage {
+  id: string;
+  sender_id: string;
+  text: string;
+  created_at: string;
 }
 
 function formatMessageTime(iso?: string | null): string {
@@ -108,6 +117,8 @@ export default function MatchesScreen() {
   );
   const [athleteMatches, setAthleteMatches] = useState<AthleteMatch[]>([]);
   const [parentMessages, setParentMessages] = useState<RecruiterParentOutreach[]>([]);
+  const [activeOutreach, setActiveOutreach] =
+    useState<RecruiterParentOutreach | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [inbox, setInbox] = useState<ConversationItem[]>([]);
@@ -228,10 +239,15 @@ export default function MatchesScreen() {
     [],
   );
 
+  // Fetch the inbox on every focus — not just when the Messages view is
+  // open — so the unread badge on the Messages pill is fresh immediately.
   useFocusEffect(
     useCallback(() => {
-      if (view !== "messages") return;
-      loadInbox(inboxLoadedOnce.current ? "silent" : "initial");
+      if (view === "messages" && !inboxLoadedOnce.current) {
+        loadInbox("initial");
+      } else {
+        loadInbox("silent");
+      }
     }, [view, loadInbox]),
   );
 
@@ -515,18 +531,45 @@ export default function MatchesScreen() {
           onWithdraw={handleWithdraw}
           onDiscover={() => router.replace("/(tabs)")}
         />
+      ) : isParent && activeOutreach ? (
+        <OutreachThread
+          outreach={activeOutreach}
+          userId={user?.id}
+          insetsBottom={insets.bottom}
+          onBack={() => {
+            setActiveOutreach(null);
+            // Opening the thread marks its messages read server-side —
+            // refresh the list so unread counts update immediately.
+            loadPrimary();
+          }}
+        />
       ) : loading ? (
         <View style={styles.content}>
           <ActivityIndicator size="large" color={theme.text} />
         </View>
       ) : error ? (
-        <View style={styles.content}>
-          <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
-          <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
-          <Text style={styles.emptySubtitle}>
-            Check your connection and try again.
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.emptyScroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={loadPrimary}
+              tintColor={theme.text}
+            />
+          }
+        >
+          <View style={styles.content}>
+            <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
+            <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
+            <Text style={styles.emptySubtitle}>
+              Check your connection and try again.
+            </Text>
+            <Pressable style={styles.discoverButton} onPress={loadPrimary}>
+              <Ionicons name="refresh" size={18} color={theme.accentText} />
+              <Text style={styles.discoverButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       ) : isParent ? (
         <ScrollView
           style={styles.scroll}
@@ -558,6 +601,9 @@ export default function MatchesScreen() {
             </View>
           ) : (
             <View style={styles.list}>
+              {/* Outreach threads are NOT match chats — /chat/[threadId]
+                  expects a match id and breaks on outreach ids. Open the
+                  in-screen outreach thread view instead. */}
               {parentMessages.map((message) => (
                 <Pressable
                   key={message.id}
@@ -565,12 +611,7 @@ export default function MatchesScreen() {
                     styles.card,
                     pressed && styles.cardPressed,
                   ]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/chat/[threadId]",
-                      params: { threadId: message.id },
-                    })
-                  }
+                  onPress={() => setActiveOutreach(message)}
                 >
                   <View style={styles.cardTopRow}>
                     <View style={styles.senderWrap}>
@@ -898,13 +939,28 @@ function ReceivedList({
   }
   if (error) {
     return (
-      <View style={styles.content}>
-        <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
-        <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
-        <Text style={styles.emptySubtitle}>
-          Check your connection and try again.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.emptyScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.text}
+          />
+        }
+      >
+        <View style={styles.content}>
+          <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
+          <Text style={styles.emptySubtitle}>
+            Check your connection and try again.
+          </Text>
+          <Pressable style={styles.discoverButton} onPress={onRefresh}>
+            <Ionicons name="refresh" size={18} color={theme.accentText} />
+            <Text style={styles.discoverButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
     );
   }
   if (rows.length === 0) {
@@ -1040,13 +1096,28 @@ function SentList({
   }
   if (error) {
     return (
-      <View style={styles.content}>
-        <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
-        <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
-        <Text style={styles.emptySubtitle}>
-          Check your connection and try again.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.emptyScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.text}
+          />
+        }
+      >
+        <View style={styles.content}>
+          <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
+          <Text style={styles.emptySubtitle}>
+            Check your connection and try again.
+          </Text>
+          <Pressable style={styles.discoverButton} onPress={onRefresh}>
+            <Ionicons name="refresh" size={18} color={theme.accentText} />
+            <Text style={styles.discoverButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
     );
   }
   if (rows.length === 0) {
@@ -1165,21 +1236,47 @@ function MessagesInbox({
   }
   if (error) {
     return (
-      <View style={styles.content}>
-        <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
-        <Text style={styles.emptyTitle}>Couldn&apos;t load messages</Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.emptyScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.text}
+          />
+        }
+      >
+        <View style={styles.content}>
+          <Ionicons name="warning-outline" size={64} color={theme.textMuted} />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load messages</Text>
+          <Pressable style={styles.discoverButton} onPress={onRefresh}>
+            <Ionicons name="refresh" size={18} color={theme.accentText} />
+            <Text style={styles.discoverButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
     );
   }
   if (inbox.length === 0) {
     return (
-      <View style={styles.content}>
-        <Ionicons name="mail-outline" size={64} color={theme.textMuted} />
-        <Text style={styles.emptyTitle}>No messages yet</Text>
-        <Text style={styles.emptySubtitle}>
-          Chats open once you match — draft someone and have them draft you back.
-        </Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.emptyScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.text}
+          />
+        }
+      >
+        <View style={styles.content}>
+          <Ionicons name="mail-outline" size={64} color={theme.textMuted} />
+          <Text style={styles.emptyTitle}>No messages yet</Text>
+          <Text style={styles.emptySubtitle}>
+            Chats open once you match — draft someone and have them draft you back.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
   return (
@@ -1252,6 +1349,215 @@ function MessagesInbox({
         </Pressable>
       ))}
     </ScrollView>
+  );
+}
+
+// In-screen outreach thread for parents. Outreach conversations live in
+// their own tables (outreach_messages) and must NOT be opened through
+// /chat/[threadId], which only understands match ids. Fetching messages
+// also marks them read server-side.
+function OutreachThread({
+  outreach,
+  userId,
+  insetsBottom,
+  onBack,
+}: {
+  outreach: RecruiterParentOutreach;
+  userId?: string;
+  insetsBottom: number;
+  onBack: () => void;
+}) {
+  const [messages, setMessages] = useState<OutreachMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const load = useCallback(
+    async (mode: "initial" | "refresh") => {
+      if (mode === "initial") setLoading(true);
+      if (mode === "refresh") setRefreshing(true);
+      setError(false);
+      try {
+        const rows = await outreachService.getMessages(outreach.id);
+        setMessages(Array.isArray(rows) ? (rows as OutreachMessage[]) : []);
+      } catch {
+        setError(true);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [outreach.id],
+  );
+
+  useEffect(() => {
+    load("initial");
+  }, [load]);
+
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      const row = await outreachService.sendMessage(outreach.id, text);
+      setMessages((prev) => [...prev, row as OutreachMessage]);
+      setDraft("");
+    } catch (e: any) {
+      Alert.alert(
+        "Couldn't send",
+        e?.response?.data?.message || "Please try again.",
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.threadHeader}>
+        <Pressable style={styles.threadBackButton} onPress={onBack}>
+          <Ionicons name="chevron-back" size={22} color={theme.text} />
+        </Pressable>
+        <View style={styles.threadTitleWrap}>
+          <View style={styles.threadTitleRow}>
+            <Text style={styles.threadTitle} numberOfLines={1}>
+              {outreach.recruiterName}
+            </Text>
+            {outreach.verified && (
+              <Ionicons
+                name="checkmark-circle"
+                size={15}
+                color={semantic.success}
+              />
+            )}
+          </View>
+          <Text style={styles.threadSubtitle} numberOfLines={1}>
+            {[outreach.recruiterRole, outreach.organization]
+              .filter(Boolean)
+              .join(" • ")}
+          </Text>
+        </View>
+      </View>
+
+      {loading ? (
+        <View style={styles.content}>
+          <ActivityIndicator size="large" color={theme.text} />
+        </View>
+      ) : error ? (
+        <ScrollView
+          contentContainerStyle={styles.emptyScroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => load("refresh")}
+              tintColor={theme.text}
+            />
+          }
+        >
+          <View style={styles.content}>
+            <Ionicons
+              name="warning-outline"
+              size={64}
+              color={theme.textMuted}
+            />
+            <Text style={styles.emptyTitle}>Couldn&apos;t load messages</Text>
+            <Text style={styles.emptySubtitle}>
+              Check your connection and try again.
+            </Text>
+            <Pressable
+              style={styles.discoverButton}
+              onPress={() => load("initial")}
+            >
+              <Ionicons name="refresh" size={18} color={theme.accentText} />
+              <Text style={styles.discoverButtonText}>Retry</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      ) : (
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.threadContent}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() =>
+            scrollRef.current?.scrollToEnd({ animated: false })
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => load("refresh")}
+              tintColor={theme.text}
+            />
+          }
+        >
+          {messages.map((m) => {
+            const mine = m.sender_id === userId;
+            return (
+              <View
+                key={m.id}
+                style={[
+                  styles.bubbleRow,
+                  mine ? styles.bubbleRowRight : styles.bubbleRowLeft,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.bubble,
+                    mine ? styles.mineBubble : styles.theirBubble,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.bubbleText,
+                      mine ? styles.mineBubbleText : styles.theirBubbleText,
+                    ]}
+                  >
+                    {m.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.bubbleTime,
+                      mine ? styles.mineBubbleTime : styles.theirBubbleTime,
+                    ]}
+                  >
+                    {formatTimeAgo(m.created_at)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+        <View style={[styles.composer, { paddingBottom: insetsBottom + 10 }]}>
+          <View style={styles.composerInputWrap}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Type a message..."
+              placeholderTextColor={theme.inputPlaceholder}
+              style={styles.composerInput}
+              multiline
+            />
+          </View>
+          <Pressable
+            style={[styles.composerSend, sending && { opacity: 0.7 }]}
+            onPress={handleSend}
+            disabled={sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color={theme.accentText} />
+            ) : (
+              <Ionicons name="send" size={18} color={theme.accentText} />
+            )}
+          </Pressable>
+        </View>
+      </KeyboardStickyView>
+    </View>
   );
 }
 
@@ -1758,5 +2064,123 @@ const styles = StyleSheet.create({
     color: theme.badgeText,
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  threadHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  threadBackButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  threadTitleWrap: {
+    flex: 1,
+  },
+  threadTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  threadTitle: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  threadSubtitle: {
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
+    color: theme.textSecondary,
+  },
+  threadContent: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  bubbleRow: {
+    flexDirection: "row",
+  },
+  bubbleRowLeft: {
+    justifyContent: "flex-start",
+  },
+  bubbleRowRight: {
+    justifyContent: "flex-end",
+  },
+  bubble: {
+    maxWidth: "82%",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  theirBubble: {
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+  },
+  mineBubble: {
+    backgroundColor: brand.primary,
+  },
+  bubbleText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Poppins_400Regular",
+  },
+  theirBubbleText: {
+    color: theme.text,
+  },
+  mineBubbleText: {
+    color: brand.white,
+  },
+  bubbleTime: {
+    marginTop: 4,
+    fontSize: 10,
+    fontFamily: "Poppins_500Medium",
+  },
+  theirBubbleTime: {
+    color: theme.textMuted,
+  },
+  mineBubbleTime: {
+    color: "rgba(255,255,255,0.85)",
+  },
+  composer: {
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    backgroundColor: theme.headerBg,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  composerInputWrap: {
+    flex: 1,
+    maxHeight: 110,
+    borderWidth: 1,
+    borderColor: theme.inputBorder,
+    borderRadius: 18,
+    backgroundColor: theme.inputBg,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  composerInput: {
+    fontSize: 14,
+    fontFamily: "Poppins_400Regular",
+    color: theme.inputText,
+  },
+  composerSend: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: theme.accent,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

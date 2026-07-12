@@ -64,6 +64,21 @@ function roleLabel(role: AdminUserRow["role"]) {
   }
 }
 
+function kycStatusLabel(kyc: AdminUserRow["kyc_status"]): string {
+  switch (kyc) {
+    case "pending":
+      return "Pending";
+    case "in_review":
+      return "In review";
+    case "approved":
+      return "Approved";
+    case "declined":
+      return "Declined";
+    default:
+      return "No KYC";
+  }
+}
+
 function timeAgo(iso?: string): string {
   if (!iso) return "";
   const then = new Date(iso).getTime();
@@ -93,6 +108,7 @@ export default function AdminUsersTab() {
   const [filter, setFilter] = useState<FilterId>("all");
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<AdminUserRow[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -116,16 +132,20 @@ export default function AdminUsersTab() {
         f === "kyc_pending" || f === "kyc_declined" || f === "banned"
           ? f
           : undefined;
+      // No server-side search endpoint yet, so pull a big first page —
+      // the local search below only sees what's loaded.
       const page = await adminService.getUsers(
         1,
-        100,
+        500,
         isRoleFilter ? f : undefined,
         flag,
       );
       setRows(page.users);
+      setTotal(page.total);
     } catch {
       setError(true);
       setRows([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -161,7 +181,7 @@ export default function AdminUsersTab() {
         <Text style={styles.title}>Users</Text>
         {rows && (
           <Text style={styles.countLine}>
-            {filtered.length} of {rows.length}
+            {filtered.length} of {total}
           </Text>
         )}
       </View>
@@ -275,6 +295,9 @@ function UserRow({
   // action twice while the network round-trip is in flight. Reset by the
   // parent list re-render after onChanged() refreshes.
   const [busy, setBusy] = useState<null | "ban" | "unban" | "verify">(null);
+  // The users list doesn't expose recruiter_profiles.verified, so track a
+  // local "just verified" flag to swap the button for a Verified chip.
+  const [verified, setVerified] = useState(false);
 
   const runAction = useCallback(
     async (
@@ -287,6 +310,7 @@ function UserRow({
       try {
         await fn();
         onChanged();
+        Alert.alert(successMsg);
       } catch (err: any) {
         const msg =
           err?.response?.data?.message ?? err?.message ?? "Try again.";
@@ -325,7 +349,10 @@ function UserRow({
   const confirmAndVerify = useCallback(() => {
     runAction(
       "verify",
-      () => adminService.verifyRecruiter(row.id),
+      async () => {
+        await adminService.verifyRecruiter(row.id);
+        setVerified(true);
+      },
       "Recruiter verified",
     );
   }, [row.id, runAction]);
@@ -391,34 +418,39 @@ function UserRow({
         <View style={styles.kycRow}>
           <View style={[styles.kycDot, { backgroundColor: kycColor }]} />
           <Text style={styles.kycLabel}>
-            {kyc ?? "none"}
+            {kycStatusLabel(kyc)}
             {row.created_at ? ` · ${timeAgo(row.created_at)}` : ""}
           </Text>
         </View>
         <View style={styles.actionRow}>
-          {showVerify && (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                confirmAndVerify();
-              }}
-              hitSlop={6}
-              disabled={!!busy}
-              style={({ pressed }) => [
-                styles.actionBtn,
-                styles.actionVerify,
-                (pressed || !!busy) && styles.actionPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Verify ${row.name ?? "recruiter"}`}
-            >
-              {busy === "verify" ? (
-                <ActivityIndicator size="small" color={theme.text} />
-              ) : (
-                <Text style={styles.actionVerifyText}>Verify</Text>
-              )}
-            </Pressable>
-          )}
+          {showVerify &&
+            (verified ? (
+              <View style={[styles.actionBtn, styles.actionVerified]}>
+                <Text style={styles.actionVerifiedText}>Verified</Text>
+              </View>
+            ) : (
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation();
+                  confirmAndVerify();
+                }}
+                hitSlop={6}
+                disabled={!!busy}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  styles.actionVerify,
+                  (pressed || !!busy) && styles.actionPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Verify ${row.name ?? "recruiter"}`}
+              >
+                {busy === "verify" ? (
+                  <ActivityIndicator size="small" color={theme.text} />
+                ) : (
+                  <Text style={styles.actionVerifyText}>Verify</Text>
+                )}
+              </Pressable>
+            ))}
           {row.is_banned ? (
             <Pressable
               onPress={(e) => {
@@ -590,7 +622,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Poppins_500Medium",
     color: theme.textMuted,
-    textTransform: "capitalize",
   },
   bannedPill: {
     paddingHorizontal: 6,
@@ -647,6 +678,16 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Poppins_700Bold",
     color: theme.text,
+    letterSpacing: 0.5,
+  },
+  actionVerified: {
+    backgroundColor: "rgba(0,184,148,0.12)",
+    borderColor: "rgba(0,184,148,0.4)",
+  },
+  actionVerifiedText: {
+    fontSize: 10,
+    fontFamily: "Poppins_700Bold",
+    color: semantic.success,
     letterSpacing: 0.5,
   },
 

@@ -120,8 +120,8 @@ export default function BuySwipesScreen() {
         }
         await refreshBonus();
         Alert.alert(
-          'Swipes added!',
-          `${pack.swipes} swipes have been credited to your account.`,
+          'Drafts added!',
+          `${pack.swipes} Drafts have been credited to your account.`,
           [{ text: 'Done', onPress: () => router.back() }],
         );
       } catch (err: any) {
@@ -142,7 +142,7 @@ export default function BuySwipesScreen() {
         <Pressable style={styles.headerButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color={theme.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Buy more swipes</Text>
+        <Text style={styles.headerTitle}>Buy more Drafts</Text>
         <View style={styles.headerButton} />
       </View>
 
@@ -160,15 +160,15 @@ export default function BuySwipesScreen() {
             <View style={styles.heroIcon}>
               <Ionicons name="flash" size={28} color={brand.white} />
             </View>
-            <Text style={styles.heroTitle}>Top up your swipes</Text>
+            <Text style={styles.heroTitle}>Top up your Drafts</Text>
             <Text style={styles.heroSubtitle}>
-              One-time purchase. Extra swipes carry over and stack with your daily plan.
+              One-time purchase. Extra Drafts carry over and stack with your monthly Draft allowance.
             </Text>
             {bonusSwipes !== null && bonusSwipes > 0 && (
               <View style={styles.bonusBadge}>
                 <Ionicons name="sparkles" size={14} color={semantic.success} />
                 <Text style={styles.bonusBadgeText}>
-                  You have {bonusSwipes} bonus swipe{bonusSwipes === 1 ? '' : 's'} available
+                  You have {bonusSwipes} bonus Draft{bonusSwipes === 1 ? '' : 's'} available
                 </Text>
               </View>
             )}
@@ -207,7 +207,7 @@ export default function BuySwipesScreen() {
                 <View style={styles.packRow}>
                   <View style={styles.packLeft}>
                     <Text style={styles.packSwipes}>{pack.swipes}</Text>
-                    <Text style={styles.packSwipesLabel}>swipes</Text>
+                    <Text style={styles.packSwipesLabel}>Drafts</Text>
                   </View>
                   <View style={styles.packRight}>
                     <Text style={styles.packPrice}>{formatPrice(pack.amountCents)}</Text>
@@ -232,7 +232,7 @@ export default function BuySwipesScreen() {
           <View style={styles.footer}>
             <Ionicons name="shield-checkmark" size={14} color={theme.textSecondary} />
             <Text style={styles.footerText}>
-              Secure payment via Stripe · No subscription · Swipes never expire
+              Secure payment via Stripe · No subscription · Drafts never expire
             </Text>
           </View>
         </ScrollView>

@@ -11,6 +11,7 @@ import {
   Platform,
   Switch,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import KeyboardAwareScreen from "@/components/KeyboardAwareScreen";
 import DateTimePicker, {
@@ -41,7 +42,11 @@ import { useAppDispatch } from "@/store/hooks";
 import { updateUser } from "@/store/slices/authSlice";
 
 function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Format from local date parts — toISOString() converts to UTC, which
+  // shifts the DOB a day back west of UTC (and can flip minor/adult).
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 const { width } = Dimensions.get("window");
@@ -320,6 +325,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   };
   const [heightUnit, setHeightUnit] = useState<"in" | "cm">("in");
   const [weightUnit, setWeightUnit] = useState<"lbs" | "kg">("lbs");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const progress = useSharedValue(0);
 
@@ -492,6 +498,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     if (currentStep < steps.length - 1) {
       setCurrentStep((prev) => prev + 1);
     } else {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
       try {
         const fullName =
           `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
@@ -562,6 +570,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           err?.response?.data,
         );
         Alert.alert("Profile not saved", message);
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };
@@ -914,7 +924,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                           onChangeText={(value) =>
                             handleFieldChange(field.id, value)
                           }
-                          keyboardType="numeric"
+                          keyboardType={
+                            heightUnit === "cm" ? "numeric" : "default"
+                          }
                         />
                       </View>
                     </>
@@ -1364,7 +1376,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   pressed && { transform: [{ scale: 0.98 }] },
                 ]}
                 onPress={handleNext}
-                disabled={!isStepComplete()}
+                disabled={!isStepComplete() || isSubmitting}
               >
                 <LinearGradient
                   colors={
@@ -1376,20 +1388,26 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   end={{ x: 1, y: 0 }}
                   style={styles.buttonGradient}
                 >
-                  <Text style={styles.buttonText}>
-                    {currentStep < steps.length - 1
-                      ? "Next"
-                      : "Complete Profile"}
-                  </Text>
-                  <Ionicons
-                    name={
-                      currentStep < steps.length - 1
-                        ? "arrow-forward"
-                        : "checkmark"
-                    }
-                    size={20}
-                    color={brand.white}
-                  />
+                  {isSubmitting ? (
+                    <ActivityIndicator color={brand.white} />
+                  ) : (
+                    <>
+                      <Text style={styles.buttonText}>
+                        {currentStep < steps.length - 1
+                          ? "Next"
+                          : "Complete Profile"}
+                      </Text>
+                      <Ionicons
+                        name={
+                          currentStep < steps.length - 1
+                            ? "arrow-forward"
+                            : "checkmark"
+                        }
+                        size={20}
+                        color={brand.white}
+                      />
+                    </>
+                  )}
                 </LinearGradient>
               </Pressable>
             </View>

@@ -66,7 +66,8 @@ const MOCK_COHORT: Record<string, number> = {
 };
 
 // Graceful demo fallback — keeps the leaderboard populated when the API is
-// unreachable or the live DB is still sparse. Real data always wins.
+// unreachable (request failure only). Real data always wins, including a
+// successful-but-empty response.
 const MOCK_RANKINGS: RankingRow[] = [
   mock("Liam Tremblay", "CA", "Hockey", "Center", "U SPORTS", 5, 0),
   mock("Noah Gagnon", "CA", "Hockey", "Defense", "CEGEP", 4, 1),
@@ -126,13 +127,9 @@ export const rankingsService = {
       const { data } = await api.get("/rankings", {
         params: { division, ...(sport ? { sport } : {}), limit },
       });
-      const rows = (data.data ?? []) as RankingRow[];
-      if (rows.length === 0) {
-        return MOCK_RANKINGS.filter(
-          (r) => r.division === division && (!sport || r.sport === sport),
-        );
-      }
-      return rows;
+      // A successful-but-empty response is real data — return it as-is so
+      // the screen can show its genuine empty state instead of mock rows.
+      return (data.data ?? []) as RankingRow[];
     } catch {
       return MOCK_RANKINGS.filter(
         (r) => r.division === division && (!sport || r.sport === sport),

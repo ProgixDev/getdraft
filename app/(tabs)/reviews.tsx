@@ -3,12 +3,14 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -56,39 +58,6 @@ function relationshipLabel(r: string): string {
   );
 }
 
-function promptDecision(
-  title: string,
-  confirmLabel: string,
-  destructive: boolean,
-  onConfirm: (notes?: string) => void,
-) {
-  if (Platform.OS === "ios" && typeof Alert.prompt === "function") {
-    Alert.prompt(
-      title,
-      "Optional notes (visible to admin only).",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: confirmLabel,
-          style: destructive ? "destructive" : "default",
-          onPress: (notes?: string) => onConfirm(notes || undefined),
-        },
-      ],
-      "plain-text",
-      "",
-    );
-    return;
-  }
-  Alert.alert(title, undefined, [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: confirmLabel,
-      style: destructive ? "destructive" : "default",
-      onPress: () => onConfirm(undefined),
-    },
-  ]);
-}
-
 export default function AdminReviewsTab() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -104,24 +73,33 @@ export default function AdminReviewsTab() {
   const [tab, setTab] = useState<GuardianLinkStatus | "all">("pending_admin");
   const [links, setLinks] = useState<LinkWithVideo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{
+    id: string;
+    action: "approve" | "decline";
+  } | null>(null);
+  const [notesPrompt, setNotesPrompt] = useState<{
+    title: string;
+    confirmLabel: string;
+    destructive: boolean;
+    onConfirm: (notes?: string) => void;
+  } | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
 
   const refresh = useCallback(
     async (status: GuardianLinkStatus | "all", mode: "initial" | "refresh") => {
       if (mode === "initial") setLoading(true);
       else setRefreshing(true);
+      setLoadError(false);
       try {
         const list = await guardianLinksService.adminList(
           status === "all" ? undefined : status,
         );
         setLinks(list);
-      } catch (err: any) {
-        const msg =
-          err?.response?.data?.message ??
-          err?.message ??
-          "Could not load review queue.";
-        Alert.alert("Could not load", String(msg));
+      } catch {
+        // Don't fall through to "Queue is clear" — show a retry state.
+        setLoadError(true);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -140,34 +118,57 @@ export default function AdminReviewsTab() {
   );
 
   const decide = useCallback(
-    async (link: LinkWithVideo, decision: "approved" | "declined") => {
-      if (busyId) return;
-      promptDecision(
-        decision === "approved" ? "Approve link?" : "Decline link?",
-        decision === "approved" ? "Approve" : "Decline",
-        decision === "declined",
-        async (notes?: string) => {
-          setBusyId(link.id);
-          try {
-            if (decision === "approved") {
-              await guardianLinksService.adminApprove(link.id, notes);
-            } else {
-              await guardianLinksService.adminDecline(link.id, notes);
-            }
-            await refresh(tab, "refresh");
-          } catch (err: any) {
-            const msg =
-              err?.response?.data?.message ??
-              err?.message ??
-              "Action failed.";
-            Alert.alert("Could not save", String(msg));
-          } finally {
-            setBusyId(null);
+    (link: LinkWithVideo, decision: "approved" | "declined") => {
+      if (busy) return;
+      const title =
+        decision === "approved" ? "Approve link?" : "Decline link?";
+      const confirmLabel = decision === "approved" ? "Approve" : "Decline";
+      const destructive = decision === "declined";
+      const run = async (notes?: string) => {
+        setBusy({
+          id: link.id,
+          action: decision === "approved" ? "approve" : "decline",
+        });
+        try {
+          if (decision === "approved") {
+            await guardianLinksService.adminApprove(link.id, notes);
+          } else {
+            await guardianLinksService.adminDecline(link.id, notes);
           }
-        },
-      );
+          await refresh(tab, "refresh");
+        } catch (err: any) {
+          const msg =
+            err?.response?.data?.message ??
+            err?.message ??
+            "Action failed.";
+          Alert.alert("Could not save", String(msg));
+        } finally {
+          setBusy(null);
+        }
+      };
+      if (Platform.OS === "ios" && typeof Alert.prompt === "function") {
+        Alert.prompt(
+          title,
+          "Optional notes (visible to admin only).",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: confirmLabel,
+              style: destructive ? "destructive" : "default",
+              onPress: (notes?: string) => run(notes || undefined),
+            },
+          ],
+          "plain-text",
+          "",
+        );
+        return;
+      }
+      // Android has no Alert.prompt — use an in-app modal so admins can
+      // still attach optional notes to the decision.
+      setNotesDraft("");
+      setNotesPrompt({ title, confirmLabel, destructive, onConfirm: run });
     },
-    [busyId, refresh, tab],
+    [busy, refresh, tab],
   );
 
   if (!fontsLoaded) return null;
@@ -207,6 +208,21 @@ export default function AdminReviewsTab() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={theme.text} />
         </View>
+      ) : loadError ? (
+        <View style={styles.center}>
+          <Ionicons
+            name="cloud-offline-outline"
+            size={48}
+            color={theme.textMuted}
+          />
+          <Text style={styles.emptyTitle}>Couldn&apos;t load</Text>
+          <Text style={styles.emptySub}>
+            The review queue didn&apos;t load. Check your connection.
+          </Text>
+          <Pressable style={styles.retry} onPress={() => refresh(tab, "initial")}>
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
       ) : links.length === 0 ? (
         <View style={styles.center}>
           <Ionicons
@@ -239,12 +255,68 @@ export default function AdminReviewsTab() {
             <ReviewCard
               key={link.id}
               link={link}
-              busy={busyId === link.id}
+              busyAction={busy?.id === link.id ? busy.action : null}
               onApprove={() => decide(link, "approved")}
               onDecline={() => decide(link, "declined")}
             />
           ))}
         </ScrollView>
+      )}
+
+      {notesPrompt && (
+        <Modal
+          transparent
+          animationType="fade"
+          visible
+          onRequestClose={() => setNotesPrompt(null)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{notesPrompt.title}</Text>
+              <Text style={styles.modalSub}>
+                Optional notes (visible to admin only).
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                value={notesDraft}
+                onChangeText={setNotesDraft}
+                placeholder="Notes"
+                placeholderTextColor={theme.inputPlaceholder}
+                multiline
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={styles.modalCancelBtn}
+                  onPress={() => setNotesPrompt(null)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.modalConfirmBtn,
+                    notesPrompt.destructive && styles.modalConfirmBtnDestructive,
+                  ]}
+                  onPress={() => {
+                    const { onConfirm } = notesPrompt;
+                    const notes = notesDraft.trim();
+                    setNotesPrompt(null);
+                    onConfirm(notes || undefined);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.modalConfirmText,
+                      notesPrompt.destructive &&
+                        styles.modalConfirmTextDestructive,
+                    ]}
+                  >
+                    {notesPrompt.confirmLabel}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
     </View>
   );
@@ -252,12 +324,12 @@ export default function AdminReviewsTab() {
 
 function ReviewCard({
   link,
-  busy,
+  busyAction,
   onApprove,
   onDecline,
 }: {
   link: LinkWithVideo;
-  busy: boolean;
+  busyAction: "approve" | "decline" | null;
   onApprove: () => void;
   onDecline: () => void;
 }) {
@@ -376,19 +448,25 @@ function ReviewCard({
       {isPending && (
         <View style={styles.actionsRow}>
           <Pressable
-            style={[styles.declineBtn, busy && { opacity: 0.5 }]}
+            style={[styles.declineBtn, !!busyAction && { opacity: 0.5 }]}
             onPress={onDecline}
-            disabled={busy}
+            disabled={!!busyAction}
           >
-            <Ionicons name="close" size={18} color={semantic.error} />
-            <Text style={styles.declineBtnText}>Decline</Text>
+            {busyAction === "decline" ? (
+              <ActivityIndicator color={semantic.error} />
+            ) : (
+              <>
+                <Ionicons name="close" size={18} color={semantic.error} />
+                <Text style={styles.declineBtnText}>Decline</Text>
+              </>
+            )}
           </Pressable>
           <Pressable
-            style={[styles.approveBtn, busy && { opacity: 0.5 }]}
+            style={[styles.approveBtn, !!busyAction && { opacity: 0.5 }]}
             onPress={onApprove}
-            disabled={busy}
+            disabled={!!busyAction}
           >
-            {busy ? (
+            {busyAction === "approve" ? (
               <ActivityIndicator color={theme.accentText} />
             ) : (
               <>
@@ -577,4 +655,87 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
     textAlign: "center",
   },
+  retry: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: theme.accent,
+  },
+  retryText: {
+    fontSize: 13,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.accentText,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: theme.overlay,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: theme.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+    padding: 18,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontFamily: "Poppins_700Bold",
+    color: theme.text,
+  },
+  modalSub: {
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
+    color: theme.textMuted,
+  },
+  modalInput: {
+    minHeight: 72,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.inputBorder,
+    backgroundColor: theme.inputBg,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    fontFamily: "Poppins_500Medium",
+    color: theme.inputText,
+    textAlignVertical: "top",
+  },
+  modalActions: { flexDirection: "row", gap: 8, marginTop: 4 },
+  modalCancelBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.surfaceSecondary,
+    borderWidth: 1,
+    borderColor: theme.cardBorder,
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontFamily: "Poppins_700Bold",
+    color: theme.textSecondary,
+  },
+  modalConfirmBtn: {
+    flex: 1.4,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.accent,
+  },
+  modalConfirmBtnDestructive: { backgroundColor: semantic.error },
+  modalConfirmText: {
+    fontSize: 13,
+    fontFamily: "Poppins_700Bold",
+    color: theme.accentText,
+  },
+  modalConfirmTextDestructive: { color: "#FFFFFF" },
 });

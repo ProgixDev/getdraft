@@ -367,13 +367,16 @@ export default function EditProfileScreen() {
       const mime = asset.mimeType ?? "image/jpeg";
       const ext = extFromMime(mime);
       const fileName = sanitizeFileName(`avatar-${Date.now()}.${ext}`);
-      const signed = await uploadsService.getSignedUploadUrl(
+      // Native streaming upload (FileSystem.uploadAsync) — same path
+      // post-create uses. fetch().blob() on a file:// URI is unreliable
+      // and memory-heavy on-device, so never load the file into JS.
+      const uploaded = await uploadsService.uploadAsset(
         AVATAR_BUCKET,
+        localUri,
         fileName,
+        mime,
       );
-      const blob = await (await fetch(localUri)).blob();
-      await uploadsService.uploadFile(signed.signedUrl, blob, mime);
-      setAvatarUploadedUrl(signed.publicUrl);
+      setAvatarUploadedUrl(uploaded.publicUrl);
     } catch (err: any) {
       setAvatarPreview(null);
       setAvatarUploadedUrl(null);
@@ -978,7 +981,12 @@ export default function EditProfileScreen() {
               style={styles.modalBackdrop}
               onPress={() => setDobModalVisible(false)}
             />
-            <View style={styles.modalSheet}>
+            <View
+              style={[
+                styles.modalSheet,
+                { paddingBottom: insets.bottom + 18 },
+              ]}
+            >
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Date of Birth</Text>
                 <Pressable
@@ -1074,6 +1082,7 @@ function OptionPickerModal({
   onClose: () => void;
   onSelect: (value: string) => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal
       visible={visible}
@@ -1083,7 +1092,9 @@ function OptionPickerModal({
     >
       <View style={styles.modalRoot}>
         <Pressable style={styles.modalBackdrop} onPress={onClose} />
-        <View style={styles.modalSheet}>
+        <View
+          style={[styles.modalSheet, { paddingBottom: insets.bottom + 18 }]}
+        >
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
             <Pressable onPress={onClose} style={styles.modalCloseButton}>

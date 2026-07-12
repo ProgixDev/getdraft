@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  Share,
   Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -116,18 +115,6 @@ export default function LinkGuardianScreen() {
     return () => clearTimeout(timer);
   }, [expiresAt, issueToken]);
 
-  const handleShare = useCallback(async () => {
-    if (!token) return;
-    try {
-      await Share.share({
-        message:
-          `Link your guardian on GetDraft. Have them scan this code in the app: ${token}`,
-      });
-    } catch {
-      // Share cancellation isn't an error.
-    }
-  }, [token]);
-
   const handleRevoke = useCallback((link: GuardianLink) => {
     Alert.alert(
       'Revoke link?',
@@ -196,14 +183,6 @@ export default function LinkGuardianScreen() {
               <Pressable style={styles.actionButton} onPress={issueToken} disabled={issuing}>
                 <Ionicons name="refresh" size={16} color={theme.text} />
                 <Text style={styles.actionButtonText}>Refresh</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.actionButton, styles.actionButtonPrimary]}
-                onPress={handleShare}
-                disabled={!token}
-              >
-                <Ionicons name="share-outline" size={16} color={theme.accentText} />
-                <Text style={[styles.actionButtonText, styles.actionButtonTextPrimary]}>Share</Text>
               </Pressable>
             </View>
           </View>
@@ -321,9 +300,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.border,
   },
-  actionButtonPrimary: { backgroundColor: theme.accent, borderColor: theme.accent },
   actionButtonText: { fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: theme.text },
-  actionButtonTextPrimary: { color: theme.accentText },
   errorInline: { color: theme.textSecondary, fontFamily: 'Poppins_500Medium' },
   sectionHeading: {
     fontSize: 16,

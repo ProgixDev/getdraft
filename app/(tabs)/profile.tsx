@@ -45,8 +45,11 @@ function comingSoon(feature: string) {
 }
 
 // Demo seed for the IG grid — surfaces a populated grid in offline /
-// pre-seed environments. Real data always wins; this only kicks in when
-// the API errors. (Empty success = "you haven't posted yet" empty state.)
+// pre-seed environments. DEV ONLY: real data always wins; this only
+// kicks in when the API errors under __DEV__, and the tiles are
+// display-only (tapping a mock id would break the detail modal). In
+// prod an API error shows an inline retry state instead. (Empty
+// success = "you haven't posted yet" empty state.)
 const MOCK_GRID_PHOTOS: PostItem[] = [
   "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600",
   "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?w=600",
@@ -188,6 +191,10 @@ export default function ProfileScreen() {
   const [myPosts, setMyPosts] = useState<PostItem[] | null>(null);
   const [myReels, setMyReels] = useState<PostItem[] | null>(null);
   const [savedPosts, setSavedPosts] = useState<PostItem[] | null>(null);
+  // Prod-only inline error state for the posts/reels grid fetches;
+  // bumping gridFetchKey re-runs the fetch effect (Retry button).
+  const [gridError, setGridError] = useState(false);
+  const [gridFetchKey, setGridFetchKey] = useState(0);
   // Wired in D4 — the press handler is shared between D3 and D4.
   const [openedPost, setOpenedPost] = useState<PostItem | null>(null);
   // Live state for the detail modal. Initialised from openedPost on open
@@ -245,23 +252,40 @@ export default function ProfileScreen() {
   );
 
   // Fetch the three grid tabs on profile focus. Run in parallel for
-  // speed; each promise has its own try/catch → mock fallback so a
-  // single failure (e.g. backend offline) only swaps THAT tab to mocks
-  // and doesn't blank the rest. Athletes-only — the only role that
-  // posts to the feed has the only IG-style grid.
+  // speed; each promise has its own try/catch so a single failure
+  // (e.g. backend offline) only affects THAT tab and doesn't blank the
+  // rest. In dev, failures fall back to the mock seed; in prod they
+  // surface the inline error + Retry state instead of fake tiles.
+  // Athletes-only — the only role that posts to the feed has the only
+  // IG-style grid.
   useFocusEffect(
     useCallback(() => {
       if (!isAthlete || !user?.id) return;
       let cancelled = false;
       const userId = user.id;
+      setGridError(false);
       postsService
         .getUserPosts(userId, "post")
         .then((r) => !cancelled && setMyPosts(r.posts))
-        .catch(() => !cancelled && setMyPosts(MOCK_GRID_PHOTOS));
+        .catch(() => {
+          if (cancelled) return;
+          if (__DEV__) setMyPosts(MOCK_GRID_PHOTOS);
+          else {
+            setMyPosts([]);
+            setGridError(true);
+          }
+        });
       postsService
         .getUserPosts(userId, "reel")
         .then((r) => !cancelled && setMyReels(r.posts))
-        .catch(() => !cancelled && setMyReels(MOCK_GRID_REELS));
+        .catch(() => {
+          if (cancelled) return;
+          if (__DEV__) setMyReels(MOCK_GRID_REELS);
+          else {
+            setMyReels([]);
+            setGridError(true);
+          }
+        });
       postsService
         .getSavedPosts()
         .then((r) => !cancelled && setSavedPosts(r.posts))
@@ -269,7 +293,7 @@ export default function ProfileScreen() {
       return () => {
         cancelled = true;
       };
-    }, [isAthlete, user?.id]),
+    }, [isAthlete, user?.id, gridFetchKey]),
   );
 
   // Hydrate detail-modal state from the tapped post. Saved-by-me is
@@ -606,7 +630,7 @@ export default function ProfileScreen() {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{athleteProfile.likesReceived}</Text>
-              <Text style={styles.statLabel}>Likes</Text>
+              <Text style={styles.statLabel}>Drafts</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
@@ -820,6 +844,12 @@ export default function ProfileScreen() {
                     ? myReels
                     : savedPosts
               }
+              error={gridError}
+              onRetry={() => {
+                setMyPosts(null);
+                setMyReels(null);
+                setGridFetchKey((k) => k + 1);
+              }}
               onTilePress={setOpenedPost}
             />
           </View>
@@ -879,14 +909,6 @@ export default function ProfileScreen() {
                     <Text style={styles.emptyMediaText}>
                       Child athlete hasn&apos;t added photos yet
                     </Text>
-                    <Pressable
-                      style={styles.addMediaButton}
-                      onPress={() => comingSoon("Request Uploads")}
-                    >
-                      <Text style={styles.addMediaButtonText}>
-                        Request Uploads
-                      </Text>
-                    </Pressable>
                   </View>
                 )}
               </View>
@@ -938,14 +960,6 @@ export default function ProfileScreen() {
                     <Text style={styles.emptyMediaText}>
                       Child athlete hasn&apos;t added highlight videos
                     </Text>
-                    <Pressable
-                      style={styles.addMediaButton}
-                      onPress={() => comingSoon("Request Uploads")}
-                    >
-                      <Text style={styles.addMediaButtonText}>
-                        Request Uploads
-                      </Text>
-                    </Pressable>
                   </View>
                 )}
               </View>
@@ -1127,16 +1141,36 @@ function DetailModalContents({
 function GridContent({
   tab,
   posts,
+  error,
+  onRetry,
   onTilePress,
 }: {
   tab: "posts" | "reels" | "saved";
   posts: PostItem[] | null;
+  error: boolean;
+  onRetry: () => void;
   onTilePress: (post: PostItem) => void;
 }) {
   if (posts === null) {
     return (
       <View style={styles.gridLoading}>
         <ActivityIndicator size="small" color={theme.text} />
+      </View>
+    );
+  }
+  // Prod API failure (posts/reels fetch) — never fake a populated grid;
+  // say so and offer a retry. Saved keeps its silent empty fallback.
+  if (error && tab !== "saved") {
+    return (
+      <View style={styles.gridEmpty}>
+        <Ionicons name="cloud-offline-outline" size={40} color={theme.textMuted} />
+        <Text style={styles.gridEmptyText}>
+          Couldn&apos;t load your {tab}. Check your connection and try
+          again.
+        </Text>
+        <Pressable style={styles.addMediaButton} onPress={onRetry}>
+          <Text style={styles.addMediaButtonText}>Retry</Text>
+        </Pressable>
       </View>
     );
   }
@@ -1169,10 +1203,14 @@ function GridContent({
         // dark placeholder so the tile reads as a reel, not a broken image.
         const poster =
           p.thumbnailUrl ?? (p.kind === "reel" ? undefined : p.mediaUrl);
+        // Dev mock seeds are display-only — their ids don't exist on the
+        // backend, so opening the detail modal would break on like/save.
+        const isMock = p.id.startsWith("mock-");
         return (
           <Pressable
             key={p.id}
             style={styles.gridTile}
+            disabled={isMock}
             onPress={() => onTilePress(p)}
             accessibilityRole="button"
             accessibilityLabel={

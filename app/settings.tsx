@@ -87,10 +87,10 @@ export default function SettingsScreen() {
     }, []),
   );
 
-  // Persist a delta to /users/me.preferences. Best-effort; toggle stays
-  // applied locally even on save failure so the user isn't fighting the UI.
+  // Persist a delta to /users/me.preferences. On save failure the switch is
+  // reverted and the user is told, so the UI never lies about saved state.
   const persist = useCallback(
-    (delta: Record<string, boolean>) => {
+    (delta: Record<string, boolean>, revert: () => void) => {
       const next = {
         matchAlerts,
         messageNotifications,
@@ -99,7 +99,13 @@ export default function SettingsScreen() {
         showDistance,
         ...delta,
       };
-      usersService.updateMe({ preferences: next }).catch(() => {});
+      usersService.updateMe({ preferences: next }).catch(() => {
+        revert();
+        Alert.alert(
+          "Couldn't save",
+          "Your change wasn't saved. Please try again.",
+        );
+      });
     },
     [
       matchAlerts,
@@ -112,23 +118,23 @@ export default function SettingsScreen() {
 
   const onMatchAlerts = (v: boolean) => {
     setMatchAlerts(v);
-    persist({ matchAlerts: v });
+    persist({ matchAlerts: v }, () => setMatchAlerts(!v));
   };
   const onMessageNotifications = (v: boolean) => {
     setMessageNotifications(v);
-    persist({ messageNotifications: v });
+    persist({ messageNotifications: v }, () => setMessageNotifications(!v));
   };
   const onRecruiterActivity = (v: boolean) => {
     setRecruiterActivity(v);
-    persist({ recruiterActivity: v });
+    persist({ recruiterActivity: v }, () => setRecruiterActivity(!v));
   };
   const onProfileVisible = (v: boolean) => {
     setProfileVisible(v);
-    persist({ profileVisible: v });
+    persist({ profileVisible: v }, () => setProfileVisible(!v));
   };
   const onShowDistance = (v: boolean) => {
     setShowDistance(v);
-    persist({ showDistance: v });
+    persist({ showDistance: v }, () => setShowDistance(!v));
   };
 
   if (!fontsLoaded) return null;
@@ -421,55 +427,6 @@ export default function SettingsScreen() {
             <Ionicons name="person-outline" size={20} color={theme.text} />
             <Text style={styles.sectionTitle}>Account</Text>
           </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.menuRow,
-              pressed && styles.menuRowPressed,
-            ]}
-            onPress={() =>
-              Alert.alert("Change Email", "Email change is coming soon.")
-            }
-          >
-            <Ionicons
-              name="mail-outline"
-              size={20}
-              color={theme.textSecondary}
-            />
-            <View style={styles.menuRowCopy}>
-              <Text style={styles.menuRowTitle}>Change Email</Text>
-              <Text style={styles.menuRowValue}>{user?.email}</Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={theme.textMuted}
-            />
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.menuRow,
-              pressed && styles.menuRowPressed,
-            ]}
-            onPress={() =>
-              Alert.alert("Change Password", "Password change is coming soon.")
-            }
-          >
-            <Ionicons
-              name="key-outline"
-              size={20}
-              color={theme.textSecondary}
-            />
-            <View style={styles.menuRowCopy}>
-              <Text style={styles.menuRowTitle}>Change Password</Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={theme.textMuted}
-            />
-          </Pressable>
 
           <Pressable
             style={({ pressed }) => [

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
@@ -24,7 +24,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import type { Socket } from "socket.io-client";
 
-import { brand, neutral, theme } from "@/config/colors";
+import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
 import { conversationsService } from "@/services/conversations";
@@ -34,13 +34,22 @@ type DmMessage = {
   mine: boolean;
   text: string;
   sentAt: string;
+  failed?: boolean;
 };
 
 function formatTime(iso?: string): string {
   if (!iso) return "Now";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Now";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return time;
+  const day = d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return `${day}, ${time}`;
 }
 
 export default function DmScreen() {
@@ -73,6 +82,7 @@ export default function DmScreen() {
   const [otherRole, setOtherRole] = useState(initialOtherRole);
   // Tracked so the header avatar tap routes to the right /user/[id].
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -133,7 +143,9 @@ export default function DmScreen() {
       setMessages((prev) => {
         if (prev.some((m) => m.id === realId)) return prev;
         if (mine) {
-          const i = prev.findIndex((m) => m.id.startsWith("local-"));
+          const i = prev.findIndex(
+            (m) => !m.failed && m.id.startsWith("local-"),
+          );
           if (i !== -1) {
             const copy = [...prev];
             copy[i] = incoming;
@@ -192,12 +204,30 @@ export default function DmScreen() {
     ]);
     setDraft("");
 
+    deliver(optimisticId, text);
+  };
+
+  // Send via socket when connected, otherwise REST. On REST failure, flag
+  // the optimistic bubble so the user can tap it to retry.
+  const deliver = (messageId: string, text: string) => {
+    if (!conversationId) return;
     const socket = chatService.getSocket();
     if (socket?.connected) {
       conversationsService.sendDm(conversationId, text);
     } else {
-      conversationsService.sendMessage(conversationId, text).catch(() => {});
+      conversationsService.sendMessage(conversationId, text).catch(() => {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, failed: true } : m)),
+        );
+      });
     }
+  };
+
+  const handleRetry = (message: DmMessage) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id ? { ...m, failed: false } : m)),
+    );
+    deliver(message.id, message.text);
   };
 
   if (!fontsLoaded) return null;
@@ -299,6 +329,7 @@ export default function DmScreen() {
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           style={styles.messagesScroll}
           contentContainerStyle={[
             styles.messagesContent,
@@ -307,38 +338,53 @@ export default function DmScreen() {
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() =>
+            scrollRef.current?.scrollToEnd({ animated: false })
+          }
         >
           {messages.map((message) => (
-            <View
-              key={message.id}
-              style={[
-                styles.bubbleRow,
-                message.mine ? styles.bubbleRowRight : styles.bubbleRowLeft,
-              ]}
-            >
+            <View key={message.id}>
               <View
                 style={[
-                  styles.bubble,
-                  message.mine ? styles.mineBubble : styles.theirBubble,
+                  styles.bubbleRow,
+                  message.mine ? styles.bubbleRowRight : styles.bubbleRowLeft,
                 ]}
               >
-                <Text
+                <View
                   style={[
-                    styles.bubbleText,
-                    message.mine ? styles.mineBubbleText : styles.theirBubbleText,
+                    styles.bubble,
+                    message.mine ? styles.mineBubble : styles.theirBubble,
                   ]}
                 >
-                  {message.text}
-                </Text>
-                <Text
-                  style={[
-                    styles.timeText,
-                    message.mine ? styles.mineTimeText : styles.theirTimeText,
-                  ]}
-                >
-                  {message.sentAt}
-                </Text>
+                  <Text
+                    style={[
+                      styles.bubbleText,
+                      message.mine ? styles.mineBubbleText : styles.theirBubbleText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.timeText,
+                      message.mine ? styles.mineTimeText : styles.theirTimeText,
+                    ]}
+                  >
+                    {message.sentAt}
+                  </Text>
+                </View>
               </View>
+              {message.failed && (
+                <Pressable
+                  style={styles.failedRow}
+                  onPress={() => handleRetry(message)}
+                  hitSlop={6}
+                >
+                  <Text style={styles.failedText}>
+                    Not sent — tap to retry
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -495,6 +541,16 @@ const styles = StyleSheet.create({
   },
   mineTimeText: {
     color: "rgba(255,255,255,0.85)",
+  },
+  failedRow: {
+    alignItems: "flex-end",
+    marginTop: 2,
+    paddingRight: 4,
+  },
+  failedText: {
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: semantic.error,
   },
   composer: {
     borderTopWidth: 1,

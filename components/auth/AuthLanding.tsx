@@ -9,6 +9,7 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +44,11 @@ type LandingState =
   | 'oauth-onboarding';
 
 type OAuthProvider = 'apple' | 'google';
+
+// Served by the backend; there is no separate Terms of Service URL yet, so
+// only "Privacy Policy" is a live link below.
+const PRIVACY_POLICY_URL =
+  'https://getdraft-api-production.up.railway.app/api/privacy';
 
 /**
  * Post-welcome auth entry. User picks how to continue: phone (primary),
@@ -257,7 +263,14 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
         </Animated.View>
 
         <Animated.Text entering={FadeIn.duration(500).delay(400)} style={styles.legal}>
-          By continuing you agree to the Terms of Service and Privacy Policy.
+          By continuing you agree to the Terms of Service and{' '}
+          <Text
+            style={styles.legalLink}
+            onPress={() => Linking.openURL(PRIVACY_POLICY_URL)}
+          >
+            Privacy Policy
+          </Text>
+          .
         </Animated.Text>
       </ScrollView>
     </View>
@@ -397,6 +410,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: 'rgba(255,255,255,0.35)',
     lineHeight: 18,
+  },
+  legalLink: {
+    color: 'rgba(255,255,255,0.65)',
+    textDecorationLine: 'underline',
   },
 });
 

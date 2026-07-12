@@ -20,6 +20,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Defs, RadialGradient, Stop, Circle } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import {
   useFonts,
@@ -50,6 +51,7 @@ interface WelcomeScreenProps {
  * - Vertical pagination dots
  */
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
+  const insets = useSafeAreaInsets();
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_700Bold,
@@ -143,7 +145,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
       </View>
 
       {/* Header: Logo center + Skip top right */}
-      <View style={styles.header}>
+      <View
+        style={[styles.header, { paddingTop: insets.top + 16 }]}
+        pointerEvents="box-none"
+      >
         <View style={styles.headerSpacer} />
         <Image source={images.logo} style={styles.logo} resizeMode="contain" />
         {!isLastSlide ? (
@@ -177,7 +182,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
       </Animated.ScrollView>
 
       {/* Bottom section: Dots + Button (only on last slide) */}
-      <View style={styles.bottomContainer}>
+      <View style={styles.bottomContainer} pointerEvents="box-none">
         <View style={styles.dotsContainer}>
           <PaginationDots
             count={welcomeSlides.length}
@@ -356,7 +361,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
     zIndex: 10,

@@ -32,6 +32,7 @@ type ChatMessage = {
   mine: boolean;
   text: string;
   sentAt: string;
+  failed?: boolean;
 };
 
 type ChatHeader = {
@@ -45,7 +46,15 @@ function formatTime(iso?: string): string {
   if (!iso) return "Now";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Now";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return time;
+  const day = d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return `${day}, ${time}`;
 }
 
 export default function ChatScreen() {
@@ -70,6 +79,7 @@ export default function ChatScreen() {
   // Remote typing auto-clear: hide indicator if no new event arrives
   // within 4s (handles missed `stop` events).
   const remoteTypingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -148,7 +158,9 @@ export default function ChatScreen() {
         if (prev.some((m) => m.id === realId)) return prev;
         if (mine) {
           const i = prev.findIndex(
-            (m) => m.id.startsWith("local-") || m.id.startsWith("call-"),
+            (m) =>
+              !m.failed &&
+              (m.id.startsWith("local-") || m.id.startsWith("call-")),
           );
           if (i !== -1) {
             const copy = [...prev];
@@ -260,28 +272,37 @@ export default function ChatScreen() {
     ]);
     setDraft("");
 
+    deliver(optimisticId, text);
+  };
+
+  // Send via socket when connected, otherwise REST. On REST failure, flag
+  // the optimistic bubble so the user can tap it to retry.
+  const deliver = (messageId: string, text: string) => {
+    if (!matchId) return;
     const socket = chatService.getSocket();
     if (socket?.connected) {
       chatService.sendSocketMessage(matchId, text);
     } else {
-      chatService.sendMessage(matchId, text).catch(() => {});
+      chatService.sendMessage(matchId, text).catch(() => {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, failed: true } : m)),
+        );
+      });
     }
   };
 
+  const handleRetry = (message: ChatMessage) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id ? { ...m, failed: false } : m)),
+    );
+    deliver(message.id, message.text);
+  };
+
   const handleAskForCall = () => {
-    if (!matchId) return;
-    const text =
-      "Would you be available for a quick call this week to discuss next steps?";
-    setMessages((prev) => [
-      ...prev,
-      { id: `call-${Date.now()}`, mine: true, text, sentAt: "Now" },
-    ]);
-    const socket = chatService.getSocket();
-    if (socket?.connected) {
-      chatService.sendSocketMessage(matchId, text);
-    } else {
-      chatService.sendMessage(matchId, text).catch(() => {});
-    }
+    // Pre-fill the composer so the user can edit/confirm before sending.
+    setDraft(
+      "Would you be available for a quick call this week to discuss next steps?",
+    );
   };
 
   if (!fontsLoaded) return null;
@@ -380,6 +401,7 @@ export default function ChatScreen() {
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           style={styles.messagesScroll}
           contentContainerStyle={[
             styles.messagesContent,
@@ -388,38 +410,53 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() =>
+            scrollRef.current?.scrollToEnd({ animated: false })
+          }
         >
           {messages.map((message) => (
-            <View
-              key={message.id}
-              style={[
-                styles.bubbleRow,
-                message.mine ? styles.bubbleRowRight : styles.bubbleRowLeft,
-              ]}
-            >
+            <View key={message.id}>
               <View
                 style={[
-                  styles.bubble,
-                  message.mine ? styles.mineBubble : styles.theirBubble,
+                  styles.bubbleRow,
+                  message.mine ? styles.bubbleRowRight : styles.bubbleRowLeft,
                 ]}
               >
-                <Text
+                <View
                   style={[
-                    styles.bubbleText,
-                    message.mine ? styles.mineBubbleText : styles.theirBubbleText,
+                    styles.bubble,
+                    message.mine ? styles.mineBubble : styles.theirBubble,
                   ]}
                 >
-                  {message.text}
-                </Text>
-                <Text
-                  style={[
-                    styles.timeText,
-                    message.mine ? styles.mineTimeText : styles.theirTimeText,
-                  ]}
-                >
-                  {message.sentAt}
-                </Text>
+                  <Text
+                    style={[
+                      styles.bubbleText,
+                      message.mine ? styles.mineBubbleText : styles.theirBubbleText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.timeText,
+                      message.mine ? styles.mineTimeText : styles.theirTimeText,
+                    ]}
+                  >
+                    {message.sentAt}
+                  </Text>
+                </View>
               </View>
+              {message.failed && (
+                <Pressable
+                  style={styles.failedRow}
+                  onPress={() => handleRetry(message)}
+                  hitSlop={6}
+                >
+                  <Text style={styles.failedText}>
+                    Not sent — tap to retry
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -447,7 +484,15 @@ export default function ChatScreen() {
               multiline
             />
           </View>
-          <Pressable style={styles.sendButton} onPress={handleSend}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.sendButton,
+              (!draft.trim()) && styles.sendButtonDisabled,
+              pressed && { opacity: 0.85 },
+            ]}
+            onPress={handleSend}
+            disabled={!draft.trim()}
+          >
             <Ionicons name="send" size={18} color={theme.accentText} />
           </Pressable>
         </View>
@@ -592,6 +637,16 @@ const styles = StyleSheet.create({
   mineTimeText: {
     color: "rgba(255,255,255,0.85)",
   },
+  failedRow: {
+    alignItems: "flex-end",
+    marginTop: 2,
+    paddingRight: 4,
+  },
+  failedText: {
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: semantic.error,
+  },
   typingRow: {
     paddingHorizontal: 14,
     paddingVertical: 4,
@@ -642,6 +697,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accent,
     alignItems: "center",
     justifyContent: "center",
+  },
+  sendButtonDisabled: {
+    opacity: 0.55,
   },
   emptyContainer: {
     flex: 1,

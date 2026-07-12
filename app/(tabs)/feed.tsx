@@ -5,7 +5,6 @@ import {
   Dimensions,
   FlatList,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -23,6 +22,7 @@ import Animated, {
 import { Image as ExpoImage } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -59,6 +59,9 @@ function timeAgo(iso: string): string {
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
+  // Real tab-bar height from react-navigation — the old 68+insets guess
+  // drifted from the actual bar and threw off reels paging.
+  const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   // Feed is athletes-only. Anyone else lands on their role's home via
   // useRoleHomeRedirect (focus-based, survives back-navigation).
@@ -293,7 +296,7 @@ export default function FeedScreen() {
           onOpenComments={(id) => setCommentsForPost(id)}
           reducedMotion={reducedMotion}
           headerHeight={insets.top + 60}
-          tabBarHeight={68 + insets.bottom}
+          tabBarHeight={tabBarHeight}
           errorMsg={errorMsg}
         />
       ) : (
@@ -630,7 +633,12 @@ function ReelsList({
   tabBarHeight,
   errorMsg,
 }: ReelsListProps) {
-  const itemHeight = SCREEN_HEIGHT - tabBarHeight;
+  // Page size = the list's own measured height (exact viewport — the
+  // header overlays in reels mode and the tab bar sits below the list).
+  // Until the first onLayout lands, fall back to the tab-bar-corrected
+  // screen height so the initial render is close enough.
+  const [listHeight, setListHeight] = useState(0);
+  const itemHeight = listHeight || SCREEN_HEIGHT - tabBarHeight;
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const viewabilityConfig = useRef({
@@ -673,6 +681,7 @@ function ReelsList({
       data={posts}
       keyExtractor={(p) => p.id}
       style={styles.reelsList}
+      onLayout={(e) => setListHeight(Math.round(e.nativeEvent.layout.height))}
       pagingEnabled
       snapToInterval={itemHeight}
       decelerationRate="fast"
@@ -731,6 +740,7 @@ function ReelItem({
   onOpenComments: (id: string) => void;
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const player = useVideoPlayer(post.mediaUrl, (p) => {
     p.loop = true;
     p.muted = true;
@@ -940,6 +950,7 @@ function ReelItem({
           <Pressable
             style={({ pressed }) => [
               styles.fsExitBtn,
+              { top: insets.top + 10 },
               pressed && styles.pressed,
             ]}
             onPress={() => setFullscreen(false)}
@@ -1214,7 +1225,6 @@ const styles = StyleSheet.create({
   },
   fsExitBtn: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 50 : 28,
     right: 14,
     width: 44,
     height: 44,

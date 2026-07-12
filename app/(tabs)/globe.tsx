@@ -8,7 +8,10 @@ import {
   ActivityIndicator,
   Image,
   Modal,
+  ScrollView,
+  Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Animated, {
   useSharedValue,
@@ -26,52 +29,38 @@ import {
 } from "@expo-google-fonts/poppins";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import { theme } from "@/config/colors";
+import { theme, semantic } from "@/config/colors";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { discoverService, type MapPoint } from "@/services/discover";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// ── Continent talent data (defaults) ──
-const DEFAULT_CONTINENTS = [
-  {
-    name: "North America",
-    athletes: "4,200+",
-    recruiters: "180+",
-    icon: "american-football" as const,
-  },
-  {
-    name: "Europe",
-    athletes: "2,800+",
-    recruiters: "150+",
-    icon: "football" as const,
-  },
-  {
-    name: "Africa",
-    athletes: "1,500+",
-    recruiters: "60+",
-    icon: "fitness" as const,
-  },
-  {
-    name: "South America",
-    athletes: "900+",
-    recruiters: "45+",
-    icon: "football" as const,
-  },
-  {
-    name: "Asia",
-    athletes: "400+",
-    recruiters: "35+",
-    icon: "tennisball" as const,
-  },
-  {
-    name: "Oceania",
-    athletes: "200+",
-    recruiters: "30+",
-    icon: "basketball" as const,
-  },
+// ── Continent list (labels + icons only) ──
+// Counts come EXCLUSIVELY from the live stats API — no invented figures.
+// Until the API answers (or when it has nothing for a continent) the card
+// shows a neutral "Growing" label instead.
+const CONTINENT_META = [
+  { name: "North America", icon: "american-football" as const },
+  { name: "Europe", icon: "football" as const },
+  { name: "Africa", icon: "fitness" as const },
+  { name: "South America", icon: "football" as const },
+  { name: "Asia", icon: "tennisball" as const },
+  { name: "Oceania", icon: "basketball" as const },
 ];
+
+type ContinentRow = {
+  name: string;
+  icon: (typeof CONTINENT_META)[number]["icon"];
+  athletes: number | null;
+  recruiters: number | null;
+};
+
+const DEFAULT_CONTINENTS: ContinentRow[] = CONTINENT_META.map((m) => ({
+  ...m,
+  athletes: null,
+  recruiters: null,
+}));
 
 // ── Interactive Three.js globe HTML ──
 // Renders the real, role-targeted candidates as point meshes that the
@@ -83,6 +72,12 @@ function buildGlobeHtml(points: { id: string; lat: number; lng: number; role: st
   // gives us a JS literal that can't break out of the script tag and
   // is bounded by what the backend returns (no untrusted markup).
   const ptsJson = JSON.stringify(points);
+  // Pin color: single brand green in production. The orange split for
+  // seeded/demo accounts (@getdraft.app) is a dev-only diagnostic — end
+  // users must never see a two-tone globe.
+  const colorForFn = __DEV__
+    ? `function colorFor(d){return d.generated?'#FDA63A':'${semantic.success}'}`
+    : `function colorFor(){return '${semantic.success}'}`;
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
@@ -108,9 +103,9 @@ var arcs=[
 {startLat:-30.6,startLng:22.9,endLat:40.5,endLng:-3.7},
 {startLat:23.6,startLng:-102.6,endLat:56.1,endLng:-106.3}
 ];
-// Visible point markers — manually-created REAL users are GREEN, seeded/demo
-// accounts (@getdraft.app) are ORANGE, so real signups stand out instantly.
-function colorFor(d){return d.generated?'#FDA63A':'#00B894'}
+// Visible point markers — brand green in production; in dev builds
+// seeded/demo accounts (@getdraft.app) are ORANGE so real signups stand out.
+${colorForFn}
 var G=new ThreeGlobe()
 .globeImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg')
 .bumpImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png')
@@ -203,7 +198,7 @@ function ContinentCard({
   continent,
   index,
 }: {
-  continent: (typeof DEFAULT_CONTINENTS)[0];
+  continent: ContinentRow;
   index: number;
 }) {
   const opacity = useSharedValue(0);
@@ -229,16 +224,21 @@ function ContinentCard({
     transform: [{ translateX: translateX.value }],
   }));
 
+  // Live counts only — a continent with no server data reads "Growing"
+  // rather than an invented figure.
+  const statsLine =
+    continent.athletes == null && continent.recruiters == null
+      ? "Growing"
+      : `${continent.athletes ?? "—"} athlete${continent.athletes === 1 ? "" : "s"} · ${continent.recruiters ?? "—"} recruiter${continent.recruiters === 1 ? "" : "s"}`;
+
   return (
     <Animated.View style={[styles.continentCard, style]}>
       <View style={styles.continentIcon}>
-        <Ionicons name={continent.icon} size={16} color="#00B894" />
+        <Ionicons name={continent.icon} size={16} color={semantic.success} />
       </View>
       <View style={styles.continentInfo}>
         <Text style={styles.continentName}>{continent.name}</Text>
-        <Text style={styles.continentStats}>
-          {continent.athletes} athletes · {continent.recruiters} recruiters
-        </Text>
+        <Text style={styles.continentStats}>{statsLine}</Text>
       </View>
     </Animated.View>
   );
@@ -258,10 +258,12 @@ export default function GlobeTab() {
   // their own role's home via useRoleHomeRedirect (focus-based).
   const redirecting = useRoleHomeRedirect(["athlete", "coach", "recruiter"]);
 
+  const insets = useSafeAreaInsets();
   const [isActive, setIsActive] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const webviewRef = useRef<WebView>(null);
-  const [CONTINENTS, setContinents] = useState(DEFAULT_CONTINENTS);
+  const [CONTINENTS, setContinents] =
+    useState<ContinentRow[]>(DEFAULT_CONTINENTS);
   const [points, setPoints] = useState<MapPoint[]>([]);
   // Mini card sits over the globe on point tap; tapping the mini opens
   // the big-card modal with Draft / Pass.
@@ -270,19 +272,26 @@ export default function GlobeTab() {
   const [swiping, setSwiping] = useState(false);
   const [matchMsg, setMatchMsg] = useState<string | null>(null);
 
-  // Fetch globe stats from API
+  // Fetch globe stats from API. The backend returns an object keyed by
+  // continent name ({ "North America": { athletes, recruiters, ... } });
+  // only numeric server counts are shown — missing continents stay null
+  // and render as "Growing" instead of an invented figure.
   useEffect(() => {
     statsService
       .getGlobeStats()
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setContinents(
-            data.map((d: any, i: number) => ({
-              ...DEFAULT_CONTINENTS[i],
-              ...d,
-            })),
-          );
-        }
+        if (!data || typeof data !== "object") return;
+        setContinents(
+          CONTINENT_META.map((meta, i) => {
+            const s: any = Array.isArray(data) ? data[i] : data[meta.name];
+            return {
+              ...meta,
+              athletes: typeof s?.athletes === "number" ? s.athletes : null,
+              recruiters:
+                typeof s?.recruiters === "number" ? s.recruiters : null,
+            };
+          }),
+        );
       })
       .catch(() => {});
   }, []);
@@ -376,10 +385,22 @@ export default function GlobeTab() {
         } else {
           dismissAll();
         }
-      } catch {
-        // Backend rejected (out of swipes, banned, etc) — still hide
-        // the card; surfacing details is the swipe deck's job.
-        dismissAll();
+      } catch (err) {
+        const status = (err as any)?.response?.status;
+        if (status === 429 || status === 403) {
+          // Out of Drafts — hide the card, they can't act on it right now.
+          dismissAll();
+          Alert.alert(
+            "Out of Drafts",
+            "You're out of Drafts this month — upgrade or come back next month.",
+          );
+        } else {
+          // Network / server hiccup — keep the card open so they can retry.
+          Alert.alert(
+            "Connection problem",
+            "That didn't go through. Check your connection and try again.",
+          );
+        }
       } finally {
         setSwiping(false);
       }
@@ -410,7 +431,7 @@ export default function GlobeTab() {
           />
         ) : (
           <View style={styles.globePlaceholder}>
-            <ActivityIndicator size="large" color="#00B894" />
+            <ActivityIndicator size="large" color={semantic.success} />
           </View>
         )}
         {/* Gradient overlay at bottom for readability */}
@@ -418,47 +439,88 @@ export default function GlobeTab() {
       </View>
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { top: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>Global Network</Text>
         <Text style={styles.headerSubtitle}>Talent distribution worldwide</Text>
       </View>
 
-      {/* Toggle stats panel */}
-      <View style={styles.bottomPanel}>
-        <Pressable
-          style={styles.toggleButton}
-          onPress={() => setShowStats(!showStats)}
-        >
-          <Ionicons
-            name={showStats ? "chevron-down" : "chevron-up"}
-            size={18}
-            color="rgba(255,255,255,0.7)"
-          />
-          <Text style={styles.toggleText}>
-            {showStats ? "Hide" : "Talent Hotspots"}
-          </Text>
-        </Pressable>
+      {/* Filters & Hotspots — visible pill button opening the bottom sheet.
+          The tab bar is NOT absolute (the scene ends above it), so a small
+          insets-aware offset from the scene bottom is enough. */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.hotspotsButton,
+          { bottom: insets.bottom + 20 },
+          pressed && { opacity: 0.85 },
+        ]}
+        onPress={() => {
+          // Dismiss any selected point mini-card before the sheet slides up.
+          setSelected(null);
+          setShowStats(true);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Open filters and hotspots"
+      >
+        <Ionicons name="options-outline" size={16} color="#FFFFFF" />
+        <Text style={styles.hotspotsButtonText}>Filters & Hotspots</Text>
+      </Pressable>
 
-        {showStats && (
-          <View style={styles.continentList}>
-            {CONTINENTS.map((c, i) => (
-              <ContinentCard key={c.name} continent={c} index={i} />
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* Instruction hint — centered above bottom panel */}
+      {/* Instruction hint — centered above the hotspots button */}
       {!showStats && !selected && !matchMsg && (
-        <View style={styles.hint}>
+        <View style={[styles.hint, { bottom: insets.bottom + 84 }]}>
           <Ionicons
             name="hand-left-outline"
             size={14}
-            color="rgba(255,255,255,0.4)"
+            color="rgba(255,255,255,0.7)"
           />
           <Text style={styles.hintText}>Drag to rotate · Tap a point</Text>
         </View>
       )}
+
+      {/* Hotspots bottom sheet */}
+      <Modal
+        visible={showStats}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setShowStats(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setShowStats(false)}
+        >
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Talent Hotspots</Text>
+              <Pressable
+                hitSlop={10}
+                onPress={() => setShowStats(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close hotspots"
+                style={styles.sheetClose}
+              >
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color="rgba(255,255,255,0.7)"
+                />
+              </Pressable>
+            </View>
+            <ScrollView
+              contentContainerStyle={{
+                gap: 6,
+                paddingBottom: insets.bottom + 16,
+              }}
+              showsVerticalScrollIndicator={false}
+            >
+              {CONTINENTS.map((c, i) => (
+                <ContinentCard key={c.name} continent={c} index={i} />
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Match toast — replaces the mini card after a mutual draft. */}
       {matchMsg && (
@@ -505,7 +567,11 @@ export default function GlobeTab() {
                 {selected.name ?? "Athlete"}
               </Text>
               {selected.verified && (
-                <Ionicons name="checkmark-circle" size={14} color="#00B894" />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={14}
+                  color={semantic.success}
+                />
               )}
             </View>
             <Text style={styles.miniMeta} numberOfLines={1}>
@@ -565,7 +631,7 @@ export default function GlobeTab() {
                     <Ionicons
                       name="checkmark-circle"
                       size={20}
-                      color="#00B894"
+                      color={semantic.success}
                     />
                   )}
                 </View>
@@ -676,7 +742,6 @@ const styles = StyleSheet.create({
   },
   header: {
     position: "absolute",
-    top: 60,
     left: 24,
     right: 24,
   },
@@ -692,33 +757,65 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.5)",
     marginTop: 2,
   },
-  bottomPanel: {
+  hotspotsButton: {
     position: "absolute",
-    bottom: 90,
-    left: 16,
-    right: 16,
-  },
-  toggleButton: {
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 16,
+    backgroundColor: "rgba(0, 184, 148, 0.22)",
+    borderRadius: 24,
     paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.06)",
-    alignSelf: "center",
+    paddingHorizontal: 22,
+    borderWidth: 1.5,
+    borderColor: semantic.success,
   },
-  toggleText: {
+  hotspotsButtonText: {
     fontSize: 14,
     fontFamily: "Poppins_600SemiBold",
-    color: "rgba(255, 255, 255, 0.7)",
+    color: "#FFFFFF",
   },
-  continentList: {
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+  },
+  sheet: {
+    maxHeight: SCREEN_HEIGHT * 0.55,
+    backgroundColor: "#151515",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 16,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
     marginTop: 10,
-    gap: 6,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
+  },
+  sheetClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
   continentCard: {
     flexDirection: "row",
@@ -755,18 +852,20 @@ const styles = StyleSheet.create({
   },
   hint: {
     position: "absolute",
-    bottom: 140,
-    left: 0,
-    right: 0,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
   },
   hintText: {
     fontSize: 12,
     fontFamily: "Poppins_500Medium",
-    color: "rgba(255, 255, 255, 0.4)",
+    color: "rgba(255, 255, 255, 0.7)",
   },
   matchToast: {
     position: "absolute",
@@ -922,7 +1021,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
   },
   passBtn: { backgroundColor: "#E74C3C" },
-  draftBtn: { backgroundColor: "#00B894" },
+  draftBtn: { backgroundColor: semantic.success },
   bigBtnText: {
     fontSize: 15,
     fontFamily: "Poppins_700Bold",

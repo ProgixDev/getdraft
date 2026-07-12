@@ -99,6 +99,16 @@ export default function PostCreateScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     const a = result.assets[0];
     const isVideo = a.type === "video" || (a.mimeType ?? "").startsWith("video/");
+    // videoMaxDuration only caps in-app camera recordings — library
+    // picks arrive at full length, so enforce the 60s reel limit here
+    // too (asset.duration is in milliseconds).
+    if (isVideo && (a.duration ?? 0) > 60_000) {
+      Alert.alert(
+        "Video too long",
+        "Reels are limited to 60 seconds. Pick a shorter video or trim it first.",
+      );
+      return;
+    }
     const mime = a.mimeType ?? (isVideo ? "video/mp4" : "image/jpeg");
     setAsset({
       uri: a.uri,
