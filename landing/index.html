@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0F4C67">
+<meta name="theme-color" content="#121212">
 <meta name="description" content="GetDraft — the sports recruiting app where athletes get discovered. Swipe, Draft, match with coaches and recruiters. Coming soon to the App Store and Google Play.">
 <meta property="og:title" content="GetDraft — Get discovered. It's a Draft!">
 <meta property="og:description" content="Athletes, coaches & recruiters connect with a single Draft. Free to start — coming soon to iOS & Android.">
@@ -26,20 +26,21 @@
 
 /* ============ Design tokens (mirrors the GetDraft app theme) ============ */
 :root{
-  --bg:#0F4C67; --bg2:#0C4157; --card:#14587A; --card2:#186287;
-  --green:#DFF24B; --green-dark:#0B3E55; --green-deep:#082F42;
-  --txt:#FFFFFF; --muted:#BCD8E5; --line:rgba(255,255,255,.16);
+  --bg:#121212; --bg2:rgba(8,13,24,.45); --card:rgba(255,255,255,.07); --card2:rgba(255,255,255,.11);
+  --green:#9CC7F0; --green-dark:#0A2C55; --green-deep:#081A33;
+  --txt:#FFFFFF; --muted:#BFC9D9; --line:rgba(255,255,255,.16);
   --radius:24px;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{
   font-family:'Poppins',-apple-system,'Segoe UI',Roboto,sans-serif;
-  background:var(--bg); color:var(--txt);
+  /* the app's signup gradient: brand.primary -> #0a4d8f -> dark */
+  background:linear-gradient(180deg,#121212 0%,#0a4d8f 55%,#0c1526 100%) fixed; color:var(--txt);
   overflow-x:hidden; line-height:1.6;
   -webkit-font-smoothing:antialiased;
 }
-::selection{background:var(--green); color:#0C3549}
+::selection{background:var(--green); color:#121212}
 img{max-width:100%; display:block}
 a{color:inherit; text-decoration:none}
 button{font-family:inherit; cursor:pointer; border:none}
@@ -50,7 +51,7 @@ button{font-family:inherit; cursor:pointer; border:none}
 .nav{
   position:fixed; top:0; left:0; right:0; z-index:60;
   backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-  background:rgba(12,65,87,.72); border-bottom:1px solid transparent;
+  background:rgba(10,14,25,.72); border-bottom:1px solid transparent;
   transition:border-color .3s;
 }
 .nav.scrolled{border-color:var(--line)}
@@ -63,7 +64,7 @@ button{font-family:inherit; cursor:pointer; border:none}
 .nav-links a:hover{color:#fff}
 .btn{
   display:inline-flex; align-items:center; justify-content:center; gap:8px;
-  background:var(--green); color:#0C3549; font-weight:700; font-size:14px;
+  background:#fff; color:#121212; font-weight:700; font-size:14px;
   padding:11px 22px; border-radius:40px; transition:transform .2s, box-shadow .2s, background .2s;
   box-shadow:0 6px 24px rgba(151,211,237,.28);
 }
@@ -109,7 +110,7 @@ h1{
   font-size:clamp(40px,5.4vw,68px); font-weight:800; line-height:1.06; letter-spacing:-2px;
 }
 h1 .hl{
-  background:linear-gradient(90deg,#F2FF8F,var(--green));
+  background:linear-gradient(90deg,#CFE4FA,var(--green));
   -webkit-background-clip:text; background-clip:text; color:transparent;
 }
 .hero-sub{color:var(--muted); font-size:18px; max-width:480px; margin:22px 0 30px}
@@ -320,7 +321,7 @@ h2{font-size:clamp(30px,3.6vw,44px); font-weight:800; letter-spacing:-1.4px; lin
 /* draft banner */
 .draft-banner{
   border-radius:32px; overflow:hidden; position:relative; text-align:center;
-  background:radial-gradient(circle at 50% 0%,#186287 0%,#10516F 45%,#0C4157 100%);
+  background:radial-gradient(circle at 50% 0%,#0f5aa8 0%,#0a3a75 45%,rgba(10,14,25,0) 100%);
   border:1px solid rgba(151,211,237,.25); padding:74px 30px 66px;
 }
 .draft-banner img{width:230px; margin:0 auto 8px; filter:drop-shadow(0 18px 40px rgba(0,0,0,.55))}
@@ -337,7 +338,7 @@ h2{font-size:clamp(30px,3.6vw,44px); font-weight:800; letter-spacing:-1.4px; lin
 .plan.hot{border-color:var(--green); background:linear-gradient(175deg,rgba(151,211,237,.1) 0%,var(--card) 45%)}
 .plan .pop{
   position:absolute; top:-13px; left:50%; transform:translateX(-50%);
-  background:var(--green); color:#0C3549; font-size:11px; font-weight:800; letter-spacing:1px;
+  background:var(--green); color:#121212; font-size:11px; font-weight:800; letter-spacing:1px;
   padding:5px 16px; border-radius:20px; text-transform:uppercase; white-space:nowrap;
 }
 .plan .pn{font-size:15px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1.6px}
@@ -406,7 +407,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
 /* scroll progress bar */
 .progress{
   position:fixed; top:0; left:0; right:0; height:3px; z-index:99;
-  background:linear-gradient(90deg,#1FAA59,#F2FF8F);
+  background:linear-gradient(90deg,#0a4d8f,#CFE4FA);
   transform-origin:0 50%; transform:scaleX(0);
 }
 /* floodlight sweep across the hero */
@@ -523,7 +524,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
 .safe p{font-size:13.5px; color:var(--muted)}
 .safe .num{
   position:absolute; top:-8px; left:50%; margin-left:14px; z-index:2;
-  width:24px; height:24px; border-radius:50%; background:var(--green); color:#0C3549;
+  width:24px; height:24px; border-radius:50%; background:var(--green); color:#121212;
   font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;
 }
 
@@ -1212,7 +1213,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
   function burst(){
     if(reduced) return;
     parts = [];
-    var colors = ['#1FAA59','#F2FF8F','#FFFFFF','#CFF5DF'];
+    var colors = ['#1FAA59','#CFE4FA','#FFFFFF','#CFF5DF'];
     for(var i=0;i<70;i++){
       parts.push({
         x: cv.width/2, y: cv.height*0.42,
