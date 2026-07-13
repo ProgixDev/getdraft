@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Linking,
+  BackHandler,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,6 +73,25 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
   const [phoneVerificationToken, setPhoneVerificationToken] = useState<string>('');
   const [oauthInitial, setOauthInitial] = useState<{ name?: string; email?: string }>({});
   const [pendingOauth, setPendingOauth] = useState<OAuthProvider | null>(null);
+
+  // Hardware/gesture back steps backwards through the auth entry states.
+  // AuthScreen registers its own handler (later, so it wins) for the steps
+  // it owns and falls through to this one at its root. Only on 'landing'
+  // do we return false and let the OS close the app.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (state === 'phone-verify') {
+        setState('phone-input');
+        return true;
+      }
+      if (state !== 'landing') {
+        setState('landing');
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [state]);
 
   const handleCodeSent = useCallback((p: string, c: 'sms' | 'whatsapp') => {
     setPhone(p);

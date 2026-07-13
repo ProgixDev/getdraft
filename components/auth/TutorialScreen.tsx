@@ -24,6 +24,7 @@ const { width, height } = Dimensions.get("window");
 
 interface TutorialScreenProps {
   onComplete: () => void;
+  onBack?: () => void;
 }
 
 interface TutorialSlide {
@@ -66,6 +67,7 @@ const tutorialSlides: TutorialSlide[] = [
 
 export const TutorialScreen: React.FC<TutorialScreenProps> = ({
   onComplete,
+  onBack,
 }) => {
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -130,6 +132,11 @@ export const TutorialScreen: React.FC<TutorialScreenProps> = ({
       style={styles.container}
     >
       <View style={styles.content}>
+        {onBack && (
+          <Pressable onPress={onBack} style={styles.backButton} hitSlop={10}>
+            <Ionicons name="arrow-back" size={24} color={brand.white} />
+          </Pressable>
+        )}
         <Text style={styles.headerTitle}>How Matching Works</Text>
 
         <FlatList
@@ -194,6 +201,18 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingTop: 80,
+  },
+  backButton: {
+    position: "absolute",
+    top: 56,
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
   },
   headerTitle: {
     fontSize: 24,

@@ -10,6 +10,7 @@ import {
   LayoutAnimation,
   ActivityIndicator,
   Alert,
+  BackHandler,
 } from "react-native";
 import KeyboardAwareScreen from "@/components/KeyboardAwareScreen";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -205,6 +206,77 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   useEffect(() => {
     contentOpacity.value = withDelay(300, withTiming(1, { duration: 600 }));
   }, []);
+
+  /**
+   * Android hardware/gesture back mirrors the on-screen Back buttons:
+   * every step returns to the previous one instead of exiting the app.
+   * Returns false only at the flow root so the parent (AuthLanding)
+   * or the OS default can take over.
+   */
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (isLoading) return true; // ignore back while a request is in flight
+      if (mode === "forgot") {
+        setMode("login");
+        return true;
+      }
+      if (mode === "signup" && signupStep !== "role") {
+        const roleStep: SignupStep = isPhoneSignup
+          ? "phone-role"
+          : isOauthSignup
+            ? "oauth-role"
+            : "role";
+        switch (signupStep) {
+          case "verify":
+          case "location":
+            setSignupStep(roleStep);
+            return true;
+          case "profile":
+            if (role === "parent") setSignupStep(roleStep);
+            else setSignupStep("location");
+            return true;
+          case "kyc":
+            setSignupStep("profile");
+            return true;
+          case "guardian-link":
+            setSignupStep("kyc");
+            return true;
+          case "questions":
+            setSignupStep(role === "parent" ? "guardian-link" : "kyc");
+            return true;
+          case "tutorial":
+            setSignupStep("questions");
+            return true;
+          case "plan":
+            setSignupStep("tutorial");
+            return true;
+          case "phone-role":
+          case "oauth-role":
+            if (onCancel) {
+              onCancel();
+              return true;
+            }
+            return false;
+        }
+      }
+      // Root login/signup card — back out to the sign-in method choices.
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [
+    mode,
+    signupStep,
+    role,
+    isLoading,
+    isPhoneSignup,
+    isOauthSignup,
+    onBack,
+    onCancel,
+  ]);
 
   /**
    * Resume signup at the right step when the user is logged in but
@@ -770,12 +842,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           />
         );
       case "tutorial":
-        return <TutorialScreen onComplete={handleTutorialComplete} />;
+        return (
+          <TutorialScreen
+            onComplete={handleTutorialComplete}
+            onBack={() => setSignupStep("questions")}
+          />
+        );
       case "plan":
         return (
           <PlanSelectionScreen
             onPlanSelected={handlePlanSelected}
             onSkip={handleSkipPlan}
+            onBack={() => setSignupStep("tutorial")}
           />
         );
       case "phone-role":
