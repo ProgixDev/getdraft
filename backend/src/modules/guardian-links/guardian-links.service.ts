@@ -10,7 +10,10 @@ import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../../config/supabase.config';
 import { UserRole } from '../../common/types';
-import { setActivationStatus } from '../../common/utils/activation';
+import {
+  setActivationStatus,
+  reevaluateMinorActivation,
+} from '../../common/utils/activation';
 
 export type GuardianRelationship =
   | 'parent'
@@ -155,6 +158,24 @@ export class GuardianLinksService {
     }
     const { error } = await supabase.from('guardian_links').delete().eq('id', linkId);
     if (error) throw new BadRequestException(error.message);
+
+    // Revoking the link may have removed a minor's last approved guardian.
+    // Re-gate them if so — same rule as guardian account deletion. The
+    // revoke already succeeded, so a re-evaluation hiccup is logged, not
+    // fatal.
+    try {
+      const status = await reevaluateMinorActivation(supabase, athleteUserId);
+      if (status === 'pending_guardian') {
+        this.logger.warn(
+          `[activation] athlete ${athleteUserId} re-gated to pending_guardian after revoking guardian link ${linkId}`,
+        );
+      }
+    } catch (err: any) {
+      this.logger.error(
+        `[activation] re-evaluation failed for athlete ${athleteUserId} after revoking link ${linkId}: ${err?.message ?? err}`,
+      );
+    }
+
     return { revoked: true };
   }
 

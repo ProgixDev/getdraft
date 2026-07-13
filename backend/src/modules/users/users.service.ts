@@ -13,7 +13,10 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUserPayload, UserRole } from '../../common/types';
 import { isMinor } from '../../common/utils/age';
-import { setActivationStatus } from '../../common/utils/activation';
+import {
+  setActivationStatus,
+  reevaluateMinorActivation,
+} from '../../common/utils/activation';
 
 @Injectable()
 export class UsersService {
@@ -408,6 +411,18 @@ export class UsersService {
       .eq('id', userId)
       .maybeSingle();
 
+    // If this account is a guardian, capture the athletes it's linked to
+    // BEFORE the delete — the guardian_links rows cascade away with the
+    // parent, so we must remember who to re-check afterwards. A minor left
+    // with no other approved guardian must not stay usable (COPPA).
+    const { data: linkedAthletes } = await supabase
+      .from('guardian_links')
+      .select('athlete_user_id')
+      .eq('guardian_user_id', userId);
+    const affectedAthleteIds = Array.from(
+      new Set((linkedAthletes ?? []).map((l: any) => l.athlete_user_id)),
+    );
+
     if (row?.stripe_subscription_id) {
       try {
         await this.subscriptionsService.cancelSubscription(userId, true);
@@ -421,6 +436,24 @@ export class UsersService {
     const { error } = await supabase.auth.admin.deleteUser(userId);
     if (error) {
       throw new BadRequestException(error.message);
+    }
+
+    // Cascade has now removed this guardian's links. Re-gate any minor who
+    // lost their last approved guardian. Best-effort per athlete: one
+    // failure must not abort the others, and the account is already gone.
+    for (const athleteId of affectedAthleteIds) {
+      try {
+        const status = await reevaluateMinorActivation(supabase, athleteId);
+        if (status === 'pending_guardian') {
+          this.logger.warn(
+            `[activation] athlete ${athleteId} re-gated to pending_guardian after guardian ${userId} deleted their account`,
+          );
+        }
+      } catch (err: any) {
+        this.logger.error(
+          `[activation] re-evaluation failed for athlete ${athleteId} after guardian ${userId} deletion: ${err?.message ?? err}`,
+        );
+      }
     }
 
     return { deleted: true };
