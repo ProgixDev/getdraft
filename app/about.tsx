@@ -7,6 +7,7 @@ import {
   ScrollView,
   Linking,
   Alert,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -19,24 +20,19 @@ import {
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral, semantic, theme } from "@/config/colors";
+import { images } from "@/config/assets";
 
+// Official channels only — add more here once they exist.
 const SOCIAL_LINKS = [
   {
     icon: "logo-instagram" as const,
     label: "Instagram",
-    url: "https://instagram.com/getdraft",
-  },
-  {
-    icon: "logo-twitter" as const,
-    label: "X / Twitter",
-    url: "https://x.com/getdraft",
-  },
-  {
-    icon: "musical-notes-outline" as const,
-    label: "TikTok",
-    url: "https://tiktok.com/@getdraft",
+    url: "https://www.instagram.com/officialgetdraft?igsh=dThvbWdkNG9vaGFl",
   },
 ];
+
+const PRIVACY_POLICY_URL =
+  "https://getdraft-api-production.up.railway.app/api/privacy";
 
 const LEGAL_LINKS = [
   { icon: "document-text-outline" as const, label: "Terms of Service" },
@@ -78,7 +74,11 @@ export default function AboutScreen() {
         {/* Brand */}
         <View style={styles.brandSection}>
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>GD</Text>
+            <Image
+              source={images.logoWhite}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.brandName}>GetDraft</Text>
           <Text style={styles.version}>Version 1.0.0</Text>
@@ -105,7 +105,9 @@ export default function AboutScreen() {
                 pressed && styles.legalRowPressed,
               ]}
               onPress={() =>
-                Alert.alert(item.label, `${item.label} page is coming soon.`)
+                item.label === "Privacy Policy"
+                  ? Linking.openURL(PRIVACY_POLICY_URL)
+                  : Alert.alert(item.label, `${item.label} page is coming soon.`)
               }
             >
               <Ionicons
@@ -198,10 +200,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  logoText: {
-    fontSize: 36,
-    fontFamily: "Poppins_700Bold",
-    color: brand.white,
+  logoImage: {
+    width: 64,
+    height: 64,
   },
   brandName: {
     fontSize: 30,
