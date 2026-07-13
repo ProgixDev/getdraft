@@ -136,7 +136,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
 
   // Email path delegates entirely to existing AuthScreen.
   if (state === 'email') {
-    return <AuthScreen onLogin={onLogin} />;
+    return <AuthScreen onLogin={onLogin} onBack={() => setState('landing')} />;
   }
 
   // Phone-input → phone-verify → phone-onboarding (AuthScreen w/ phone token).

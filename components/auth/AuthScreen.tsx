@@ -66,6 +66,12 @@ interface AuthScreenProps {
   onLogin?: () => void;
   onSignup?: () => void;
   /**
+   * Return to the previous screen (the AuthLanding method choices —
+   * email vs phone). Rendered as a back chevron on the login/signup
+   * card when provided.
+   */
+  onBack?: () => void;
+  /**
    * Set when the user arrived via the phone signup path. We skip the
    * email/OTP steps and just collect role + name + password, then call
    * completeSignup with this token.
@@ -138,6 +144,7 @@ const roleOptions: RoleOption[] = [
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLogin,
+  onBack,
   phoneVerificationToken,
   initialPhone,
   oauthMode,
@@ -1053,6 +1060,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         style={styles.container}
         contentContainerStyle={styles.scrollContainer}
       >
+          {/* Back to the sign-in method choices (email / phone) */}
+          {onBack && (
+            <Pressable style={styles.landingBackButton} onPress={onBack} hitSlop={10}>
+              <Ionicons name="chevron-back" size={22} color={brand.white} />
+              <Text style={styles.landingBackText}>Back</Text>
+            </Pressable>
+          )}
+
           {/* Header with Logo */}
           <Animated.View entering={FadeIn.duration(800)} style={styles.header}>
             <Image
@@ -1268,6 +1283,20 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
     color: "rgba(255, 255, 255, 0.9)",
     letterSpacing: 0.3,
+  },
+  landingBackButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  landingBackText: {
+    color: brand.white,
+    fontSize: 15,
+    fontFamily: "Poppins_500Medium",
+    marginLeft: 2,
   },
   card: {
     flex: 1,
