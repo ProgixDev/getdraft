@@ -195,7 +195,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
           <PaginationDots
             count={welcomeSlides.length}
             scrollX={scrollX}
-            vertical
             color={brand.white}
           />
         </View>
