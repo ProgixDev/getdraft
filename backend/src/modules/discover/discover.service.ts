@@ -368,7 +368,12 @@ export class DiscoverService {
     if (recruiterType) recruiterProfileFilter.role_type = recruiterType;
     if (verifiedOnly) recruiterProfileFilter.verified = true;
 
-    const athleteBranch: Prisma.public_usersWhereInput = { role: 'athlete' };
+    // Minors awaiting guardian approval must not be discoverable (COPPA):
+    // they only enter the feed once their activation flips to 'active'.
+    const athleteBranch: Prisma.public_usersWhereInput = {
+      role: 'athlete',
+      activation_status: 'active',
+    };
     if (Object.keys(athleteProfileFilter).length) {
       athleteBranch.athlete_profiles = { is: athleteProfileFilter };
     }
@@ -478,6 +483,8 @@ export class DiscoverService {
     const where: Prisma.public_usersWhereInput = {
       role: 'athlete',
       is_banned: false,
+      // Same COPPA gate as the feed — unapproved minors stay off the map.
+      activation_status: 'active',
       id: { notIn: [...excluded, user.id] },
     };
     if (query.country && !query.includeInternational) where.country = query.country;
