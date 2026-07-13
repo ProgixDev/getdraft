@@ -21,6 +21,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
 import { subscriptionsService } from '@/services/subscriptions';
+import { useRoleHomeRedirect } from '@/lib/roleRoutes';
 
 interface SwipePack {
   id: string;
@@ -43,6 +44,11 @@ export default function BuySwipesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
+  // Billing is athlete/recruiter-side only. Parents and admins never buy
+  // Draft packs — deep links bounce them home (focus-based, same pattern
+  // as the role-gated tabs).
+  const redirecting = useRoleHomeRedirect(['athlete', 'coach', 'recruiter']);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -154,6 +160,7 @@ export default function BuySwipesScreen() {
   );
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

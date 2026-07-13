@@ -434,9 +434,12 @@ export default function MatchesScreen() {
       >
         {isParent ? (
           <>
+            {/* Parents don't match — this view is the recruiter-outreach
+                inbox, so label it that way (the "matches" key is just the
+                internal view id shared with the other roles). */}
             <TabPill
-              icon="trophy"
-              label="Matches"
+              icon="mail"
+              label="Outreach"
               active={view === "matches"}
               onPress={() => setView("matches")}
             />

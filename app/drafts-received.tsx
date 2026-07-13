@@ -22,6 +22,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, theme } from "@/config/colors";
 import { discoverService } from "@/services/discover";
+import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
 interface DrafterSwiper {
   id: string;
@@ -54,6 +55,8 @@ function formatTimeAgo(iso?: string | null): string {
 export default function DraftsReceivedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // Drafts are between athletes and recruiters — parents/admin bounce home.
+  const redirecting = useRoleHomeRedirect(["athlete", "coach", "recruiter"]);
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
@@ -108,7 +111,7 @@ export default function DraftsReceivedScreen() {
     [pendingId],
   );
 
-  if (!fontsLoaded) return null;
+  if (redirecting || !fontsLoaded) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

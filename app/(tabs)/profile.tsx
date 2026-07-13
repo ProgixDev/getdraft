@@ -877,95 +877,10 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Parents: unchanged view of their child's media plus the
-            Request Uploads stub. Parents can't post; this is the
-            window onto their athlete's profile. */}
-        {isParent && (
-          <>
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Child&apos;s Photos</Text>
-              </View>
-              <View style={styles.photoGrid}>
-                {photos.length > 0 ? (
-                  photos.map((photo, i) => (
-                    <View key={i} style={styles.photoItem}>
-                      <Image
-                        source={
-                          typeof photo === "string" ? { uri: photo } : photo
-                        }
-                        style={styles.photoImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  ))
-                ) : (
-                  <View style={styles.emptyMedia}>
-                    <Ionicons
-                      name="images-outline"
-                      size={40}
-                      color={theme.textMuted}
-                    />
-                    <Text style={styles.emptyMediaText}>
-                      Child athlete hasn&apos;t added photos yet
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Child&apos;s Videos</Text>
-              </View>
-              <View style={styles.videoSection}>
-                {videos.length > 0 ? (
-                  videos.map((video, i) => (
-                    <Pressable
-                      key={i}
-                      style={styles.videoItem}
-                      onPress={() => {
-                        if (typeof video === "string") {
-                          router.push({
-                            pathname: "/video",
-                            params: {
-                              url: video,
-                              title: `Highlight Reel ${i + 1}`,
-                            },
-                          });
-                        } else {
-                          comingSoon("Video Player");
-                        }
-                      }}
-                    >
-                      <View style={styles.videoPlaceholder}>
-                        <Ionicons
-                          name="play-circle"
-                          size={48}
-                          color={brand.white}
-                        />
-                        <Text style={styles.videoLabel}>
-                          Highlight Reel {i + 1}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))
-                ) : (
-                  <View style={styles.emptyMedia}>
-                    <Ionicons
-                      name="videocam-outline"
-                      size={40}
-                      color={theme.textMuted}
-                    />
-                    <Text style={styles.emptyMediaText}>
-                      Child athlete hasn&apos;t added highlight videos
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </>
-        )}
+        {/* Parents: no media sections — a guardian profile is deliberately
+            minimal (identity + About + avatar via Edit). The child's
+            media lives on the child's own profile, reachable from the
+            guardian dashboard. */}
       </ScrollView>
 
       {/* Post / reel detail. Uses the same like + comment + save

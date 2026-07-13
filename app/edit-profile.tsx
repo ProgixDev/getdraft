@@ -171,6 +171,7 @@ export default function EditProfileScreen() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [bio, setBio] = useState("");
   const [sport, setSport] = useState("");
+  const [organization, setOrganization] = useState("");
   const [position, setPosition] = useState("");
   const [level, setLevel] = useState("");
   const [height, setHeight] = useState("");
@@ -221,6 +222,7 @@ export default function EditProfileScreen() {
         setExistingProfile(p);
         setBio(p.bio ?? "");
         if (!isParent) setSport(p.sport ?? "");
+        if (isRecruiter) setOrganization(p.organization ?? "");
         if (isAthlete) {
           setPosition(p.position ?? "");
           setLevel(p.level ?? "");
@@ -547,6 +549,10 @@ export default function EditProfileScreen() {
       setErrorMsg("Pick a sport.");
       return;
     }
+    if (isRecruiter && !organization.trim()) {
+      setErrorMsg("Organization is required.");
+      return;
+    }
     setErrorMsg(null);
     setSaving(true);
     try {
@@ -582,7 +588,7 @@ export default function EditProfileScreen() {
       } else if (isRecruiter) {
         const prev = existingProfile ?? {};
         await profilesService.upsertRecruiterProfile({
-          organization: prev.organization ?? "",
+          organization: organization.trim(),
           sport,
           role_type: prev.role_type ?? (role === "coach" ? "coach" : "agent"),
           tags: prev.tags ?? [],
@@ -745,6 +751,28 @@ export default function EditProfileScreen() {
             />
           </View>
         </View>
+
+        {isRecruiter && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Organization</Text>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>
+                {role === "coach" ? "Organization" : "Agency Name"}
+              </Text>
+              <TextInput
+                value={organization}
+                onChangeText={setOrganization}
+                placeholder={
+                  role === "coach" ? "State University" : "Premier Sports Group"
+                }
+                placeholderTextColor={theme.inputPlaceholder}
+                style={styles.input}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+            </View>
+          </View>
+        )}
 
         {!isParent && (
           <View style={styles.section}>

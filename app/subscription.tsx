@@ -22,6 +22,7 @@ import {
 import { brand, semantic, theme } from '@/config/colors';
 import { plans } from '@/constants/plansData';
 import { subscriptionsService } from '@/services/subscriptions';
+import { useRoleHomeRedirect } from '@/lib/roleRoutes';
 
 type SubStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
@@ -61,6 +62,11 @@ function statusLabel(status: SubStatus | undefined) {
 export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // Billing is athlete/recruiter-side only. Parents are covered by their
+  // athlete's plan and admins never buy — deep links bounce them home
+  // (focus-based, same pattern as the role-gated tabs).
+  const redirecting = useRoleHomeRedirect(['athlete', 'coach', 'recruiter']);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -221,6 +227,7 @@ export default function SubscriptionScreen() {
   }, [pendingAction, router]);
 
   if (!fontsLoaded) return null;
+  if (redirecting) return null;
 
   const currentPlanId = apiSub?.plan_id ?? 'basic';
   const currentPlan = plans.find((p) => p.id === currentPlanId) ?? plans[0];
