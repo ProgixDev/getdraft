@@ -256,6 +256,9 @@ export class DiscoverService {
 
   private athleteCardFromUser(u: any) {
     const p = u.athlete_profiles;
+    // Settings → Privacy → "Show Location": off hides the city/country
+    // line from the card (the map excludes them separately).
+    const hideLocation = u.preferences?.showDistance === false;
     return {
       cardType: 'athlete' as const,
       id: u.id,
@@ -266,8 +269,8 @@ export class DiscoverService {
       sport: p.sport,
       position: p.position,
       level: p.level,
-      location: u.location,
-      country: u.country,
+      location: hideLocation ? null : u.location,
+      country: hideLocation ? null : u.country,
       distanceKm: 0,
       classYear: p.class_year,
       gpa: p.gpa,
@@ -283,14 +286,15 @@ export class DiscoverService {
 
   private recruiterCardFromUser(u: any) {
     const p = u.recruiter_profiles;
+    const hideLocation = u.preferences?.showDistance === false;
     return {
       cardType: 'recruiter' as const,
       id: u.id,
       name: u.name,
       role: p.role_type,
       organization: p.organization,
-      location: u.location,
-      country: u.country,
+      location: hideLocation ? null : u.location,
+      country: hideLocation ? null : u.country,
       distanceKm: 0,
       sport: p.sport,
       verified: p.verified,
@@ -401,6 +405,9 @@ export class DiscoverService {
         created_at: true,
         // Feeds the card's verified checkmark (athletes: KYC-approved).
         kyc_status: true,
+        // Settings toggles: profileVisible (hidden from feed) and
+        // showDistance (location hidden on the card).
+        preferences: true,
         athlete_profiles: {
           select: {
             sport: true,
@@ -439,6 +446,11 @@ export class DiscoverService {
     });
 
     const cards = users
+      // Settings → Privacy → "Profile Visible": explicit false means the
+      // user opted out of discovery. Filtered here (not in SQL) because a
+      // JSONB path comparison silently drops rows with no preferences at
+      // all — absence must default to visible.
+      .filter((u) => (u.preferences as any)?.profileVisible !== false)
       .map((u) => {
         if (u.role === 'athlete' && u.athlete_profiles) {
           return this.athleteCardFromUser(u);
@@ -505,6 +517,9 @@ export class DiscoverService {
         country: true,
         latitude: true,
         longitude: true,
+        // Settings toggles — see getEveryoneFeed for why this is filtered
+        // in JS rather than in SQL.
+        preferences: true,
         athlete_profiles: {
           select: {
             sport: true,
@@ -526,6 +541,12 @@ export class DiscoverService {
       .map((u) => {
         const p = u.athlete_profiles;
         if (!p) return null;
+        // Privacy toggles: opted out of discovery entirely, or asked to
+        // keep their location private — a map pin is pure location.
+        const prefs = (u.preferences as any) ?? {};
+        if (prefs.profileVisible === false || prefs.showDistance === false) {
+          return null;
+        }
         // Precise coords win; otherwise place by country (+ deterministic
         // per-user offset). Signup saves country only today, so this is what
         // makes REAL athletes show on the globe until lat/lng is captured.

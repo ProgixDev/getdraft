@@ -293,9 +293,10 @@ export default function SettingsScreen() {
 
           <View style={[styles.switchRow, styles.switchRowLast]}>
             <View style={styles.switchCopy}>
-              <Text style={styles.switchTitle}>Show Distance</Text>
+              <Text style={styles.switchTitle}>Show Location</Text>
               <Text style={styles.switchSubtitle}>
-                Display your distance on your profile
+                When off, your location is hidden from your card and the
+                talent map
               </Text>
             </View>
             <Switch
