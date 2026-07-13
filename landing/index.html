@@ -399,9 +399,9 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
 }
 @keyframes sweep{0%,100%{transform:translateX(-18%)}50%{transform:translateX(18%)}}
 /* headline load-in */
-.h-in{display:inline-block; opacity:0; transform:translateY(26px); animation:hin .8s cubic-bezier(.2,.7,.2,1) forwards}
+.h-in{display:inline-block; animation:hin .8s cubic-bezier(.2,.7,.2,1) backwards}
 .h-in.d1{animation-delay:.05s}.h-in.d2{animation-delay:.18s}
-@keyframes hin{to{opacity:1; transform:none}}
+@keyframes hin{from{opacity:0; transform:translateY(26px)}}
 /* CTA pulse */
 .btn.pulse{animation:ctapulse 2.8s ease-in-out infinite}
 @keyframes ctapulse{0%,100%{box-shadow:0 6px 24px rgba(151,211,237,.28)}50%{box-shadow:0 6px 34px rgba(151,211,237,.55)}}
