@@ -33,7 +33,7 @@ import {
 import { brand, semantic } from "@/config/colors";
 import type { UserRole } from "@/store/slices/authSlice";
 
-const ACCENT = semantic.success; // #00B894 brand green
+const ACCENT = semantic.infoDark; // #0984E3 brand blue
 const CONFETTI_COLORS = [
   semantic.success,
   semantic.info,
@@ -396,7 +396,7 @@ export function MatchCelebration({
             ]}
           />
           <LinearGradient
-            colors={["rgba(0,184,148,0.12)", "transparent"]}
+            colors={["rgba(9,132,227,0.12)", "transparent"]}
             style={styles.topWash}
           />
         </Animated.View>
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: "rgba(0,184,148,0.16)",
+    backgroundColor: "rgba(9,132,227,0.16)",
   },
   topWash: {
     position: "absolute",
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
     width: 240,
     height: 240,
     borderRadius: 120,
-    backgroundColor: "rgba(0,184,148,0.10)",
+    backgroundColor: "rgba(9,132,227,0.10)",
   },
   handshakeWrap: {
     width: "100%",
@@ -711,7 +711,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,184,148,0.12)",
+    backgroundColor: "rgba(9,132,227,0.12)",
   },
   unlockTextWrap: {
     flex: 1,
