@@ -12,6 +12,7 @@ import {
   Alert,
 } from "react-native";
 import KeyboardAwareScreen from "@/components/KeyboardAwareScreen";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -158,6 +159,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   oauthMode,
 }) => {
   const dispatch = useAppDispatch();
+  const insets = useSafeAreaInsets();
   const isPhoneSignup = !!phoneVerificationToken;
   const isOauthSignup = !!oauthMode;
 
@@ -796,7 +798,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             {/* Cancel back to the sign-in method choices */}
             {onCancel && (
               <Pressable
-                style={styles.landingBackButton}
+                style={[styles.landingBackButton, { marginTop: insets.top + 4 }]}
                 onPress={onCancel}
                 hitSlop={10}
               >
@@ -931,7 +933,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             {/* Cancel back to the sign-in method choices */}
             {onCancel && (
               <Pressable
-                style={styles.landingBackButton}
+                style={[styles.landingBackButton, { marginTop: insets.top + 4 }]}
                 onPress={onCancel}
                 hitSlop={10}
               >
@@ -1094,7 +1096,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       >
           {/* Back to the sign-in method choices (email / phone) */}
           {onBack && (
-            <Pressable style={styles.landingBackButton} onPress={onBack} hitSlop={10}>
+            <Pressable
+              style={[styles.landingBackButton, { marginTop: insets.top + 4 }]}
+              onPress={onBack}
+              hitSlop={10}
+            >
               <Ionicons name="chevron-back" size={22} color={brand.white} />
               <Text style={styles.landingBackText}>Back</Text>
             </Pressable>
