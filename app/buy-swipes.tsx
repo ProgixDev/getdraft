@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -81,6 +81,25 @@ export default function BuySwipesScreen() {
     refreshBonus();
     return () => { cancelled = true; };
   }, [refreshBonus]);
+
+  // Badges are derived from the pack data, not array position — the API may
+  // return any number of packs in any order. BEST VALUE = lowest cost per
+  // Draft; POPULAR = the middle pack by Draft count (suppressed if it would
+  // land on the same pack as BEST VALUE).
+  const { popularPackId, bestValuePackId } = useMemo(() => {
+    if (packs.length < 2) {
+      return { popularPackId: null as string | null, bestValuePackId: null as string | null };
+    }
+    const best = packs.reduce((a, b) =>
+      b.amountCents / b.swipes < a.amountCents / a.swipes ? b : a,
+    );
+    const bySwipes = [...packs].sort((a, b) => a.swipes - b.swipes);
+    const middle = bySwipes[Math.floor((bySwipes.length - 1) / 2)];
+    return {
+      popularPackId: middle.id === best.id ? null : middle.id,
+      bestValuePackId: best.id,
+    };
+  }, [packs]);
 
   const handleBuy = useCallback(
     async (pack: SwipePack) => {
@@ -176,9 +195,9 @@ export default function BuySwipesScreen() {
 
           <Text style={styles.sectionHeading}>Choose a pack</Text>
 
-          {packs.map((pack, index) => {
-            const isPopular = index === 1; // middle pack
-            const isBest = index === 2; // largest pack
+          {packs.map((pack) => {
+            const isPopular = pack.id === popularPackId;
+            const isBest = pack.id === bestValuePackId;
             const isPending = pendingPackId === pack.id;
             return (
               <Pressable

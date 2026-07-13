@@ -72,6 +72,13 @@ interface AuthScreenProps {
    */
   onBack?: () => void;
   /**
+   * Bail out of the phone/OAuth role step back to the AuthLanding
+   * choices. A step-back isn't possible there (the phone verification
+   * token is single-use and the OAuth user already exists), so this
+   * renders as a "Cancel" row instead of "Back".
+   */
+  onCancel?: () => void;
+  /**
    * Set when the user arrived via the phone signup path. We skip the
    * email/OTP steps and just collect role + name + password, then call
    * completeSignup with this token.
@@ -145,6 +152,7 @@ const roleOptions: RoleOption[] = [
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLogin,
   onBack,
+  onCancel,
   phoneVerificationToken,
   initialPhone,
   oauthMode,
@@ -785,6 +793,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           style={styles.container}
           contentContainerStyle={styles.scrollContainer}
         >
+            {/* Cancel back to the sign-in method choices */}
+            {onCancel && (
+              <Pressable
+                style={styles.landingBackButton}
+                onPress={onCancel}
+                hitSlop={10}
+              >
+                <Ionicons name="chevron-back" size={22} color={brand.white} />
+                <Text style={styles.landingBackText}>Cancel</Text>
+              </Pressable>
+            )}
+
             <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
               <Image
                 source={images.logoWhite}
@@ -908,6 +928,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           style={styles.container}
           contentContainerStyle={styles.scrollContainer}
         >
+            {/* Cancel back to the sign-in method choices */}
+            {onCancel && (
+              <Pressable
+                style={styles.landingBackButton}
+                onPress={onCancel}
+                hitSlop={10}
+              >
+                <Ionicons name="chevron-back" size={22} color={brand.white} />
+                <Text style={styles.landingBackText}>Cancel</Text>
+              </Pressable>
+            )}
+
             <Animated.View entering={FadeIn.duration(500)} style={styles.header}>
               <Image
                 source={images.logoWhite}

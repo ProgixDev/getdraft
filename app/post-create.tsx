@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -66,6 +66,32 @@ export default function PostCreateScreen() {
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const navigation = useNavigation();
+  // Guards Android hardware/gesture back while an upload is in flight — the
+  // header chevron is disabled, but a system back would otherwise pop the
+  // screen and silently abandon the in-flight post. A ref (not state) so the
+  // success-path replace() below can clear it synchronously and NOT be
+  // intercepted by its own listener.
+  const blockBackRef = useRef(false);
+  useEffect(() => {
+    return navigation.addListener("beforeRemove", (e) => {
+      if (!blockBackRef.current) return;
+      e.preventDefault();
+      Alert.alert(
+        "Cancel upload?",
+        "Your post is still uploading. Leaving now will discard it.",
+        [
+          { text: "Keep uploading", style: "cancel" },
+          {
+            text: "Cancel upload",
+            style: "destructive",
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ],
+      );
+    });
+  }, [navigation]);
 
   // Posting is an athlete affordance only. Recruiters/coaches/parents/
   // admins who somehow land here bounce back via useRoleHomeRedirect.
@@ -131,6 +157,7 @@ export default function PostCreateScreen() {
     }
     setErrorMsg(null);
     setUploading(true);
+    blockBackRef.current = true;
     let uploadedPath: string | null = null;
     try {
       const fileName = `${Date.now()}.${asset.ext}`;
@@ -153,6 +180,9 @@ export default function PostCreateScreen() {
       });
       // Success — keep the blob; the post row references it.
       uploadedPath = null;
+      // Clear the back-guard BEFORE navigating: replace() fires beforeRemove
+      // on this screen too, and the listener must let our own exit through.
+      blockBackRef.current = false;
       router.replace("/(tabs)/feed");
     } catch (err: any) {
       const msg =
@@ -165,6 +195,7 @@ export default function PostCreateScreen() {
       if (uploadedPath) {
         uploadsService.deleteFile("posts", uploadedPath).catch(() => {});
       }
+      blockBackRef.current = false;
       setUploading(false);
     }
   };

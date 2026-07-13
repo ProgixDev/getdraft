@@ -166,6 +166,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
         onLogin={onLogin}
         phoneVerificationToken={phoneVerificationToken}
         initialPhone={phone}
+        onCancel={() => setState('landing')}
       />
     );
   }
@@ -174,6 +175,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
       <AuthScreen
         onLogin={onLogin}
         oauthMode={{ initialName: oauthInitial.name, initialEmail: oauthInitial.email }}
+        onCancel={() => setState('landing')}
       />
     );
   }

@@ -108,7 +108,10 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   const horizontalPan = Gesture.Pan()
     .enabled(horizontalEnabled)
     .activeOffsetX([-20, 20])
-    .failOffsetY([-24, 24])
+    // Cross-axis fail window is deliberately wider (±40) than the activation
+    // window (±20) — a diagonal swipe that crosses ±24 on BOTH axes would
+    // otherwise fail both recognizers and drop the gesture entirely.
+    .failOffsetY([-40, 40])
     .onStart(() => {
       // Interruptible carousel: pick up from wherever the previous animation
       // left off. Direct writes to carouselTranslateX in onUpdate also
@@ -161,7 +164,8 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   const verticalPan = Gesture.Pan()
     .enabled(verticalEnabled)
     .activeOffsetY([-20, 20])
-    .failOffsetX([-24, 24])
+    // Same widened cross-axis window as horizontalPan (see above).
+    .failOffsetX([-40, 40])
     .onUpdate((e) => {
       translateY.value = e.translationY;
     })

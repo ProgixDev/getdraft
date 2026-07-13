@@ -260,6 +260,9 @@ export class DiscoverService {
       cardType: 'athlete' as const,
       id: u.id,
       name: u.name,
+      // KYC-approved athletes get the verified checkmark (mirrors the
+      // map-points logic; adult athletes only — minors are KYC-waived).
+      verified: u.kyc_status === 'approved',
       sport: p.sport,
       position: p.position,
       level: p.level,
@@ -391,6 +394,8 @@ export class DiscoverService {
         latitude: true,
         longitude: true,
         created_at: true,
+        // Feeds the card's verified checkmark (athletes: KYC-approved).
+        kyc_status: true,
         athlete_profiles: {
           select: {
             sport: true,

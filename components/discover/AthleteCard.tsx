@@ -68,6 +68,11 @@ function AthleteCardImpl({
   const reducedMotion = useReducedMotion();
   const active = isActive ?? isFocused;
   const sportAccent = getSportTheme(athlete.sport).accent;
+  // Feed cards only carry `verified` for KYC-approved athletes — gate the
+  // badge on it (same pattern as the recruiter card) instead of stamping
+  // every athlete as verified.
+  const isVerified =
+    (athlete as AthleteProfile & { verified?: boolean }).verified === true;
   const accessibilityLabel = `${athlete.name}, ${athlete.position}, ${athlete.sport}, ${athlete.location}`;
 
   const hasVideo = athlete.videos.length > 0;
@@ -267,11 +272,13 @@ function AthleteCardImpl({
               <Text style={styles.overlayName} numberOfLines={1}>
                 {athlete.name}, {athlete.position}
               </Text>
-              <Ionicons
-                name="checkmark-circle"
-                size={20}
-                color={semantic.success}
-              />
+              {isVerified && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color={semantic.success}
+                />
+              )}
             </View>
             <Text style={styles.overlayOrg}>
               {athlete.level} • {athlete.sport}

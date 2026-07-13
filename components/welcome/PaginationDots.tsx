@@ -15,6 +15,8 @@ interface PaginationDotsProps {
   scrollX: SharedValue<number>;
   /** If true, displays vertically */
   vertical?: boolean;
+  /** Dot color — defaults to the brand primary (dark). */
+  color?: string;
 }
 
 /**
@@ -25,6 +27,7 @@ export const PaginationDots: React.FC<PaginationDotsProps> = ({
   count,
   scrollX,
   vertical = false,
+  color = brand.primary,
 }) => {
   return (
     <View style={[styles.container, vertical && styles.containerVertical]}>
@@ -34,6 +37,7 @@ export const PaginationDots: React.FC<PaginationDotsProps> = ({
           index={index}
           scrollX={scrollX}
           vertical={vertical}
+          color={color}
         />
       ))}
     </View>
@@ -44,12 +48,14 @@ interface AnimatedDotProps {
   index: number;
   scrollX: SharedValue<number>;
   vertical: boolean;
+  color: string;
 }
 
 const AnimatedDot: React.FC<AnimatedDotProps> = ({
   index,
   scrollX,
   vertical,
+  color,
 }) => {
   const inputRange = [
     (index - 1) * SCREEN_WIDTH,
@@ -79,6 +85,7 @@ const AnimatedDot: React.FC<AnimatedDotProps> = ({
     <Animated.View
       style={[
         styles.dot,
+        { backgroundColor: color },
         vertical ? styles.dotVertical : styles.dotHorizontal,
         animatedStyle,
       ]}

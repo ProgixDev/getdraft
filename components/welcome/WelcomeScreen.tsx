@@ -29,11 +29,15 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { images } from "@/config/assets";
-import { brand, neutral } from "@/config/colors";
+import { brand, theme } from "@/config/colors";
 import { welcomeSlides } from "@/constants/welcomeData";
 import { PaginationDots } from "./PaginationDots";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+// GetDraft brand green (same accent the landing page / sport themes use).
+const GREEN = "#1FAA59";
+const GREEN_TEXT = "#06210f";
 
 interface WelcomeScreenProps {
   /** Callback when user completes onboarding */
@@ -134,8 +138,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
                 fy="100%"
                 gradientUnits="userSpaceOnUse"
               >
-                <Stop offset="0" stopColor={brand.primary} stopOpacity="0.5" />
-                <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+                <Stop offset="0" stopColor={GREEN} stopOpacity="0.5" />
+                <Stop offset="1" stopColor={GREEN} stopOpacity="0" />
               </RadialGradient>
             </Defs>
             {/* Circle positioned deeply in bottom right corner */}
@@ -150,7 +154,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
         pointerEvents="box-none"
       >
         <View style={styles.headerSpacer} />
-        <Image source={images.logo} style={styles.logo} resizeMode="contain" />
+        <Image
+          source={images.logoWhite}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         {!isLastSlide ? (
           <Pressable onPress={handleSkip} style={styles.skipButton}>
             <Text style={styles.skipButtonText}>Skip</Text>
@@ -188,6 +196,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
             count={welcomeSlides.length}
             scrollX={scrollX}
             vertical
+            color={brand.white}
           />
         </View>
 
@@ -351,7 +360,7 @@ const SlideContent: React.FC<SlideContentProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: brand.white, // Fallback
+    backgroundColor: theme.bg, // Dark-first — matches the auth screens
   },
   header: {
     position: "absolute",
@@ -377,7 +386,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   skipButtonText: {
-    color: neutral.gray500,
+    color: "rgba(255,255,255,0.6)",
     fontSize: 16,
     fontFamily: "Poppins_400Regular",
   },
@@ -401,20 +410,20 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   primaryButton: {
-    backgroundColor: brand.primary,
+    backgroundColor: GREEN,
     paddingVertical: 18,
     paddingHorizontal: 48,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: brand.primary,
+    shadowColor: GREEN,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
   },
   primaryButtonText: {
-    color: brand.white,
+    color: GREEN_TEXT,
     fontSize: 17,
     fontFamily: "Poppins_700Bold",
     letterSpacing: 0.5,
@@ -437,14 +446,14 @@ const slideStyles = StyleSheet.create({
   title: {
     fontSize: 42,
     fontFamily: "Poppins_800ExtraBold",
-    color: brand.primary,
+    color: brand.white,
     lineHeight: 48,
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
     fontFamily: "Poppins_400Regular",
-    color: neutral.gray600,
+    color: "rgba(255,255,255,0.7)",
     lineHeight: 24,
   },
   decorativeContainer: {
@@ -457,7 +466,7 @@ const slideStyles = StyleSheet.create({
     width: "100%",
     height: "100%",
     borderRadius: 999,
-    backgroundColor: brand.primary,
+    backgroundColor: GREEN,
   },
   blurCircle: {
     position: "absolute",
