@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   Linking,
-  Alert,
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -31,13 +30,24 @@ const SOCIAL_LINKS = [
   },
 ];
 
-const PRIVACY_POLICY_URL =
-  "https://getdraft-api-production.up.railway.app/api/privacy";
+const LEGAL_BASE_URL = "https://getdraft-api-production.up.railway.app/api";
 
 const LEGAL_LINKS = [
-  { icon: "document-text-outline" as const, label: "Terms of Service" },
-  { icon: "shield-checkmark-outline" as const, label: "Privacy Policy" },
-  { icon: "code-slash-outline" as const, label: "Licenses" },
+  {
+    icon: "document-text-outline" as const,
+    label: "Terms of Service",
+    url: `${LEGAL_BASE_URL}/terms`,
+  },
+  {
+    icon: "shield-checkmark-outline" as const,
+    label: "Privacy Policy",
+    url: `${LEGAL_BASE_URL}/privacy`,
+  },
+  {
+    icon: "code-slash-outline" as const,
+    label: "Licenses",
+    url: `${LEGAL_BASE_URL}/licenses`,
+  },
 ];
 
 export default function AboutScreen() {
@@ -104,11 +114,7 @@ export default function AboutScreen() {
                 idx === LEGAL_LINKS.length - 1 && styles.legalRowLast,
                 pressed && styles.legalRowPressed,
               ]}
-              onPress={() =>
-                item.label === "Privacy Policy"
-                  ? Linking.openURL(PRIVACY_POLICY_URL)
-                  : Alert.alert(item.label, `${item.label} page is coming soon.`)
-              }
+              onPress={() => Linking.openURL(item.url)}
             >
               <Ionicons
                 name={item.icon}

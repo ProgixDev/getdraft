@@ -1,6 +1,8 @@
 import { Module, Controller, Get, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { PRIVACY_HTML } from './privacy.page';
+import { TERMS_HTML } from './terms.page';
+import { LICENSES_HTML } from './licenses.page';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
@@ -41,6 +43,18 @@ class HealthController {
   @Get('privacy')
   privacy(@Res() res: FastifyReply) {
     res.type('text/html; charset=utf-8').send(PRIVACY_HTML);
+  }
+
+  @Public()
+  @Get('terms')
+  terms(@Res() res: FastifyReply) {
+    res.type('text/html; charset=utf-8').send(TERMS_HTML);
+  }
+
+  @Public()
+  @Get('licenses')
+  licenses(@Res() res: FastifyReply) {
+    res.type('text/html; charset=utf-8').send(LICENSES_HTML);
   }
 
   @Public()
