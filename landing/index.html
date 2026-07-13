@@ -150,12 +150,10 @@ h1 .hl{
 .hstat .n span{color:var(--green)}
 .hstat .l{font-size:12px; color:var(--muted)}
 
-}
-
 /* ============ Phone (CSS 3D iPhone) ============ */
 .stage{
-  position:relative; display:flex; justify-content:center; align-items:center;
-  perspective:1400px; height:640px;
+  position:relative; display:flex; justify-content:flex-end; align-items:center;
+  perspective:1400px; height:640px; padding-right:24px;
 }
 .phone{
   position:relative; width:296px; height:606px;
@@ -546,7 +544,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
   .hero-sub{margin-left:auto; margin-right:auto}
   .hero-form{margin-left:auto; margin-right:auto}
   .stores,.hero-stats{justify-content:center}
-  .stage{height:660px; margin-top:6px}
+  .stage{height:660px; margin-top:6px; justify-content:center; padding-right:0}
   .scroll-hint{display:none}
   .steps,.feats,.roles,.plans{grid-template-columns:1fr; max-width:480px; margin:0 auto}
   .nav-links{display:none}
