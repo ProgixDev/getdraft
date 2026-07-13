@@ -186,8 +186,8 @@ function RootLayoutContent() {
   if (appState === "welcome") {
     return (
       <View style={{ flex: 1 }}>
-        {/* Welcome slides are dark-background — light status icons */}
-        <StatusBar style="light" />
+        {/* Welcome slides are light-background — dark status icons */}
+        <StatusBar style="dark" />
         <WelcomeScreen onComplete={handleWelcomeComplete} />
       </View>
     );
