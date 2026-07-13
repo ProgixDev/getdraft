@@ -499,6 +499,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
   background:linear-gradient(90deg,rgba(151,211,237,.1),var(--green),rgba(151,211,237,.1));
 }
 .safe{position:relative; text-align:center; padding:0 18px}
+.safe .dot .dnum{font-size:26px; font-weight:800; color:var(--green)}
 .safe .dot{
   width:74px; height:74px; margin:0 auto 18px; border-radius:50%; font-size:30px;
   display:flex; align-items:center; justify-content:center; position:relative; z-index:1;
@@ -507,11 +508,6 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
 }
 .safe h3{font-size:17px; font-weight:700; letter-spacing:-.3px; margin-bottom:8px}
 .safe p{font-size:13.5px; color:var(--muted)}
-.safe .num{
-  position:absolute; top:-8px; left:50%; margin-left:14px; z-index:2;
-  width:24px; height:24px; border-radius:50%; background:var(--green); color:#121212;
-  font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center;
-}
 
 /* FAQ */
 .faq{max-width:760px; margin:0 auto}
@@ -710,17 +706,17 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
     </div>
     <div class="steps">
       <div class="step reveal">
-        <div class="num">01</div><div class="ico">🎽</div>
+        <div class="num">01</div>
         <h3>Build your profile</h3>
         <p>Your digital recruiting card: sport, position, stats, photos and highlight reels. Everything a scout needs, in one swipe.</p>
       </div>
       <div class="step reveal">
-        <div class="num">02</div><div class="ico">🔍</div>
+        <div class="num">02</div>
         <h3>Scout &amp; Draft</h3>
         <p>Browse athletes and recruiters near you or worldwide on the Talent Map. Pass freely — send a Draft when you mean it.</p>
       </div>
       <div class="step reveal">
-        <div class="num">03</div><div class="ico">🤝</div>
+        <div class="num">03</div>
         <h3>Match &amp; talk</h3>
         <p>When both sides Draft each other — <b style="color:var(--green)">It's a Draft!</b> Chat unlocks, and the conversation that changes your season begins.</p>
       </div>
@@ -789,12 +785,12 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
       <p class="sec-sub">One app for discovery, proof and contact — with safety built into every layer.</p>
     </div>
     <div class="feats">
-      <div class="feat reveal"><span class="fi">🌍</span><h3>Talent Map</h3><p>Explore athletes on an interactive map — your city, your state, or worldwide.</p></div>
-      <div class="feat reveal"><span class="fi">📊</span><h3>Rankings &amp; Draft Score</h3><p>See who's rising. Regional boards and a Draft Score that rewards real activity.</p></div>
-      <div class="feat reveal"><span class="fi">🎬</span><h3>Highlights feed</h3><p>Post photos and reels of your best plays. Your grind, visible to every scout.</p></div>
-      <div class="feat reveal"><span class="fi">💬</span><h3>Chat after the Draft</h3><p>Messages unlock only after a mutual Draft — no spam, no unsolicited contact.</p></div>
-      <div class="feat reveal"><span class="fi">🛡️</span><h3>Verified adults</h3><p>Every coach, recruiter and agent passes identity verification before they can connect.</p></div>
-      <div class="feat reveal"><span class="fi">👨‍👩‍👧</span><h3>Guardian control</h3><p>Athletes under 18 activate only with a parent or guardian's approval. Little league welcome.</p></div>
+      <div class="feat reveal"><h3>Talent Map</h3><p>Explore athletes on an interactive map — your city, your state, or worldwide.</p></div>
+      <div class="feat reveal"><h3>Rankings &amp; Draft Score</h3><p>See who's rising. Regional boards and a Draft Score that rewards real activity.</p></div>
+      <div class="feat reveal"><h3>Highlights feed</h3><p>Post photos and reels of your best plays. Your grind, visible to every scout.</p></div>
+      <div class="feat reveal"><h3>Chat after the Draft</h3><p>Messages unlock only after a mutual Draft — no spam, no unsolicited contact.</p></div>
+      <div class="feat reveal"><h3>Verified adults</h3><p>Every coach, recruiter and agent passes identity verification before they can connect.</p></div>
+      <div class="feat reveal"><h3>Guardian control</h3><p>Athletes under 18 activate only with a parent or guardian's approval. Little league welcome.</p></div>
     </div>
   </div>
 </section>
@@ -809,17 +805,17 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
     </div>
     <div class="safe-flow">
       <div class="safe reveal">
-        <div class="dot">🪪<span class="num">1</span></div>
+        <div class="dot"><span class="dnum">1</span></div>
         <h3>Adults verify their ID</h3>
         <p>Every coach, recruiter and agent passes government-ID verification before they can contact anyone.</p>
       </div>
       <div class="safe reveal">
-        <div class="dot">👨‍👩‍👧<span class="num">2</span></div>
+        <div class="dot"><span class="dnum">2</span></div>
         <h3>Guardians approve minors</h3>
         <p>Athletes under 18 activate only after a parent or guardian links to their account and signs off.</p>
       </div>
       <div class="safe reveal">
-        <div class="dot">🔒<span class="num">3</span></div>
+        <div class="dot"><span class="dnum">3</span></div>
         <h3>No contact without consent</h3>
         <p>Messaging opens only after BOTH sides Draft each other. No cold DMs. No unsolicited contact. Ever.</p>
       </div>
@@ -835,18 +831,15 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
       <h2>Every side of the game</h2>
     </div>
     <div class="roles">
-      <div class="role reveal">
-        <span class="ri">🏃</span><h3>Athletes</h3>
+      <div class="role reveal"><h3>Athletes</h3>
         <p>Get seen by real coaches, recruiters and agents — from little league to college.</p>
         <ul><li>Profile with stats &amp; highlights</li><li>20 free Drafts every month</li><li>See who drafted you</li></ul>
       </div>
-      <div class="role reveal">
-        <span class="ri">📋</span><h3>Coaches &amp; Recruiters</h3>
+      <div class="role reveal"><h3>Coaches &amp; Recruiters</h3>
         <p>Scout verified talent, filtered by sport, position, class and location.</p>
         <ul><li>Unlimited passing, precise Drafts</li><li>Talent Map &amp; rankings</li><li>Direct chat after a match</li></ul>
       </div>
-      <div class="role reveal">
-        <span class="ri">🛡️</span><h3>Parents</h3>
+      <div class="role reveal"><h3>Parents</h3>
         <p>Manage and protect your young athlete's recruiting journey from day one.</p>
         <ul><li>Approve your child's account</li><li>See who's scouting them</li><li>Oversee every conversation</li></ul>
       </div>
