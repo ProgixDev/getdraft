@@ -304,8 +304,11 @@ export class AuthService {
   async requestEmailOtp(email: string): Promise<{ message: string }> {
     const normalized = email.trim().toLowerCase();
 
-    // If the user is already registered, silently no-op. They should
-    // log in or hit forgot-password instead.
+    // If the user is already registered, don't send a signup code — but
+    // never leave the mailbox silent either: a real user who forgot they
+    // have an account would wait forever for a code. They get a "you
+    // already have an account — just sign in" note instead. The API
+    // response is identical either way (no account enumeration).
     const admin = this.supabaseService.getAdminClient();
     const { data: existing } = await admin
       .from('users')
@@ -313,6 +316,9 @@ export class AuthService {
       .eq('email', normalized)
       .maybeSingle();
     if (existing) {
+      await this.mailService
+        .sendAccountExists(normalized)
+        .catch(() => {}); // best-effort — response must stay identical
       return { message: 'If this email is unused, a code has been sent.' };
     }
 
@@ -509,10 +515,13 @@ export class AuthService {
     // either way, so the endpoint still doesn't leak which numbers are
     // registered.
 
-    // Dev bypass for TEST_PHONES: skip Twilio entirely (no trial-account
-    // verified-caller-id needed). verifyPhoneOtp accepts the fixed code
-    // 000000 for these numbers. Never active in production.
-    if (isTest && this.configService.get('NODE_ENV') !== 'production') {
+    // TEST_PHONES bypass: skip Twilio entirely; verifyPhoneOtp accepts the
+    // fixed code 000000 for these numbers. Honored in ALL environments, but
+    // ONLY for numbers explicitly allowlisted via the TEST_PHONES env var —
+    // internal QA (some carriers filter international OTP SMS with fake
+    // delivery receipts) and store-review demo accounts. The destructive
+    // account-purge behavior remains dev-only regardless.
+    if (isTest) {
       this.logger.log(
         `[test-phone] Twilio bypassed for ${normalized} — use code 000000`,
       );
@@ -535,8 +544,9 @@ export class AuthService {
     const normalized = phone.trim();
     const isTest = this.testPhones().has(normalized);
 
-    if (isTest && this.configService.get('NODE_ENV') !== 'production') {
-      // Dev bypass — pairs with the Twilio skip in requestPhoneOtp.
+    if (isTest) {
+      // Allowlisted test phone — pairs with the Twilio skip in
+      // requestPhoneOtp (fixed code, all environments).
       if (code !== '000000') {
         throw new BadRequestException('Incorrect or expired code.');
       }

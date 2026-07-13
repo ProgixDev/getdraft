@@ -88,6 +88,22 @@ export class MailService implements OnModuleInit {
     await this.deliver(to, subject, html, text);
   }
 
+  /**
+   * Sent when someone tries to SIGN UP with an email that already has an
+   * account — instead of a silent no-op, the mailbox owner learns their
+   * account exists and how to get back in.
+   */
+  async sendAccountExists(to: string): Promise<void> {
+    const html = noticeEmailHtml(
+      "You're already on the roster",
+      'Someone (probably you) just tried to sign up with this email — but you already have a GetDraft account. Just sign in with your password. Forgot it? Tap “Forgot password” in the app and we’ll email you a reset code.',
+    );
+    const text =
+      'Someone tried to sign up on GetDraft with this email, but you already have an account. Just sign in — and if you forgot your password, use "Forgot password" in the app to get a reset code. If this wasn’t you, you can ignore this email.';
+    const subject = 'You already have a GetDraft account';
+    await this.deliver(to, subject, html, text);
+  }
+
   private async deliver(to: string, subject: string, html: string, text: string): Promise<void> {
     if (this.resendApiKey) {
       await this.sendViaResend(to, subject, html, text);
@@ -164,6 +180,14 @@ export class MailService implements OnModuleInit {
  * Inline HTML — modern minimal, GetDraft-branded.
  * Centered card on dark canvas, big code, short copy.
  */
+/** Code-less variant of the branded shell — heading + copy only. */
+function noticeEmailHtml(heading: string, sub: string): string {
+  return otpEmailHtml('', heading, sub).replace(
+    /<tr>\s*<td align="center" style="padding:18px 0 6px;">[\s\S]*?<\/td>\s*<\/tr>/,
+    '',
+  );
+}
+
 function otpEmailHtml(code: string, heading = "Confirm it's you", sub = 'Use this code to finish signing up. It expires in 10 minutes.'): string {
   const safeCode = String(code).replace(/[^0-9A-Za-z]/g, '');
   return `<!doctype html>
