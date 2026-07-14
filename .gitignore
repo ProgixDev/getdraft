@@ -66,3 +66,4 @@ app-example
 # Firebase service-account keys (secrets - never commit)
 *firebase-adminsdk*.json
 firebase-admin-key.json
+landing/_build/shots/
