@@ -67,7 +67,7 @@ var G=new ThreeGlobe()
 .bumpImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png')
 .arcsData(arcs).arcColor(function(){return['rgba(0,184,148,0.6)','rgba(116,185,255,0.6)']})
 .arcStroke(0.5).arcDashLength(0.4).arcDashGap(0.2).arcDashAnimateTime(2500)
-.pointsData(pts).pointColor(function(){return'#00B894'}).pointAltitude(0.01).pointRadius(0.4);
+.pointsData(pts).pointColor(function(){return'#0984E3'}).pointAltitude(0.01).pointRadius(0.4);
 var r=new THREE.WebGLRenderer({alpha:true,antialias:true});
 r.setPixelRatio(Math.min(window.devicePixelRatio,2));
 r.setSize(window.innerWidth,window.innerHeight);
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 3,
     borderRadius: 2,
-    backgroundColor: "#00B894",
+    backgroundColor: "#0984E3",
     marginBottom: 10,
   },
   statNumber: {
@@ -475,7 +475,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   statSuffix: {
-    color: "#00B894",
+    color: "#0984E3",
   },
   statLabel: {
     fontSize: 12,

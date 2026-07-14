@@ -38,7 +38,7 @@ import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { theme } from "@/config/colors";
 import { store, RootState } from "@/store";
 import { useAppDispatch } from "@/store/hooks";
-import { WelcomeScreen } from "@/components";
+import { SplashScreen, WelcomeScreen } from "@/components";
 import { AuthLanding, PendingActivationScreen } from "@/components/auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { loadAuth, saveAuth, clearAuth } from "@/store/authStorage";
@@ -57,7 +57,7 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-type AppState = "loading" | "welcome" | "auth" | "app";
+type AppState = "loading" | "splash" | "welcome" | "auth" | "app";
 
 function RootLayoutContent() {
   const colorScheme = useColorScheme();
@@ -104,20 +104,17 @@ function RootLayoutContent() {
   // skip straight to home and leave them unverified.
   useEffect(() => {
     loadAuth().then((persisted) => {
-      // No JS splash step: the native splash (G/D logo) covers the load,
-      // and the Welcome carousel opens with the logo anyway. Returning
-      // fully-onboarded users go straight into the app; everyone else
-      // lands on the welcome intro.
+      // Restore any saved session into Redux, but ALWAYS open on the
+      // splash intro (logo → globe + live stats). Where we land AFTER the
+      // intro is decided in handleSplashComplete from the restored auth
+      // state — so a returning user still gets the branded cold-launch
+      // intro (logo-only fast path) instead of a blank jump into the app.
       if (persisted?.user) {
         dispatch(
           login({ user: persisted.user, isOnboarded: persisted.isOnboarded }),
         );
-        if (persisted.isOnboarded) {
-          setAppState("app");
-          return;
-        }
       }
-      setAppState("welcome");
+      setAppState("splash");
     });
   }, [dispatch]);
 
@@ -162,6 +159,13 @@ function RootLayoutContent() {
     }
   }, [appState, isAuthenticated]);
 
+  const handleSplashComplete = useCallback(() => {
+    // Returning users (signed in + onboarded) skip the welcome carousel
+    // entirely — logo/globe beat → straight into the app. Everyone else
+    // (new, logged out, or mid-signup) continues to the welcome intro.
+    setAppState(isAuthenticated && isOnboarded ? "app" : "welcome");
+  }, [isAuthenticated, isOnboarded]);
+
   const handleWelcomeComplete = useCallback(() => {
     // After the intro: a fully-onboarded signed-in user goes straight into
     // the app; everyone else (logged out, or mid-signup) lands on the auth
@@ -179,6 +183,21 @@ function RootLayoutContent() {
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#FFFFFF" />
       </View>
+    );
+  }
+
+  // Show the splash intro on cold launch. Returning (signed-in + onboarded)
+  // users get the logo-only fast path (~2.6s, no globe/stats); new and
+  // logged-out users see the full globe + live-stats intro.
+  if (appState === "splash") {
+    return (
+      <>
+        <StatusBar style="light" />
+        <SplashScreen
+          onAnimationComplete={handleSplashComplete}
+          short={isAuthenticated && isOnboarded}
+        />
+      </>
     );
   }
 

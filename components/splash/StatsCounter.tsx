@@ -61,7 +61,7 @@ function StatCard({
   return (
     <Animated.View style={[styles.statCard, cardStyle]}>
       <View style={styles.iconCircle}>
-        <Ionicons name={icon as any} size={22} color="#00B894" />
+        <Ionicons name={icon as any} size={22} color="#0984E3" />
       </View>
       <View style={styles.statContent}>
         <AnimatedCounter
