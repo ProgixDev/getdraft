@@ -36,6 +36,9 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
+import { POPULAR_AGENCIES } from "@/constants/agenciesData";
+
+const AGENCY_OTHER = "__OTHER__";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
 import { useAppDispatch } from "@/store/hooks";
@@ -273,6 +276,13 @@ function getStepsForRole(role: string): Step[] {
           optional: true,
         },
         {
+          id: "agency",
+          label: "Agency (optional)",
+          placeholder: "Select if signed",
+          icon: "briefcase-outline",
+          optional: true,
+        },
+        {
           id: "experience",
           label: "Years of Experience",
           placeholder: "5",
@@ -326,6 +336,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [sportModalVisible, setSportModalVisible] = useState(false);
   const [positionModalVisible, setPositionModalVisible] = useState(false);
   const [levelModalVisible, setLevelModalVisible] = useState(false);
+  const [agencyModalVisible, setAgencyModalVisible] = useState(false);
+  const [agencyCustom, setAgencyCustom] = useState(false);
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [relationshipModalVisible, setRelationshipModalVisible] =
     useState(false);
@@ -491,6 +503,17 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     setGenderModalVisible(false);
   };
 
+  const handleAgencySelect = (value: string) => {
+    if (value === AGENCY_OTHER) {
+      setAgencyCustom(true);
+      handleFieldChange("agency", "");
+    } else {
+      setAgencyCustom(false);
+      handleFieldChange("agency", value);
+    }
+    setAgencyModalVisible(false);
+  };
+
   const handleRelationshipSelect = (relationship: string) => {
     handleFieldChange("relationship", relationship);
     setRelationshipModalVisible(false);
@@ -542,6 +565,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             position: formData.position,
             level: formData.level,
             team: formData.team?.trim() || undefined,
+            agency: formData.agency?.trim() || undefined,
             bio: "",
             class_year: "",
             height: formData.height
@@ -898,6 +922,57 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                         />
                       </Pressable>
                     </>
+                  ) : field.id === "agency" ? (
+                    <>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <Pressable
+                        style={styles.inputContainer}
+                        onPress={() => setAgencyModalVisible(true)}
+                      >
+                        <Ionicons
+                          name={field.icon as any}
+                          size={20}
+                          color={neutral.gray400}
+                          style={styles.inputIcon}
+                        />
+                        <Text
+                          style={[
+                            styles.input,
+                            !formData[field.id] && styles.inputPlaceholder,
+                          ]}
+                        >
+                          {formData[field.id] ||
+                            (agencyCustom ? "Type below" : field.placeholder)}
+                        </Text>
+                        <Ionicons
+                          name="chevron-down"
+                          size={20}
+                          color={neutral.gray400}
+                        />
+                      </Pressable>
+                      {agencyCustom && (
+                        <View
+                          style={[styles.inputContainer, { marginTop: 10 }]}
+                        >
+                          <Ionicons
+                            name="create-outline"
+                            size={20}
+                            color={neutral.gray400}
+                            style={styles.inputIcon}
+                          />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Type your agency"
+                            placeholderTextColor={neutral.gray400}
+                            value={formData.agency || ""}
+                            onChangeText={(value) =>
+                              handleFieldChange("agency", value)
+                            }
+                            autoCapitalize="words"
+                          />
+                        </View>
+                      )}
+                    </>
                   ) : field.id === "height" ? (
                     <>
                       <View style={styles.fieldLabelRow}>
@@ -1253,6 +1328,86 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                         )}
                       </Pressable>
                     ))}
+                  </ScrollView>
+                </Pressable>
+              </Pressable>
+            </Modal>
+
+            {/* Agency Selection Modal — popular agencies + type-your-own */}
+            <Modal
+              visible={agencyModalVisible}
+              transparent
+              animationType="slide"
+            >
+              <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setAgencyModalVisible(false)}
+              >
+                <Pressable
+                  style={styles.modalContent}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Agency</Text>
+                    <Pressable onPress={() => setAgencyModalVisible(false)}>
+                      <Ionicons
+                        name="close"
+                        size={24}
+                        color={neutral.gray600}
+                      />
+                    </Pressable>
+                  </View>
+                  <Text style={styles.modalSubtitle}>
+                    Pick your agency, or choose Other to type it in
+                  </Text>
+                  <ScrollView
+                    style={styles.modalScroll}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {POPULAR_AGENCIES.map((name) => (
+                      <Pressable
+                        key={name}
+                        style={[
+                          styles.modalOption,
+                          formData.agency === name &&
+                            styles.modalOptionSelected,
+                        ]}
+                        onPress={() => handleAgencySelect(name)}
+                      >
+                        <Text
+                          style={[
+                            styles.modalOptionText,
+                            formData.agency === name &&
+                              styles.modalOptionTextSelected,
+                          ]}
+                        >
+                          {name}
+                        </Text>
+                        {formData.agency === name && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color={brand.primary}
+                          />
+                        )}
+                      </Pressable>
+                    ))}
+                    <Pressable
+                      style={[
+                        styles.modalOption,
+                        agencyCustom && styles.modalOptionSelected,
+                      ]}
+                      onPress={() => handleAgencySelect(AGENCY_OTHER)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalOptionText,
+                          agencyCustom && styles.modalOptionTextSelected,
+                        ]}
+                      >
+                        Other (type it in)
+                      </Text>
+                    </Pressable>
                   </ScrollView>
                 </Pressable>
               </Pressable>

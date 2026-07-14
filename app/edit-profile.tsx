@@ -31,6 +31,7 @@ import {
 
 import { brand, theme } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
+import { POPULAR_AGENCIES } from "@/constants/agenciesData";
 import { RootState } from "@/store";
 import { login as setLoggedInUser } from "@/store/slices/authSlice";
 import { profilesService } from "@/services/profiles";
@@ -43,7 +44,9 @@ const AVATAR_BUCKET = "avatars";
 
 const GENDER_OPTIONS = ["Man", "Woman"];
 
-type SelectorKey = "sport" | "position" | "level" | "gender" | null;
+const AGENCY_OTHER = "__OTHER__";
+
+type SelectorKey = "sport" | "position" | "level" | "gender" | "agency" | null;
 
 type Role = "athlete" | "recruiter" | "coach" | "parent" | undefined;
 
@@ -106,6 +109,7 @@ const ATHLETE_DTO_FIELDS = [
   "position",
   "level",
   "team",
+  "agency",
   "bio",
   "class_year",
   "gpa",
@@ -177,6 +181,9 @@ export default function EditProfileScreen() {
   const [position, setPosition] = useState("");
   const [level, setLevel] = useState("");
   const [team, setTeam] = useState("");
+  const [agency, setAgency] = useState("");
+  // When the player's agency isn't in the popular list, show a free-text input.
+  const [agencyCustom, setAgencyCustom] = useState(false);
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [gender, setGender] = useState("");
@@ -233,6 +240,9 @@ export default function EditProfileScreen() {
           setWeight(p.weight ?? "");
           setGender(p.gender ?? "");
           setDob(fromIsoDate(p.date_of_birth));
+          const ag = p.agency ?? "";
+          setAgency(ag);
+          setAgencyCustom(!!ag && !POPULAR_AGENCIES.includes(ag));
         }
         if (isAthlete || isRecruiter) {
           setGalleryPhotos(Array.isArray(p.photos) ? p.photos : []);
@@ -274,6 +284,16 @@ export default function EditProfileScreen() {
     [],
   );
 
+  // Popular agencies + a "type your own" escape hatch, so a player whose
+  // agency isn't listed is never stuck.
+  const agencyOptions = useMemo<PickerOption[]>(
+    () => [
+      ...POPULAR_AGENCIES.map((a) => ({ label: a, value: a })),
+      { label: "Other (type it in)", value: AGENCY_OTHER },
+    ],
+    [],
+  );
+
   const modalTitle =
     activeModal === "sport"
       ? "Select Sport"
@@ -283,7 +303,9 @@ export default function EditProfileScreen() {
           ? "Select Athletic Level"
           : activeModal === "gender"
             ? "Select Gender"
-            : "";
+            : activeModal === "agency"
+              ? "Select Agency"
+              : "";
 
   const modalOptions: PickerOption[] =
     activeModal === "sport"
@@ -294,7 +316,9 @@ export default function EditProfileScreen() {
           ? levelOptions
           : activeModal === "gender"
             ? genderOptions
-            : [];
+            : activeModal === "agency"
+              ? agencyOptions
+              : [];
 
   const modalSelected =
     activeModal === "sport"
@@ -305,7 +329,11 @@ export default function EditProfileScreen() {
           ? level
           : activeModal === "gender"
             ? gender
-            : "";
+            : activeModal === "agency"
+              ? agencyCustom
+                ? AGENCY_OTHER
+                : agency
+              : "";
 
   const handleSelectFromModal = (value: string) => {
     if (activeModal === "sport") {
@@ -320,6 +348,14 @@ export default function EditProfileScreen() {
       setLevel(value);
     } else if (activeModal === "gender") {
       setGender(value);
+    } else if (activeModal === "agency") {
+      if (value === AGENCY_OTHER) {
+        setAgencyCustom(true);
+        setAgency("");
+      } else {
+        setAgencyCustom(false);
+        setAgency(value);
+      }
     }
     setActiveModal(null);
   };
@@ -584,6 +620,7 @@ export default function EditProfileScreen() {
           position: position,
           level: level,
           team: team.trim(),
+          agency: agency.trim(),
           bio: bio.trim(),
           height: height.trim(),
           weight: weight.trim(),
@@ -837,6 +874,30 @@ export default function EditProfileScreen() {
                     returnKeyType="next"
                   />
                 </View>
+                <SelectorRow
+                  icon="briefcase-outline"
+                  label="Agency (if signed)"
+                  value={
+                    agency ||
+                    (agencyCustom ? "Type below" : "Select (if signed)")
+                  }
+                  placeholder={!agency}
+                  onPress={() => setActiveModal("agency")}
+                />
+                {agencyCustom && (
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>Agency name</Text>
+                    <TextInput
+                      value={agency}
+                      onChangeText={setAgency}
+                      placeholder="Type your agency"
+                      placeholderTextColor={theme.inputPlaceholder}
+                      style={styles.input}
+                      autoCapitalize="words"
+                      returnKeyType="next"
+                    />
+                  </View>
+                )}
               </>
             )}
           </View>

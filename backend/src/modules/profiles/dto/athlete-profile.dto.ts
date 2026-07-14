@@ -29,6 +29,14 @@ export class UpsertAthleteProfileDto {
   @IsString()
   team?: string;
 
+  @ApiPropertyOptional({
+    example: 'Wasserman',
+    description: 'Player agency, if already signed (optional).',
+  })
+  @IsOptional()
+  @IsString()
+  agency?: string;
+
   @ApiPropertyOptional({ example: 'Class of 2025 QB prospect...' })
   @IsOptional()
   @IsString()

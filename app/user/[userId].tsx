@@ -51,6 +51,7 @@ interface AthleteSubProfile {
   position?: string;
   level?: string;
   team?: string;
+  agency?: string;
   bio?: string;
   class_year?: string;
   gpa?: number;
@@ -407,6 +408,7 @@ export default function PublicProfileScreen() {
                   )}
                   {sub.level && <InfoRow icon="school" text={sub.level} />}
                   {sub.team && <InfoRow icon="shirt" text={sub.team} />}
+                  {sub.agency && <InfoRow icon="briefcase" text={sub.agency} />}
                   {(sub.height || sub.weight) && (
                     <InfoRow
                       icon="body"
