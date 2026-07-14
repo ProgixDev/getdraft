@@ -36,6 +36,7 @@ if (Platform.OS === "android") {
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { theme } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { store, RootState } from "@/store";
 import { useAppDispatch } from "@/store/hooks";
 import { SplashScreen, WelcomeScreen } from "@/components";
@@ -297,7 +298,13 @@ export default function RootLayout() {
         >
           <GestureHandlerRootView style={styles.container}>
             <KeyboardProvider>
-              <RootLayoutContent />
+              {/* Phone-width frame: on tablets the whole app renders as a
+                  centred phone-sized column with neutral gutters, so every
+                  screen looks like the mobile layout instead of a stretched
+                  one. No-op on phones (screen width < PHONE_MAX_WIDTH). */}
+              <View style={styles.appFrame}>
+                <RootLayoutContent />
+              </View>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </StripeProvider>
@@ -309,6 +316,13 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#0A0A0A",
+    alignItems: "center",
+  },
+  appFrame: {
+    flex: 1,
+    width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
   },
   centered: {
     justifyContent: "center",
