@@ -32,6 +32,7 @@ import {
 import { brand, theme } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { RootState } from "@/store";
 import { login as setLoggedInUser } from "@/store/slices/authSlice";
 import { profilesService } from "@/services/profiles";
@@ -1560,12 +1561,16 @@ const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
     justifyContent: "flex-end",
+    alignItems: "center",
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalSheet: {
+    width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
     maxHeight: "70%",
     backgroundColor: theme.cardBg,
     borderTopLeftRadius: 24,

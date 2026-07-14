@@ -27,6 +27,7 @@ import {
 } from "@expo-google-fonts/poppins";
 
 import { brand, theme } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { RootState } from "@/store";
 import { postsService, type CommentItem } from "@/services/posts";
 import { usersService } from "@/services/users";
@@ -622,6 +623,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: "flex-end",
+    alignItems: "center",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -629,6 +631,8 @@ const styles = StyleSheet.create({
   },
   sheetWrap: {
     width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
   },
   sheet: {
     backgroundColor: theme.cardBg,

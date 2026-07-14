@@ -22,6 +22,7 @@ import {
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral, theme } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { getCitiesForCountry } from "@/constants/citiesData";
 import { findCountryByName } from "@/constants/countryData";
@@ -799,12 +800,16 @@ const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
     justifyContent: "flex-end",
+    alignItems: "center",
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   modalSheet: {
+    width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
     maxHeight: "82%",
     backgroundColor: theme.cardBg,
     borderTopLeftRadius: 24,

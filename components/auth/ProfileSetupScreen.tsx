@@ -37,6 +37,7 @@ import {
 import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 
 const AGENCY_OTHER = "__OTHER__";
 import { profilesService } from "@/services/profiles";
@@ -1758,8 +1759,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
+    alignItems: "center",
   },
   modalContent: {
+    width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
     backgroundColor: brand.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

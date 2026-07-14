@@ -27,6 +27,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
+import { PHONE_MAX_WIDTH } from '@/lib/responsive';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
@@ -908,8 +909,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   outreachSheet: {
+    width: '100%',
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: 'center',
     backgroundColor: theme.cardBg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 
 import { brand, theme } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { COUNTRY_OPTIONS, type CountryOption } from "@/constants/countryData";
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
@@ -608,12 +609,16 @@ const styles = StyleSheet.create({
   modalRoot: {
     flex: 1,
     justifyContent: "flex-end",
+    alignItems: "center",
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   modalSheet: {
+    width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
     maxHeight: "85%",
     backgroundColor: theme.cardBg,
     borderTopLeftRadius: 24,

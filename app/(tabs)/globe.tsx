@@ -30,6 +30,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { theme, semantic } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { discoverService, type MapPoint } from "@/services/discover";
@@ -744,9 +745,13 @@ const styles = StyleSheet.create({
   sheetBackdrop: {
     flex: 1,
     justifyContent: "flex-end",
+    alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.55)",
   },
   sheet: {
+    width: "100%",
+    maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
     maxHeight: SCREEN_HEIGHT * 0.55,
     backgroundColor: "#151515",
     borderTopLeftRadius: 24,
