@@ -49,6 +49,9 @@ export type UseCarouselGestureArgs = {
   reducedMotion: boolean;
   trigger?: SwipeTrigger;
   onTriggerHandled?: () => void;
+  /** Fired on a clean tap (no drag) of the focused card — opens the full
+   *  profile. Composed as a Race with the pans, so a swipe never triggers it. */
+  onTap?: () => void;
 };
 
 export function useCarouselGesture(args: UseCarouselGestureArgs) {
@@ -72,6 +75,7 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     reducedMotion,
     trigger,
     onTriggerHandled,
+    onTap,
   } = args;
   // Split enabled flags:
   //  - horizontal browse is alive whenever this card is the committed focus —
@@ -212,7 +216,18 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
       }
     });
 
-  const gesture = Gesture.Race(horizontalPan, verticalPan);
+  // Tap the focused card to open the full profile. maxDistance keeps a drag
+  // from ever registering as a tap; Race lets the pans win the moment the
+  // finger moves past their activation offset.
+  const tap = Gesture.Tap()
+    .enabled(isFocused && !!onTap)
+    .maxDuration(300)
+    .maxDistance(12)
+    .onEnd((_e, success) => {
+      if (success && onTap) runOnJS(onTap)();
+    });
+
+  const gesture = Gesture.Race(horizontalPan, verticalPan, tap);
 
   // Button-driven trigger (draft/pass). Same instant-advance pattern as the
   // gesture path: kick the index over right away so the next card is alive.

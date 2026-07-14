@@ -40,6 +40,7 @@ interface AthleteCardProps {
   canGoPrev: boolean;
   trigger?: SwipeTrigger;
   onTriggerHandled?: () => void;
+  onOpenProfile?: () => void;
 }
 
 function AthleteCardImpl({
@@ -64,6 +65,7 @@ function AthleteCardImpl({
   canGoPrev,
   trigger,
   onTriggerHandled,
+  onOpenProfile,
 }: AthleteCardProps) {
   const reducedMotion = useReducedMotion();
   const active = isActive ?? isFocused;
@@ -142,6 +144,7 @@ function AthleteCardImpl({
     reducedMotion: !!reducedMotion,
     trigger: trigger ?? null,
     onTriggerHandled,
+    onTap: onOpenProfile,
   });
 
   const renderMedia = () => {

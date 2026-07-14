@@ -163,7 +163,7 @@ export class ProfilesService {
 
   // --- Public profile by user ID ---
 
-  async getPublicProfile(userId: string) {
+  async getPublicProfile(userId: string, viewerId?: string) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: user } = await supabase
@@ -217,7 +217,28 @@ export class ProfilesService {
       profile = data;
     }
 
-    return { ...user, profile, parent_user_id };
+    // Match status for the viewer — powers the "Matched" badge + Message
+    // shortcut on the public profile. Checks both id orderings so it's
+    // independent of how the pair was stored. Viewing your own profile, or
+    // an unauthenticated read, is never "matched".
+    let is_matched = false;
+    let match_id: string | null = null;
+    if (viewerId && viewerId !== userId) {
+      const { data: match } = await supabase
+        .from('matches')
+        .select('id')
+        .or(
+          `and(user_1_id.eq.${viewerId},user_2_id.eq.${userId}),and(user_1_id.eq.${userId},user_2_id.eq.${viewerId})`,
+        )
+        .limit(1)
+        .maybeSingle();
+      if (match) {
+        is_matched = true;
+        match_id = match.id;
+      }
+    }
+
+    return { ...user, profile, parent_user_id, is_matched, match_id };
   }
 
   // --- Helpers ---

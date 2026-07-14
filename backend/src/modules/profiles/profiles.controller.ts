@@ -66,7 +66,10 @@ export class ProfilesController {
 
   @Get(':userId')
   @ApiOperation({ summary: 'Get public profile by user ID' })
-  getPublicProfile(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.profilesService.getPublicProfile(userId);
+  getPublicProfile(
+    @CurrentUser('id') viewerId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.profilesService.getPublicProfile(userId, viewerId);
   }
 }

@@ -92,6 +92,10 @@ interface PublicProfile {
   // recruiter/coach can see the "Send outreach" entry point on this screen
   // — the outreach DTO requires the parent's user id, not the athlete's.
   parent_user_id?: string | null;
+  // True when the viewer and this user have a mutual match — powers the
+  // "Matched" badge. Server-computed per viewer.
+  is_matched?: boolean;
+  match_id?: string | null;
 }
 
 interface ProfileStats {
@@ -323,6 +327,12 @@ export default function PublicProfileScreen() {
             <View style={styles.roleBadge}>
               <Text style={styles.roleText}>{roleLabel(role, sub)}</Text>
             </View>
+            {profile.is_matched && (
+              <View style={styles.matchedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={brand.white} />
+                <Text style={styles.matchedText}>Matched</Text>
+              </View>
+            )}
             {isAthlete && sub.sport && (
               <View style={styles.sportRow}>
                 <Ionicons name="american-football" size={14} color={theme.textSecondary} />
@@ -690,6 +700,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_500Medium',
     color: theme.badgeText,
+  },
+  matchedBadge: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: brand.primary,
+    borderRadius: 20,
+  },
+  matchedText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: brand.white,
   },
   sportRow: {
     flexDirection: 'row',

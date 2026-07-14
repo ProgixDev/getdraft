@@ -107,6 +107,7 @@ function DiscoverCardImpl({
   canGoPrev,
   trigger,
   onTriggerHandled,
+  onOpenProfile,
 }: {
   recruiter: RecruiterCard;
   absoluteIndex: number;
@@ -128,6 +129,7 @@ function DiscoverCardImpl({
   canGoPrev: boolean;
   trigger: SwipeTrigger;
   onTriggerHandled: () => void;
+  onOpenProfile?: () => void;
 }) {
   const reducedMotion = useReducedMotion();
   const sportAccent = getSportTheme(recruiter.sport).accent;
@@ -160,6 +162,7 @@ function DiscoverCardImpl({
     reducedMotion: !!reducedMotion,
     trigger,
     onTriggerHandled,
+    onTap: onOpenProfile,
   });
 
   return (
@@ -1188,6 +1191,12 @@ export default function DiscoverScreen() {
                     canGesture={cardCanGesture}
                     trigger={isFocused ? pendingAction : null}
                     onTriggerHandled={handleTriggerHandled}
+                    onOpenProfile={() =>
+                      router.push({
+                        pathname: "/user/[userId]",
+                        params: { userId: String(item.id) },
+                      })
+                    }
                   />
                 ) : (
                   <DiscoverCard
@@ -1212,6 +1221,12 @@ export default function DiscoverScreen() {
                     canGoPrev={canGoPrev}
                     trigger={isFocused ? pendingAction : null}
                     onTriggerHandled={handleTriggerHandled}
+                    onOpenProfile={() =>
+                      router.push({
+                        pathname: "/user/[userId]",
+                        params: { userId: String(item.id) },
+                      })
+                    }
                   />
                 );
               })}
