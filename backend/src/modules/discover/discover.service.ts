@@ -238,8 +238,16 @@ export class DiscoverService {
 
     const swipesRemaining = await this.getSwipesRemaining(user.id);
 
-    // Open feed: every athlete/coach/recruiter sees everyone.
-    return this.getEveryoneFeed(user.id, query, offset, limit, swipesRemaining);
+    // Role-targeted feed (client matrix): athletes see coaches/agents;
+    // coaches and agents see athletes only. Enforced in getEveryoneFeed.
+    return this.getEveryoneFeed(
+      user.id,
+      user.role,
+      query,
+      offset,
+      limit,
+      swipesRemaining,
+    );
   }
 
   /**
@@ -308,6 +316,7 @@ export class DiscoverService {
 
   private async getEveryoneFeed(
     userId: string,
+    viewerRole: UserRole,
     query: DiscoverQueryDto,
     offset: number,
     limit: number,
@@ -389,7 +398,16 @@ export class DiscoverService {
       recruiterBranch.recruiter_profiles = { is: recruiterProfileFilter };
     }
 
-    where.OR = [athleteBranch, recruiterBranch];
+    // Role matrix (client): athletes — and parents acting for their athlete —
+    // see coaches/agents; coaches and agents see athletes only. Anything else
+    // (e.g. admin tooling) falls back to the full set.
+    const seesRecruiters =
+      viewerRole === UserRole.ATHLETE || viewerRole === UserRole.PARENT;
+    const seesAthletes =
+      viewerRole === UserRole.COACH || viewerRole === UserRole.RECRUITER;
+    if (seesRecruiters && !seesAthletes) where.OR = [recruiterBranch];
+    else if (seesAthletes && !seesRecruiters) where.OR = [athleteBranch];
+    else where.OR = [athleteBranch, recruiterBranch];
 
     const users = await this.prisma.public_users.findMany({
       where,
@@ -627,6 +645,21 @@ export class DiscoverService {
     ];
   }
 
+  /**
+   * The client's role-matching matrix, in one place. Athletes match with
+   * coaches/agents; coaches and agents match with athletes only. (Parent
+   * matching is handled on its own path and is intentionally not covered
+   * here yet.) Symmetric: canMatch(a,b) === canMatch(b,a).
+   */
+  private canMatch(roleA: UserRole, roleB: UserRole): boolean {
+    const isRecruiter = (r: UserRole) =>
+      r === UserRole.COACH || r === UserRole.RECRUITER;
+    return (
+      (roleA === UserRole.ATHLETE && isRecruiter(roleB)) ||
+      (isRecruiter(roleA) && roleB === UserRole.ATHLETE)
+    );
+  }
+
   async swipe(user: CurrentUserPayload, dto: SwipeDto) {
     // Parents have no draft actions (mirrors getFeed/getMapPoints/myDrafts).
     if (user.role === UserRole.PARENT) {
@@ -655,10 +688,17 @@ export class DiscoverService {
     // and end up in the swiper's matches/messages.
     const target = await this.prisma.public_users.findUnique({
       where: { id: dto.targetUserId },
-      select: { is_banned: true },
+      select: { is_banned: true, role: true },
     });
     if (!target || target.is_banned) {
       throw new NotFoundException('User not found');
+    }
+
+    // Role-pair guard (client matrix). Belt-and-braces on top of the feed
+    // filter: a deep-linked / hand-crafted targetUserId must not be able to
+    // create an illegal match (athlete↔athlete, coach↔agent, etc.).
+    if (!this.canMatch(user.role, target.role as UserRole)) {
+      throw new ForbiddenException('You cannot match with this user');
     }
 
     // Passes are always free; only Drafts (right-swipes) consume the monthly

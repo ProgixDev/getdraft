@@ -51,7 +51,11 @@ describe('DiscoverService', () => {
     prisma = {
       public_users: {
         findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn().mockResolvedValue({ is_banned: false }),
+        // Default target is a coach so the athlete↔recruiter matrix guard
+        // passes; individual tests override the role where needed.
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ is_banned: false, role: 'coach' }),
       },
       swipes: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -164,6 +168,20 @@ describe('DiscoverService', () => {
       });
       expect(result.matched).toBe(false);
       expect(prisma.swipes.create).toHaveBeenCalled();
+    });
+
+    it('blocks an illegal role pair (athlete cannot draft another athlete)', async () => {
+      prisma.public_users.findUnique.mockResolvedValueOnce({
+        is_banned: false,
+        role: 'athlete',
+      });
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'ath-2',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
     });
 
     it('throws ConflictException on duplicate swipe', async () => {
