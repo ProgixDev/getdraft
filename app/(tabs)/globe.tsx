@@ -36,6 +36,11 @@ import { discoverService, type MapPoint } from "@/services/discover";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+// Same public token the location search uses. Inlined at build time by
+// Metro; present in every EAS build. Without it the map can't load, so we
+// fall back to a friendly placeholder (see render) instead of a blank tab.
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+
 // ── Continent list (labels + icons only) ──
 // Counts come EXCLUSIVELY from the live stats API — no invented figures.
 // Until the API answers (or when it has nothing for a continent) the card
@@ -62,135 +67,94 @@ const DEFAULT_CONTINENTS: ContinentRow[] = CONTINENT_META.map((m) => ({
   recruiters: null,
 }));
 
-// ── Interactive Three.js globe HTML ──
-// Renders the real, role-targeted candidates as point meshes that the
-// user can TAP to bridge a "{type:'point', id}" message back to RN.
-// Drag still rotates the globe — taps are discriminated by elapsed
-// time + total movement on touchend.
-function buildGlobeHtml(points: { id: string; lat: number; lng: number; role: string; generated: boolean }[]): string {
-  // The points payload must be safe to embed inline. JSON.stringify
-  // gives us a JS literal that can't break out of the script tag and
-  // is bounded by what the backend returns (no untrusted markup).
-  const ptsJson = JSON.stringify(points);
-  // Pin color: single brand green in production. The orange split for
-  // seeded/demo accounts (@getdraft.app) is a dev-only diagnostic — end
-  // users must never see a two-tone globe.
-  const colorForFn = __DEV__
-    ? `function colorFor(d){return d.generated?'#FDA63A':'${semantic.success}'}`
-    : `function colorFor(){return '${semantic.success}'}`;
+// ── Interactive Mapbox globe HTML ──
+// A real 3D world map (Mapbox GL, globe projection) with named
+// continents / countries / cities and pinch-zoom — the "like Apple Maps"
+// experience the client asked for. Role-targeted candidates are plotted
+// as tappable dots that bridge a "{type:'point', id}" message back to RN.
+// The map never auto-spins: it holds wherever the user leaves it.
+function buildGlobeHtml(
+  points: { id: string; lat: number; lng: number; role: string; generated: boolean }[],
+  token: string,
+): string {
+  // GeoJSON feature set — only id + generated travel into the WebView;
+  // the rest of each candidate stays RN-side for the mini/big card.
+  const fc = JSON.stringify({
+    type: "FeatureCollection",
+    features: points.map((p) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [p.lng, p.lat] },
+      properties: { id: p.id, generated: p.generated },
+    })),
+  });
+  // Dot color: brand blue in production. Dev builds tint seeded/demo
+  // accounts (@getdraft.app) orange so real signups stand out — end
+  // users must never see a two-tone map.
+  const DOT = "#38A1F7";
+  const colorExpr = __DEV__
+    ? `['case',['boolean',['get','generated'],false],'#FDA63A','${DOT}']`
+    : `'${DOT}'`;
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"><\/script>
 <style>
 *{margin:0;padding:0}
-body{overflow:hidden;background:transparent;touch-action:none}
-#g{width:100vw;height:100vh}
+html,body,#map{height:100%;width:100%}
+body{background:#0a0a0a;overflow:hidden}
+.mapboxgl-ctrl-logo{opacity:.35}
+.mapboxgl-ctrl-attrib{opacity:.3;font-size:9px}
+.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group{margin:0 10px 96px 0}
 </style>
-</head><body><div id="g"></div>
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"><\/script>
-<script src="https://unpkg.com/three-globe@2.45.0/dist/three-globe.min.js"><\/script>
+</head><body><div id="map"></div>
 <script>
-var PTS=${ptsJson};
-// Decorative arcs — static feel of a network. Not tied to any data.
-var arcs=[
-{startLat:39.8,startLng:-98.6,endLat:51.2,endLng:10.5},
-{startLat:39.8,startLng:-98.6,endLat:-14.2,endLng:-51.9},
-{startLat:55.4,startLng:-3.4,endLat:36.2,endLng:138.3},
-{startLat:56.1,startLng:-106.3,endLat:-25.3,endLng:133.8},
-{startLat:46.2,startLng:2.2,endLat:9.1,endLng:8.7},
-{startLat:20.6,startLng:79,endLat:35.9,endLng:127.8},
-{startLat:-30.6,startLng:22.9,endLat:40.5,endLng:-3.7},
-{startLat:23.6,startLng:-102.6,endLat:56.1,endLng:-106.3}
-];
-// Visible point markers — brand green in production; in dev builds
-// seeded/demo accounts (@getdraft.app) are ORANGE so real signups stand out.
-${colorForFn}
-var G=new ThreeGlobe()
-.globeImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg')
-.bumpImageUrl('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png')
-.arcsData(arcs).arcColor(function(){return['rgba(0,184,148,0.6)','rgba(116,185,255,0.6)']})
-.arcStroke(0.5).arcDashLength(0.4).arcDashGap(0.2).arcDashAnimateTime(2500)
-.pointsData(PTS).pointColor(colorFor).pointAltitude(0.012).pointRadius(0.55);
-var r=new THREE.WebGLRenderer({alpha:true,antialias:true});
-r.setPixelRatio(Math.min(window.devicePixelRatio,2));
-r.setSize(window.innerWidth,window.innerHeight);
-document.getElementById('g').appendChild(r.domElement);
-var s=new THREE.Scene();s.add(G);
-s.add(new THREE.AmbientLight(0xffffff,1.2));
-var dl=new THREE.DirectionalLight(0xffffff,0.8);dl.position.set(6,3,5);s.add(dl);
-// Soft atmosphere shell.
-var ag=new THREE.SphereGeometry(101,32,32);
-var am=new THREE.MeshBasicMaterial({color:0x4488ff,transparent:true,opacity:0.08,side:THREE.BackSide});
-s.add(new THREE.Mesh(ag,am));
-var c=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,1000);
-c.position.z=260;
-
-// Invisible click targets — three-globe's own point meshes are not
-// easy to raycast against directly, so we add sibling spheres at the
-// same lat/lng and parent them to the globe so they rotate together.
-// G.getCoords() is the public projection three-globe uses for its own
-// .pointsData markers, so the targets line up exactly with the dots.
-// Slightly larger than the visible dot so tapping is forgiving.
-var targets=[];
-var targetGeom=new THREE.SphereGeometry(2.2,8,8);
-var targetMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0});
-for(var i=0;i<PTS.length;i++){
-  var p=PTS[i];
-  var m=new THREE.Mesh(targetGeom,targetMat);
-  var v=G.getCoords(p.lat,p.lng,0.015); // matches pointAltitude(0.012)
-  m.position.set(v.x,v.y,v.z);
-  m.userData={id:p.id};
-  G.add(m);
-  targets.push(m);
-}
-
-// Touch handling — drag rotates, tap raycasts.
-var autoRotate=true;var isDragging=false;
-var prevX=0;var prevY=0;var startX=0;var startY=0;var startT=0;var totalMove=0;
-var rotX=0;var rotY=0;
-var raycaster=new THREE.Raycaster();
-function handleTap(x,y){
-  var ndc=new THREE.Vector2(
-    (x/window.innerWidth)*2-1,
-    -(y/window.innerHeight)*2+1
-  );
-  raycaster.setFromCamera(ndc,c);
-  var hits=raycaster.intersectObjects(targets,false);
-  if(hits.length>0){
-    var id=hits[0].object.userData.id;
+mapboxgl.accessToken=${JSON.stringify(token)};
+var FC=${fc};
+var map=new mapboxgl.Map({
+  container:'map',
+  style:'mapbox://styles/mapbox/dark-v11',
+  projection:'globe',
+  center:[-40,25],
+  zoom:1.35,
+  minZoom:0.6,
+  attributionControl:false,
+  logoPosition:'bottom-left'
+});
+// Zoom in/out control (no compass) — bottom-right, above the tab bar.
+map.addControl(new mapboxgl.NavigationControl({showCompass:false,visualizePitch:false}),'bottom-right');
+map.on('style.load',function(){
+  // Space + atmosphere so the globe reads as a 3D planet, not a flat map.
+  map.setFog({
+    'color':'rgb(12,16,26)',
+    'high-color':'rgb(26,54,102)',
+    'horizon-blend':0.08,
+    'space-color':'rgb(6,7,12)',
+    'star-intensity':0.45
+  });
+});
+map.on('load',function(){
+  map.addSource('pts',{type:'geojson',data:FC});
+  // Soft halo under each dot.
+  map.addLayer({id:'pts-glow',type:'circle',source:'pts',paint:{
+    'circle-radius':12,'circle-color':'${DOT}','circle-opacity':0.22,'circle-blur':0.8
+  }});
+  map.addLayer({id:'pts',type:'circle',source:'pts',paint:{
+    'circle-radius':6,'circle-color':${colorExpr},
+    'circle-stroke-width':2,'circle-stroke-color':'#ffffff'
+  }});
+  // Tap a dot -> bridge the id back to RN (same protocol as before).
+  map.on('click','pts',function(e){
+    if(!e.features||!e.features.length)return;
+    var id=e.features[0].properties.id;
     if(window.ReactNativeWebView){
       window.ReactNativeWebView.postMessage(JSON.stringify({type:'point',id:id}));
     }
-  }
-}
-document.addEventListener('touchstart',function(e){
-  isDragging=true;autoRotate=false;
-  prevX=e.touches[0].clientX;prevY=e.touches[0].clientY;
-  startX=prevX;startY=prevY;startT=Date.now();totalMove=0;
+  });
+  map.on('mouseenter','pts',function(){map.getCanvas().style.cursor='pointer'});
+  map.on('mouseleave','pts',function(){map.getCanvas().style.cursor=''});
 });
-document.addEventListener('touchmove',function(e){
-  if(!isDragging)return;
-  var dx=e.touches[0].clientX-prevX;var dy=e.touches[0].clientY-prevY;
-  totalMove+=Math.abs(dx)+Math.abs(dy);
-  rotY+=dx*0.005;rotX+=dy*0.003;
-  rotX=Math.max(-1,Math.min(1,rotX));
-  prevX=e.touches[0].clientX;prevY=e.touches[0].clientY;
-});
-document.addEventListener('touchend',function(e){
-  isDragging=false;
-  var elapsed=Date.now()-startT;
-  // Tap: short, with negligible movement.
-  if(elapsed<280&&totalMove<10){handleTap(startX,startY);}
-  setTimeout(function(){if(!isDragging)autoRotate=true},3000);
-});
-function a(){
-  if(autoRotate)rotY+=0.003;
-  G.rotation.y=rotY;G.rotation.x=rotX;
-  r.render(s,c);
-  requestAnimationFrame(a);
-}
-a();
 <\/script></body></html>`;
 }
 
@@ -331,6 +295,7 @@ export default function GlobeTab() {
           role: p.role,
           generated: p.generated,
         })),
+        MAPBOX_TOKEN ?? "",
       ),
     [points],
   );
@@ -414,11 +379,11 @@ export default function GlobeTab() {
     <View style={styles.container}>
       {/* Globe WebView — lazy loaded */}
       <View style={styles.globeContainer}>
-        {isActive ? (
+        {isActive && MAPBOX_TOKEN ? (
           <WebView
             // Re-key on the points fingerprint so a fresh fetch fully
-            // remounts the WebView (and the inline three-globe state)
-            // instead of relying on source-prop diffing.
+            // remounts the WebView (and the Mapbox map state) instead of
+            // relying on source-prop diffing.
             key={`globe-${points.length}-${points[0]?.id ?? "empty"}`}
             ref={webviewRef}
             source={{ html: globeHtml }}
@@ -473,7 +438,7 @@ export default function GlobeTab() {
             size={14}
             color="rgba(255,255,255,0.7)"
           />
-          <Text style={styles.hintText}>Drag to rotate · Tap a point</Text>
+          <Text style={styles.hintText}>Pinch to zoom · Tap a dot</Text>
         </View>
       )}
 
