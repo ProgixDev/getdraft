@@ -24,6 +24,11 @@ export class UpsertAthleteProfileDto {
   @IsString()
   level?: string;
 
+  @ApiPropertyOptional({ example: 'Dallas Jesuit Rangers' })
+  @IsOptional()
+  @IsString()
+  team?: string;
+
   @ApiPropertyOptional({ example: 'Class of 2025 QB prospect...' })
   @IsOptional()
   @IsString()

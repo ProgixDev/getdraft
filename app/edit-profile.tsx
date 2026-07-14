@@ -105,6 +105,7 @@ const ATHLETE_DTO_FIELDS = [
   "sport",
   "position",
   "level",
+  "team",
   "bio",
   "class_year",
   "gpa",
@@ -120,6 +121,7 @@ const RECRUITER_DTO_FIELDS = [
   "organization",
   "sport",
   "role_type",
+  "team",
   "tags",
   "bio",
   "photos",
@@ -174,6 +176,7 @@ export default function EditProfileScreen() {
   const [organization, setOrganization] = useState("");
   const [position, setPosition] = useState("");
   const [level, setLevel] = useState("");
+  const [team, setTeam] = useState("");
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [gender, setGender] = useState("");
@@ -234,6 +237,7 @@ export default function EditProfileScreen() {
         if (isAthlete || isRecruiter) {
           setGalleryPhotos(Array.isArray(p.photos) ? p.photos : []);
           setGalleryVideos(Array.isArray(p.videos) ? p.videos : []);
+          setTeam(p.team ?? "");
         }
       }
       setLoading(false);
@@ -579,6 +583,7 @@ export default function EditProfileScreen() {
           // and keeps the previous value.
           position: position,
           level: level,
+          team: team.trim(),
           bio: bio.trim(),
           height: height.trim(),
           weight: weight.trim(),
@@ -591,6 +596,8 @@ export default function EditProfileScreen() {
           organization: organization.trim(),
           sport,
           role_type: prev.role_type ?? (role === "coach" ? "coach" : "agent"),
+          // Coaches persist a team; agents don't render the field.
+          team: role === "coach" ? team.trim() : (prev.team ?? undefined),
           tags: prev.tags ?? [],
           bio: bio.trim(),
         });
@@ -771,6 +778,20 @@ export default function EditProfileScreen() {
                 returnKeyType="next"
               />
             </View>
+            {role === "coach" && (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Team</Text>
+                <TextInput
+                  value={team}
+                  onChangeText={setTeam}
+                  placeholder="Varsity Football"
+                  placeholderTextColor={theme.inputPlaceholder}
+                  style={styles.input}
+                  autoCapitalize="words"
+                  returnKeyType="next"
+                />
+              </View>
+            )}
           </View>
         )}
 
@@ -804,6 +825,18 @@ export default function EditProfileScreen() {
                   disabled={!sport}
                   onPress={() => sport && setActiveModal("level")}
                 />
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Team / Club</Text>
+                  <TextInput
+                    value={team}
+                    onChangeText={setTeam}
+                    placeholder="Dallas Jesuit Rangers"
+                    placeholderTextColor={theme.inputPlaceholder}
+                    style={styles.input}
+                    autoCapitalize="words"
+                    returnKeyType="next"
+                  />
+                </View>
               </>
             )}
           </View>

@@ -50,6 +50,7 @@ interface AthleteSubProfile {
   sport?: string;
   position?: string;
   level?: string;
+  team?: string;
   bio?: string;
   class_year?: string;
   gpa?: number;
@@ -64,6 +65,7 @@ interface AthleteSubProfile {
 interface RecruiterSubProfile {
   organization?: string;
   sport?: string;
+  team?: string;
   role_type?: 'agent' | 'coach';
   verified?: boolean;
   tags?: string[];
@@ -394,6 +396,7 @@ export default function PublicProfileScreen() {
                     <InfoRow icon="football" text={`${sub.sport}${sub.position ? ` · ${sub.position}` : ''}`} />
                   )}
                   {sub.level && <InfoRow icon="school" text={sub.level} />}
+                  {sub.team && <InfoRow icon="shirt" text={sub.team} />}
                   {(sub.height || sub.weight) && (
                     <InfoRow
                       icon="body"
@@ -411,6 +414,9 @@ export default function PublicProfileScreen() {
               {isRecruiter && (
                 <>
                   {sub.organization && <InfoRow icon="briefcase" text={sub.organization} />}
+                  {sub.role_type === 'coach' && sub.team && (
+                    <InfoRow icon="shirt" text={sub.team} />
+                  )}
                   {sub.sport && <InfoRow icon="football" text={sub.sport} />}
                   {sub.role_type && (
                     <InfoRow

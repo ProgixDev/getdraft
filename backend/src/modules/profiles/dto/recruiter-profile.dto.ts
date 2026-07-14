@@ -15,6 +15,14 @@ export class UpsertRecruiterProfileDto {
   @IsEnum(RecruiterRoleType)
   role_type: RecruiterRoleType;
 
+  @ApiPropertyOptional({
+    example: 'Dallas Jesuit Rangers',
+    description: 'Coaches only — the team they coach. Agents use organization.',
+  })
+  @IsOptional()
+  @IsString()
+  team?: string;
+
   @ApiPropertyOptional({ example: ['NFL Certified', '10+ Years'] })
   @IsOptional()
   @IsArray()

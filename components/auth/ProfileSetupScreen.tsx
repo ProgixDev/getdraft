@@ -115,6 +115,17 @@ function getStepsForRole(role: string): Step[] {
           icon: "trending-up-outline",
           optional: true,
         },
+        ...(!isAgent
+          ? ([
+              {
+                id: "team",
+                label: "Team (optional)",
+                placeholder: "Varsity Football",
+                icon: "shirt-outline",
+                optional: true,
+              },
+            ] as StepField[])
+          : []),
         ...(isAgent
           ? ([
               {
@@ -253,6 +264,13 @@ function getStepsForRole(role: string): Step[] {
           label: "Position",
           placeholder: "Quarterback",
           icon: "trophy-outline",
+        },
+        {
+          id: "team",
+          label: "Team / Club (optional)",
+          placeholder: "Dallas Jesuit Rangers",
+          icon: "shirt-outline",
+          optional: true,
         },
         {
           id: "experience",
@@ -523,6 +541,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             sport: formData.sport,
             position: formData.position,
             level: formData.level,
+            team: formData.team?.trim() || undefined,
             bio: "",
             class_year: "",
             height: formData.height
@@ -549,6 +568,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             organization: formData.organization?.trim() ?? "",
             sport: formData.sport?.trim() ?? "",
             role_type: role === "coach" ? "coach" : "agent",
+            // Coaches list a team; agents leave it blank (field hidden for them).
+            team: formData.team?.trim() || undefined,
             bio: formData.bio?.trim() || undefined,
             tags,
           });
