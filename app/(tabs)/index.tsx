@@ -645,8 +645,9 @@ export default function DiscoverScreen() {
 
   const displayName = user?.name?.split(" ")[0] || "Player";
   // Parents redirect to /matches before render, so this screen only shows for
-  // athletes / recruiters. No parent-facing copy needed here anymore.
-  const discoverTitle = "Let's Start Scouting";
+  // athletes / recruiters. Coaches/agents scout; players don't scout, they get
+  // drafted — so the header reads differently per role (client request).
+  const discoverTitle = isRecruiter ? "Let's Start Scouting" : "Let's Get Drafted";
 
   // Real backend feed only — no static/mock fallback. Server already filters by
   // role/sport/country/etc.; here we just apply the local search query.
