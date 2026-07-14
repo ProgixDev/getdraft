@@ -57,6 +57,7 @@ import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { PlanSelectionScreen } from "./PlanSelectionScreen";
 import { LocationSelectionScreen } from "./LocationSelectionScreen";
 import { ProfileSetupScreen } from "./ProfileSetupScreen";
+import { MediaUploadScreen } from "./MediaUploadScreen";
 import { TutorialScreen } from "./TutorialScreen";
 import { KycVerificationScreen } from "./KycVerificationScreen";
 import { OnboardingQuestionsScreen } from "./OnboardingQuestionsScreen";
@@ -105,6 +106,7 @@ type SignupStep =
   | "verify"
   | "location"
   | "profile"
+  | "media" // Athlete-only — upload 4+ photos/videos before KYC
   | "kyc" // Didit identity verification
   | "guardian-link" // Parent-only — scan athlete QR, answer questions, record video
   | "questions" // Per-role onboarding questionnaire — feeds the matching algorithm
@@ -235,8 +237,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             if (role === "parent") setSignupStep(roleStep);
             else setSignupStep("location");
             return true;
-          case "kyc":
+          case "media":
             setSignupStep("profile");
+            return true;
+          case "kyc":
+            setSignupStep(role === "athlete" ? "media" : "profile");
             return true;
           case "guardian-link":
             setSignupStep("kyc");
@@ -609,8 +614,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   const handleProfilePayment = () => {
-    // Insert the KYC gate between Profile and Payment so we don't
-    // collect money from users who'd fail verification.
+    // Athletes upload their media (4+ photos/videos) before KYC so the
+    // profiles scouts browse are never empty. Coaches/agents skip straight
+    // to KYC. The KYC gate sits before Payment so we don't collect money
+    // from users who'd fail verification.
+    setSignupStep(role === "athlete" ? "media" : "kyc");
+  };
+
+  const handleMediaComplete = () => {
     setSignupStep("kyc");
   };
 
@@ -817,11 +828,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             }
           />
         );
+      case "media":
+        return (
+          <MediaUploadScreen
+            onComplete={handleMediaComplete}
+            onBack={() => setSignupStep("profile")}
+          />
+        );
       case "kyc":
         return (
           <KycVerificationScreen
             onComplete={handleKycComplete}
-            onBack={() => setSignupStep("profile")}
+            onBack={() =>
+              setSignupStep(role === "athlete" ? "media" : "profile")
+            }
           />
         );
       case "guardian-link":
