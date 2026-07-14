@@ -229,19 +229,19 @@ export class DiscoverService {
   ) {}
 
   async getFeed(user: CurrentUserPayload, query: DiscoverQueryDto) {
-    if (user.role === UserRole.PARENT) {
-      throw new ForbiddenException('Parents do not have a discover feed');
-    }
-
     const offset = ((query.page || 1) - 1) * (query.limit || 20);
     const limit = query.limit || 20;
 
-    const swipesRemaining = await this.getSwipesRemaining(user.id);
+    // Parents browse on behalf of their linked athlete (guardian proxy): the
+    // feed excludes what the ATHLETE already acted on and reflects the
+    // athlete's Draft allowance. Non-parents act as themselves.
+    const actorId = await this.resolveActorId(user, false);
+    const swipesRemaining = await this.getSwipesRemaining(actorId);
 
-    // Role-targeted feed (client matrix): athletes see coaches/agents;
-    // coaches and agents see athletes only. Enforced in getEveryoneFeed.
+    // Role-targeted feed (client matrix): athletes — and parents on their
+    // athlete's behalf — see coaches/agents; coaches and agents see athletes.
     return this.getEveryoneFeed(
-      user.id,
+      actorId,
       user.role,
       query,
       offset,
@@ -660,20 +660,55 @@ export class DiscoverService {
     );
   }
 
-  async swipe(user: CurrentUserPayload, dto: SwipeDto) {
-    // Parents have no draft actions (mirrors getFeed/getMapPoints/myDrafts).
-    if (user.role === UserRole.PARENT) {
-      throw new ForbiddenException('Parents do not have draft actions');
+  /**
+   * Guardian proxy: a parent acts on behalf of their linked minor, so discovery
+   * and drafts run AS the athlete (a parent's Draft on a coach produces a real
+   * athlete↔coach match). Returns the parent's approved-linked athlete id, or
+   * the user's own id for non-parents. `requireLink` throws when a parent has no
+   * approved link (used on the write path); the read path passes false so the
+   * feed still renders (just without athlete-scoped excludes).
+   */
+  private async resolveActorId(
+    user: CurrentUserPayload,
+    requireLink: boolean,
+  ): Promise<string> {
+    if (user.role !== UserRole.PARENT) return user.id;
+    const link = await this.prisma.guardian_links.findFirst({
+      where: { guardian_user_id: user.id, status: 'approved' },
+      select: { athlete_user_id: true },
+    });
+    if (!link) {
+      if (requireLink) {
+        throw new ForbiddenException(
+          'Link your athlete before drafting on their behalf.',
+        );
+      }
+      return user.id;
     }
-    if (user.id === dto.targetUserId) {
+    return link.athlete_user_id;
+  }
+
+  async swipe(user: CurrentUserPayload, dto: SwipeDto) {
+    // Parents draft on behalf of their linked minor: everything below runs as
+    // that athlete (`actor`), so a parent's Draft on a coach produces a real
+    // athlete↔coach match. Non-parents act as themselves.
+    const actor: CurrentUserPayload =
+      user.role === UserRole.PARENT
+        ? {
+            ...user,
+            id: await this.resolveActorId(user, true),
+            role: UserRole.ATHLETE,
+          }
+        : user;
+    if (actor.id === dto.targetUserId) {
       throw new BadRequestException('Cannot swipe yourself');
     }
 
     const existingBlock = await this.prisma.blocks.findFirst({
       where: {
         OR: [
-          { blocker_id: user.id, blocked_id: dto.targetUserId },
-          { blocker_id: dto.targetUserId, blocked_id: user.id },
+          { blocker_id: actor.id, blocked_id: dto.targetUserId },
+          { blocker_id: dto.targetUserId, blocked_id: actor.id },
         ],
       },
       select: { id: true },
@@ -697,7 +732,7 @@ export class DiscoverService {
     // Role-pair guard (client matrix). Belt-and-braces on top of the feed
     // filter: a deep-linked / hand-crafted targetUserId must not be able to
     // create an illegal match (athlete↔athlete, coach↔agent, etc.).
-    if (!this.canMatch(user.role, target.role as UserRole)) {
+    if (!this.canMatch(actor.role, target.role as UserRole)) {
       throw new ForbiddenException('You cannot match with this user');
     }
 
@@ -705,7 +740,7 @@ export class DiscoverService {
     // allowance. Block a Draft only when its quota is exhausted — the 429 lets
     // the client show the upgrade CTA (distinct from the 403 role/block paths).
     if (dto.direction === SwipeDirection.DRAFT) {
-      const remaining = await this.getSwipesRemaining(user.id);
+      const remaining = await this.getSwipesRemaining(actor.id);
       if (remaining === 0) {
         throw new HttpException(
           'Monthly Draft limit reached. Upgrade for unlimited Drafts.',
@@ -717,7 +752,7 @@ export class DiscoverService {
     try {
       await this.prisma.swipes.create({
         data: {
-          swiper_id: user.id,
+          swiper_id: actor.id,
           swiped_id: dto.targetUserId,
           direction: dto.direction,
         },
@@ -734,7 +769,7 @@ export class DiscoverService {
     // swipes_used_today is reused as the month-to-date Draft counter.
     if (dto.direction === SwipeDirection.DRAFT) {
       const subForSpend = await this.prisma.subscriptions.findUnique({
-        where: { user_id: user.id },
+        where: { user_id: actor.id },
         select: {
           plan_id: true,
           swipes_used_today: true,
@@ -753,11 +788,11 @@ export class DiscoverService {
         if (quotaLeft > 0) {
           await this.prisma.$executeRawUnsafe(
             'select public.increment_swipes_used($1::uuid)',
-            user.id,
+            actor.id,
           );
         } else if (subForSpend && subForSpend.bonus_swipes > 0) {
           await this.prisma.subscriptions.update({
-            where: { user_id: user.id },
+            where: { user_id: actor.id },
             data: { bonus_swipes: { decrement: 1 } },
           });
         }
@@ -776,7 +811,7 @@ export class DiscoverService {
       const mutualSwipe = await this.prisma.swipes.findFirst({
         where: {
           swiper_id: dto.targetUserId,
-          swiped_id: user.id,
+          swiped_id: actor.id,
           direction: SwipeDirection.DRAFT,
         },
         select: { id: true },
@@ -784,9 +819,9 @@ export class DiscoverService {
 
       if (mutualSwipe) {
         const [user1, user2] =
-          user.id < dto.targetUserId
-            ? [user.id, dto.targetUserId]
-            : [dto.targetUserId, user.id];
+          actor.id < dto.targetUserId
+            ? [actor.id, dto.targetUserId]
+            : [dto.targetUserId, actor.id];
 
         try {
           const match = await this.prisma.matches.create({
@@ -833,7 +868,7 @@ export class DiscoverService {
         // Push "Game On!" to both users (best-effort; sendPushToUser
         // swallows its own errors).
         const names = await this.prisma.public_users.findMany({
-          where: { id: { in: [user.id, dto.targetUserId] } },
+          where: { id: { in: [actor.id, dto.targetUserId] } },
           select: { id: true, name: true },
         });
         const nameOf = (id: string) =>
@@ -843,12 +878,12 @@ export class DiscoverService {
           this.notificationsService.sendPushToUser(
             dto.targetUserId,
             'Game On! 🤝',
-            `You matched with ${nameOf(user.id)}`,
+            `You matched with ${nameOf(actor.id)}`,
             data,
             'matchAlerts',
           ),
           this.notificationsService.sendPushToUser(
-            user.id,
+            actor.id,
             'Game On! 🤝',
             `You matched with ${nameOf(dto.targetUserId)}`,
             data,
@@ -858,7 +893,7 @@ export class DiscoverService {
       }
     }
 
-    const swipesRemaining = await this.getSwipesRemaining(user.id);
+    const swipesRemaining = await this.getSwipesRemaining(actor.id);
     return { matched, matchId, swipesRemaining };
   }
 

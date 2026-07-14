@@ -67,6 +67,12 @@ describe('DiscoverService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
       },
+      guardian_links: {
+        // Default: the parent has an approved link to athlete 'athlete-9'.
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ athlete_user_id: 'athlete-9' }),
+      },
       subscriptions: {
         findUnique: jest.fn().mockResolvedValue(sub()),
         update: jest.fn().mockResolvedValue({}),
@@ -94,10 +100,31 @@ describe('DiscoverService', () => {
   });
 
   describe('getFeed', () => {
-    it('throws ForbiddenException for parent users', async () => {
-      await expect(service.getFeed(parentUser, {})).rejects.toThrow(
-        ForbiddenException,
-      );
+    it('serves parents a coach/agent feed (guardian proxy)', async () => {
+      prisma.public_users.findMany.mockResolvedValue([
+        {
+          id: 'rec-1',
+          name: 'Coach Mike',
+          role: 'coach',
+          avatar_url: null,
+          location: 'LA, CA',
+          country: 'US',
+          created_at: new Date(),
+          recruiter_profiles: {
+            organization: 'UCLA',
+            sport: 'football',
+            role_type: 'coach',
+            verified: true,
+            tags: [],
+            bio: '',
+            photos: [],
+            videos: [],
+          },
+        },
+      ]);
+      const result = await service.getFeed(parentUser, {});
+      expect(result.cards).toHaveLength(1);
+      expect(result.cards[0].name).toBe('Coach Mike');
     });
 
     it('returns the feed with the monthly Draft allowance remaining', async () => {
@@ -178,6 +205,34 @@ describe('DiscoverService', () => {
       await expect(
         service.swipe(athleteUser, {
           targetUserId: 'ath-2',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('proxies a parent Draft to their linked athlete and matches', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('pro', 0)); // unlimited
+      // The coach already drafted the athlete, so this completes the match.
+      prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+      const result = await service.swipe(parentUser, {
+        targetUserId: 'rec-1',
+        direction: SwipeDirection.DRAFT,
+      });
+      // Recorded as the LINKED ATHLETE, not the parent.
+      expect(prisma.swipes.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ swiper_id: 'athlete-9' }),
+        }),
+      );
+      expect(result.matched).toBe(true);
+    });
+
+    it('rejects a parent Draft when they have no approved athlete link', async () => {
+      prisma.guardian_links.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        service.swipe(parentUser, {
+          targetUserId: 'rec-1',
           direction: SwipeDirection.DRAFT,
         }),
       ).rejects.toThrow(ForbiddenException);
