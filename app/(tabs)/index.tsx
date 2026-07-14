@@ -97,6 +97,7 @@ function DiscoverCardImpl({
   screenHeight,
   focusedIndexSV,
   carouselTranslateX,
+  totalCountSV,
   onSwipeLeft,
   onSwipeRight,
   draftLocked,
@@ -119,6 +120,7 @@ function DiscoverCardImpl({
   screenHeight: number;
   focusedIndexSV: SharedValue<number>;
   carouselTranslateX: SharedValue<number>;
+  totalCountSV: SharedValue<number>;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   draftLocked?: boolean;
@@ -151,6 +153,7 @@ function DiscoverCardImpl({
     screenHeight,
     focusedIndexSV,
     carouselTranslateX,
+    totalCountSV,
     onSwipeLeft,
     onSwipeRight,
     draftLocked,
@@ -503,6 +506,10 @@ export default function DiscoverScreen() {
   const reducedMotion = useReducedMotion();
   const carouselTranslateX = useSharedValue(0);
   const focusedIndexSV = useSharedValue(0);
+  // Live deck size on the UI thread. The horizontal browse worklet derives
+  // canPrev/canNext from this + focusedIndexSV instead of JS-thread booleans,
+  // so a stale closure can never wrongly block going back to the previous card.
+  const totalCountSV = useSharedValue(0);
   const bounceY = useSharedValue(0);
 
   // Preload every bundled sport image once on mount so swiping never waits on
@@ -913,7 +920,8 @@ export default function DiscoverScreen() {
   useEffect(() => {
     focusedIndexSV.value = currentIndex;
     currentIndexRef.current = currentIndex;
-  }, [currentIndex, focusedIndexSV]);
+    totalCountSV.value = discoverItems.length;
+  }, [currentIndex, discoverItems.length, focusedIndexSV, totalCountSV]);
 
   // Bouncing chevron affordance (Draft up / Pass down).
   useEffect(() => {
@@ -1181,6 +1189,7 @@ export default function DiscoverScreen() {
                     screenHeight={screenHeight}
                     focusedIndexSV={focusedIndexSV}
                     carouselTranslateX={carouselTranslateX}
+                    totalCountSV={totalCountSV}
                     onSwipeLeft={handleSwipeLeft}
                     onSwipeRight={handleSwipeRight}
                     draftLocked={outOfSwipes}
@@ -1212,6 +1221,7 @@ export default function DiscoverScreen() {
                     screenHeight={screenHeight}
                     focusedIndexSV={focusedIndexSV}
                     carouselTranslateX={carouselTranslateX}
+                    totalCountSV={totalCountSV}
                     onSwipeLeft={handleSwipeLeft}
                     onSwipeRight={handleSwipeRight}
                     draftLocked={outOfSwipes}

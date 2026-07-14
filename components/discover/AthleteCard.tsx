@@ -30,6 +30,7 @@ interface AthleteCardProps {
   screenHeight: number;
   focusedIndexSV: SharedValue<number>;
   carouselTranslateX: SharedValue<number>;
+  totalCountSV: SharedValue<number>;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   draftLocked?: boolean;
@@ -55,6 +56,7 @@ function AthleteCardImpl({
   screenHeight,
   focusedIndexSV,
   carouselTranslateX,
+  totalCountSV,
   onSwipeLeft,
   onSwipeRight,
   draftLocked,
@@ -133,6 +135,7 @@ function AthleteCardImpl({
     screenHeight,
     focusedIndexSV,
     carouselTranslateX,
+    totalCountSV,
     onSwipeLeft,
     onSwipeRight,
     draftLocked,

@@ -36,6 +36,12 @@ export type UseCarouselGestureArgs = {
    */
   focusedIndexSV: SharedValue<number>;
   carouselTranslateX: SharedValue<number>;
+  /**
+   * Live deck size on the UI thread. The horizontal browse worklet derives
+   * can-go-prev/next from this + focusedIndexSV so it never reads a stale
+   * JS-thread boolean (which previously could wrongly block going back).
+   */
+  totalCountSV: SharedValue<number>;
   onSwipeLeft: () => void; // PASS (down)
   onSwipeRight: () => void; // DRAFT (up)
   /** When true, a Draft (up) is blocked: the card snaps back and
@@ -64,6 +70,7 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     screenHeight,
     focusedIndexSV,
     carouselTranslateX,
+    totalCountSV,
     onSwipeLeft,
     onSwipeRight,
     draftLocked,
@@ -124,17 +131,23 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     })
     .onUpdate((e) => {
       let dx = e.translationX;
-      if (!canGoPrev && dx > 0) dx = dx * 0.3;
-      if (!canGoNext && dx < 0) dx = dx * 0.3;
+      // Derive bounds from live SharedValues (UI thread) — never a stale
+      // JS-thread boolean. A right-drag (dx>0) browses to the PREVIOUS card.
+      const atStart = focusedIndexSV.value <= 0;
+      const atEnd = focusedIndexSV.value >= totalCountSV.value - 1;
+      if (atStart && dx > 0) dx = dx * 0.3;
+      if (atEnd && dx < 0) dx = dx * 0.3;
       carouselTranslateX.value = horizontalStartTx.value + dx;
     })
     .onEnd((e) => {
       const dx = e.translationX;
+      const atStart = focusedIndexSV.value <= 0;
+      const atEnd = focusedIndexSV.value >= totalCountSV.value - 1;
       const shouldNext =
-        canGoNext &&
+        !atEnd &&
         (dx < -horizontalThreshold || e.velocityX < -horizontalVelocity);
       const shouldPrev =
-        canGoPrev &&
+        !atStart &&
         (dx > horizontalThreshold || e.velocityX > horizontalVelocity);
 
       if (shouldNext) {
