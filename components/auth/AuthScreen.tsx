@@ -471,8 +471,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       Alert.alert("Error", "Please enter your name.");
       return;
     }
-    if (!password || password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters.");
+    // 8 = the Supabase Auth minimum (and what the reset screen already asks).
+    // Keep these in sync: a shorter password passes here and is then rejected
+    // by Supabase with an error the user can't act on.
+    if (!password || password.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters.");
       return;
     }
 
@@ -709,8 +712,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    if (mode === "signup" && password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters.");
+    // Signup only — NEVER length-gate login: existing accounts created under
+    // the old 6-char minimum must still be able to sign in.
+    if (mode === "signup" && password.length < 8) {
+      Alert.alert("Error", "Password must be at least 8 characters.");
       return;
     }
 

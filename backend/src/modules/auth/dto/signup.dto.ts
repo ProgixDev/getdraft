@@ -13,9 +13,13 @@ export class SignupDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'password123', minLength: 6 })
+  // 8 = the Supabase Auth minimum. Supabase rejects anything shorter when the
+  // account is created, so accepting 6 here would only produce a confusing
+  // downstream error. NOTE: login.dto stays at 6 on purpose — see the comment
+  // there before "aligning" it.
+  @ApiProperty({ example: 'password123', minLength: 8 })
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   password: string;
 
   @ApiProperty({ example: 'Marcus Johnson' })

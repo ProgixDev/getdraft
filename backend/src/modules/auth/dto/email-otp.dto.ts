@@ -25,9 +25,11 @@ export class CompleteSignupDto {
   @IsNotEmpty()
   verificationToken: string;
 
-  @ApiProperty({ example: 'a-strong-password' })
+  // 8 = the Supabase Auth minimum (see signup.dto). Account creation happens
+  // here too, so this must match or Supabase rejects it downstream.
+  @ApiProperty({ example: 'a-strong-password', minLength: 8 })
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   password: string;
 
   // ADMIN is provisioned out-of-band (DB-only) and must never be assignable
