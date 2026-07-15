@@ -33,6 +33,26 @@ export class RankingsService {
   constructor(private supabaseService: SupabaseService) {}
 
   /**
+   * Athletes who switched "Profile Visible" off.
+   *
+   * The ranking view carries no privacy filter of its own, so without this an
+   * athlete who opted out of discovery would still be listed publicly on the
+   * leaderboard (name + avatar + score) — the exact opposite of what the toggle
+   * promises. Mirrors discover.service: the flag lives in free-form JSONB, so
+   * ABSENT must mean visible; only an explicit `false` hides.
+   */
+  private async hiddenAthleteIds(): Promise<string[]> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('users')
+      .select('id, preferences')
+      .eq('role', 'athlete');
+    return (data ?? [])
+      .filter((u: any) => u?.preferences?.profileVisible === false)
+      .map((u: any) => u.id as string);
+  }
+
+  /**
    * Leaderboard for a division (CA/US/OTHER). When a sport is given the
    * list is the ranked cohort for that (division, sport); without a sport
    * it is the division's top athletes overall, ordered by raw score (each
@@ -48,6 +68,13 @@ export class RankingsService {
     const supabase = this.supabaseService.getAdminClient();
 
     let query = supabase.from(VIEW).select('*').eq('division', division);
+
+    // Respect "Profile Visible": opted-out athletes are excluded here (not
+    // post-filtered) so `limit` still returns a full page.
+    const hidden = await this.hiddenAthleteIds();
+    if (hidden.length > 0) {
+      query = query.not('user_id', 'in', `(${hidden.join(',')})`);
+    }
 
     if (params.sport) {
       query = query
@@ -65,10 +92,14 @@ export class RankingsService {
   /** Distinct sports that have at least one ranked athlete in a division. */
   async getSports(division: RankingDivision): Promise<string[]> {
     const supabase = this.supabaseService.getAdminClient();
-    const { data, error } = await supabase
-      .from(VIEW)
-      .select('sport')
-      .eq('division', division);
+    let sportQuery = supabase.from(VIEW).select('sport').eq('division', division);
+    // Same privacy filter as getRankings, so a sport whose only athletes opted
+    // out doesn't show up in the picker and then open an empty leaderboard.
+    const hidden = await this.hiddenAthleteIds();
+    if (hidden.length > 0) {
+      sportQuery = sportQuery.not('user_id', 'in', `(${hidden.join(',')})`);
+    }
+    const { data, error } = await sportQuery;
     if (error) throw new BadRequestException(error.message);
     const sports = new Set<string>();
     (data ?? []).forEach((r: { sport?: string }) => {

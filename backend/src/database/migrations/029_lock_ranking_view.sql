@@ -1,0 +1,14 @@
+-- Migration 029: lock down the athlete_ranking_scores view.
+--
+-- The view is SECURITY DEFINER, so it bypasses RLS on the underlying tables,
+-- and `authenticated` held SELECT on it. Since the app ships a Supabase anon
+-- key (services/supabase.ts), any user could extract that key, sign in, and
+-- query PostgREST directly to dump EVERY athlete's kyc_status, profile_views,
+-- likes_received and score. Supabase's own linter flags this as an ERROR
+-- (0010_security_definer_view).
+--
+-- Only the service-role backend (rankings.service.ts, via getAdminClient)
+-- reads this view; the frontend goes through the NestJS API and never calls
+-- PostgREST. Revoking anon/authenticated therefore closes the hole without
+-- affecting the app. service_role keeps its access.
+REVOKE ALL ON public.athlete_ranking_scores FROM anon, authenticated;
