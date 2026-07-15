@@ -278,7 +278,32 @@ describe('DiscoverService', () => {
         return Promise.resolve([]);
       });
 
-      const result = await service.whoDraftedMe('user-1');
+      const result = await service.whoDraftedMe(athleteUser);
+      expect(result).toHaveLength(1);
+    });
+
+    it('shows a parent who drafted their linked athlete (guardian proxy)', async () => {
+      prisma.swipes.findMany.mockImplementation((args: any) => {
+        // The parent resolves to athlete-9, so THAT is the swiped_id queried.
+        if (args?.where?.swiped_id === 'athlete-9') {
+          return Promise.resolve([
+            {
+              swiped_id: 'athlete-9',
+              created_at: new Date(),
+              users_swipes_swiper_idTousers: {
+                id: 'rec-1',
+                name: 'Coach A',
+                avatar_url: null,
+                role: 'coach',
+                location: 'LA',
+              },
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await service.whoDraftedMe(parentUser);
       expect(result).toHaveLength(1);
     });
   });

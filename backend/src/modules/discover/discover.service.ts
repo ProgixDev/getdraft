@@ -923,11 +923,10 @@ export class DiscoverService {
   }
 
   async myDrafts(user: CurrentUserPayload) {
-    if (user.role === UserRole.PARENT) {
-      throw new ForbiddenException('Parents do not have a draft list');
-    }
-
-    const userId = user.id;
+    // A guardian drafts on behalf of their linked athlete, so their draft list
+    // IS that athlete's. Without this a parent could Draft but never see (or
+    // withdraw) what they'd sent.
+    const userId = await this.resolveActorId(user, false);
 
     const [outgoing, activeMatches] = await Promise.all([
       this.prisma.swipes.findMany({
@@ -974,7 +973,10 @@ export class DiscoverService {
     }));
   }
 
-  async withdrawDraft(userId: string, targetUserId: string) {
+  async withdrawDraft(user: CurrentUserPayload, targetUserId: string) {
+    // Guardian proxy: a parent withdraws the Draft they sent AS their athlete,
+    // so the row to remove is the athlete's, not the parent's.
+    const userId = await this.resolveActorId(user, true);
     const [u1, u2] =
       userId < targetUserId ? [userId, targetUserId] : [targetUserId, userId];
 
@@ -1000,7 +1002,10 @@ export class DiscoverService {
     return { withdrawn: true };
   }
 
-  async whoDraftedMe(userId: string) {
+  async whoDraftedMe(user: CurrentUserPayload) {
+    // Guardian proxy: a parent sees who drafted THEIR athlete — which is the
+    // whole point of the guardian being in the loop.
+    const userId = await this.resolveActorId(user, false);
     const [mySwiped, blocked, blockedBy] = await Promise.all([
       this.prisma.swipes.findMany({
         where: { swiper_id: userId },
