@@ -510,12 +510,19 @@ export class DiscoverService {
 
     const excluded = await this.excludedUserIds(user.id);
 
+    // The map mirrors the Discover feed's role matrix: an athlete sees
+    // coaches/agents, a coach/agent sees athletes. Without this the map showed
+    // athletes to EVERYONE, so an athlete tapping a pin hit the swipe() role
+    // guard and got a 403 on a profile they were never allowed to draft.
+    const targetsRecruiters = user.role === UserRole.ATHLETE;
+
     const where: Prisma.public_usersWhereInput = {
-      role: 'athlete',
       is_banned: false,
-      // Same COPPA gate as the feed — unapproved minors stay off the map.
-      activation_status: 'active',
       id: { notIn: [...excluded, user.id] },
+      ...(targetsRecruiters
+        ? { role: { in: ['coach', 'recruiter'] } }
+        : // Same COPPA gate as the feed — unapproved minors stay off the map.
+          { role: 'athlete', activation_status: 'active' }),
     };
     if (query.country && !query.includeInternational) where.country = query.country;
     // Same free-text city match the feed uses (see getEveryoneFeed).
@@ -549,6 +556,15 @@ export class DiscoverService {
             photos: true,
           },
         },
+        recruiter_profiles: {
+          select: {
+            organization: true,
+            sport: true,
+            role_type: true,
+            verified: true,
+            photos: true,
+          },
+        },
       },
       orderBy: { created_at: 'desc' },
       take: 200,
@@ -557,7 +573,11 @@ export class DiscoverService {
     let skippedNoCoords = 0;
     const placed = users
       .map((u) => {
-        const p = u.athlete_profiles;
+        // Athlete pins carry the athlete profile; coach/agent pins the
+        // recruiter one. Either way a pin needs a profile to describe it.
+        const ap = u.athlete_profiles;
+        const rp = u.recruiter_profiles;
+        const p = ap ?? rp;
         if (!p) return null;
         // Privacy toggles: opted out of discovery entirely, or asked to
         // keep their location private — a map pin is pure location.
@@ -590,17 +610,22 @@ export class DiscoverService {
           lat,
           lng,
           avatar_url: u.avatar_url,
-          role: 'athlete' as const,
-          sport: p.sport,
-          position: p.position,
-          level: p.level,
-          class_year: p.class_year,
-          height: p.height,
-          gpa: p.gpa != null ? Number(p.gpa) : null,
+          // Athlete-only fields stay null on a recruiter pin; the globe card
+          // renders only the rows it actually has, so it degrades cleanly.
+          role: ap ? ('athlete' as const) : ('recruiter' as const),
+          sport: p.sport ?? null,
+          position: ap?.position ?? null,
+          level: ap?.level ?? null,
+          class_year: ap?.class_year ?? null,
+          height: ap?.height ?? null,
+          gpa: ap?.gpa != null ? Number(ap.gpa) : null,
+          organization: rp?.organization ?? null,
           // First gallery photo, surfaced so the globe card has something
           // to render when the user hasn't set a separate avatar_url.
           photo: photos[0] ?? null,
-          verified: u.kyc_status === 'approved',
+          // Athletes are verified via KYC; coaches/agents via the vetted flag
+          // on their recruiter profile.
+          verified: ap ? u.kyc_status === 'approved' : (rp?.verified ?? false),
           // Seeded/demo accounts are created with @getdraft.app emails;
           // manually-created real users sign up with their own email. The
           // globe paints seeded points orange and real users green so they

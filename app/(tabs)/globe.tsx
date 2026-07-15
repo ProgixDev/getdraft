@@ -604,6 +604,10 @@ export default function GlobeTab() {
 
                 <View style={styles.bigDetails}>
                   <PlayerDetail label="Sport" value={selected.sport} />
+                  <PlayerDetail
+                    label="Organization"
+                    value={selected.organization}
+                  />
                   <PlayerDetail label="Position" value={selected.position} />
                   <PlayerDetail label="Level" value={selected.level} />
                   <PlayerDetail

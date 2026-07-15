@@ -450,14 +450,15 @@ export default function DiscoverScreen() {
     (state: RootState) => state.discoverPreferences,
   );
   const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
-  const isParent = user?.role === "parent";
   const isAdmin = user?.role === "admin";
-  // Focus-based redirect: parents → /(tabs)/home, admins →
-  // /(tabs)/dashboard. Athletes + coaches + recruiters stay.
+  // Focus-based redirect: admins → /(tabs)/dashboard. Athletes, coaches and
+  // recruiters stay — and so do parents, who draft coaches/agents on behalf of
+  // their linked athlete (the server proxies the swipe to that athlete).
   const redirecting = useRoleHomeRedirect([
     "athlete",
     "coach",
     "recruiter",
+    "parent",
   ]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -543,8 +544,9 @@ export default function DiscoverScreen() {
   });
 
   // Fetch the real discover feed from the backend (no mock fallback).
+  // Parents included: the server returns them the coach/agent feed scoped to
+  // their linked athlete (guardian proxy).
   useEffect(() => {
-    if (isParent) return;
     setApiCards(null); // null = loading
     setFeedError(false);
     discoverService
@@ -592,7 +594,7 @@ export default function DiscoverScreen() {
         setSwipesRemaining(null);
         setNextCursor(null);
       });
-  }, [isParent, preferences, fetchNonce]);
+  }, [preferences, fetchNonce]);
 
   // Fetch the next page. De-duped by id so a row that appears on two pages
   // (the boundary row is `<= cursor` on one side, never the other — but if
@@ -824,11 +826,24 @@ export default function DiscoverScreen() {
           setCurrentIndex(cur);
           // Monthly Draft quota exhausted (backend rejects the Draft). Don't
           // fake a "Drafted" — surface the out-of-Drafts lock + upgrade CTA.
-          if (status === 429 || status === 403) {
+          // 429 is the ONLY out-of-quota signal. 403 means the server refused
+          // the pair itself (blocked user, illegal role pair, or a guardian
+          // with no approved athlete link) — surfacing "upgrade for unlimited"
+          // there would be flat-out wrong, so relay the server's reason.
+          if (status === 429) {
             setSwipesRemaining(0);
             setSnackbar({
               visible: true,
               message: "Out of Drafts this month — upgrade for unlimited",
+              canUndo: false,
+            });
+            return;
+          }
+          if (status === 403) {
+            setSnackbar({
+              visible: true,
+              message:
+                err?.response?.data?.message ?? "You can't draft this profile",
               canUndo: false,
             });
             return;

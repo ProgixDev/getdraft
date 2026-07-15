@@ -41,13 +41,18 @@ export interface MapPoint {
   lat: number;
   lng: number;
   avatar_url: string | null;
-  role: "athlete";
+  // The map mirrors the Discover role matrix: athletes get coach/agent pins,
+  // coaches/agents get athlete pins. Athlete-only fields are null on a
+  // recruiter pin (and vice-versa) — the card renders what it has.
+  role: "athlete" | "recruiter";
   sport: string | null;
   position: string | null;
   level: string | null;
   class_year: string | null;
   height: string | null;
   gpa: number | null;
+  /** Coach/agent pins only — their org or agency name. */
+  organization?: string | null;
   // First gallery photo from athlete_profiles.photos[0]. The globe card
   // falls back to this when avatar_url is missing.
   photo: string | null;

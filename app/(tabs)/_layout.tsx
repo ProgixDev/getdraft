@@ -110,8 +110,11 @@ function tabVisibleForRole(tab: string, role: Role | undefined): boolean {
       // and recruiters get it too (showing athletes instead of recruiters).
       return ["index", "matches", "globe", "more"].includes(tab);
     case "parent":
-      // Guardian dashboard + inbox + more. No Discover/Feed/Globe.
-      return ["home", "matches", "more"].includes(tab);
+      // Guardian dashboard + Discover + inbox + more. Discover is in because a
+      // parent drafts coaches/agents ON BEHALF of their linked athlete (the
+      // server proxies the swipe to that athlete). No Feed/Globe: parents don't
+      // post, and the globe maps athletes — not who a parent is looking for.
+      return ["home", "index", "matches", "more"].includes(tab);
     case "admin":
       // Internal console — never sees the player surface.
       return ["dashboard", "reviews", "users", "more"].includes(tab);
