@@ -196,7 +196,11 @@ export const LocationSelectionScreen: React.FC<
       const v6Params = new URLSearchParams({
         q: query,
         access_token: MAPBOX_TOKEN,
-        types: "place,locality,region",
+        // `country` MUST be here: this screen asks "Choose Country", so typing
+        // one (e.g. "Haiti") has to return something. Without it Mapbox only
+        // matched cities/regions and any country name was a dead end — users
+        // outside the handful of seeded cities had nowhere to go.
+        types: "country,place,locality,region",
         autocomplete: "true",
         limit: "8",
         language: "en",
@@ -220,9 +224,14 @@ export const LocationSelectionScreen: React.FC<
               coords.latitude ?? feature.geometry?.coordinates?.[1],
             );
             if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-            const country = ctx.country?.name ?? "";
-            const state = ctx.region?.name;
             const city = props.name ?? "";
+            // A country result has no parent country in its context, so
+            // ctx.country is empty and `country` would come back "" — which
+            // silently breaks the Discover country filter and the globe
+            // placement. Fall back to the feature's own name in that case.
+            const isCountry = props.feature_type === "country";
+            const country = ctx.country?.name ?? (isCountry ? city : "");
+            const state = ctx.region?.name;
             const formatted =
               props.full_address ?? props.place_formatted ?? city;
             return {
@@ -239,7 +248,8 @@ export const LocationSelectionScreen: React.FC<
       } else if (resp.status === 404) {
         const v5Params = new URLSearchParams({
           access_token: MAPBOX_TOKEN,
-          types: "place,locality,region",
+          // Keep in sync with v6 above — countries must be searchable here too.
+          types: "country,place,locality,region",
           autocomplete: "true",
           limit: "8",
           language: "en",
@@ -268,10 +278,17 @@ export const LocationSelectionScreen: React.FC<
             const stateEntry = ctxArr.find((c) =>
               typeof c?.id === "string" && c.id.startsWith("region"),
             );
+            // Same as v6: a country feature carries no country in its context
+            // (it has no parent), so fall back to its own name or we'd save an
+            // empty country.
+            const placeTypes: string[] = Array.isArray(feature.place_type)
+              ? feature.place_type
+              : [];
+            const isCountry = placeTypes.includes("country");
             return {
               name: city,
               city,
-              country: countryEntry?.text ?? "",
+              country: countryEntry?.text ?? (isCountry ? city : ""),
               state: stateEntry?.text,
               lat,
               lng,
