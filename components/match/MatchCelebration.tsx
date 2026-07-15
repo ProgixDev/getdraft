@@ -83,6 +83,30 @@ function unlockRows(
   myRole: UserRole | undefined,
   other: string,
 ): UnlockRow[] {
+  // Guardian proxy: a parent Drafts on behalf of their athlete, so the match is
+  // athlete<->recruiter and the parent is NOT in that chat thread. Promising
+  // "message each other" (or calling them a player) would be wrong on both
+  // counts — recruiters reach the guardian through outreach instead.
+  if (myRole === "parent") {
+    return [
+      {
+        icon: "trophy",
+        title: "Your athlete got drafted back",
+        sub: `${other} drafted your athlete too`,
+      },
+      {
+        icon: "chatbubble-ellipses",
+        title: `${other} can now reach out`,
+        sub: "Messages come to you as the guardian",
+      },
+      {
+        icon: "person-circle",
+        title: "See their full profile",
+        sub: "Who they are and who they scout for",
+      },
+    ];
+  }
+
   const rows: UnlockRow[] = [
     {
       icon: "chatbubble-ellipses",
@@ -501,10 +525,18 @@ export function MatchCelebration({
               ]}
               onPress={onMessage}
               accessibilityRole="button"
-              accessibilityLabel={`Send a message to ${otherName}`}
+              accessibilityLabel={
+                myRole === "parent"
+                  ? "Open your inbox"
+                  : `Send a message to ${otherName}`
+              }
             >
               <Ionicons name="chatbubble" size={18} color="#0A0A0A" />
-              <Text style={styles.primaryCtaText}>Send a Message</Text>
+              {/* A guardian isn't in their athlete's chat thread, so don't
+                  promise them a conversation they can't open. */}
+              <Text style={styles.primaryCtaText}>
+                {myRole === "parent" ? "Go to Inbox" : "Send a Message"}
+              </Text>
             </Pressable>
 
             <Pressable

@@ -881,13 +881,21 @@ export default function DiscoverScreen() {
     // The chat route's [threadId] param IS the matchId.
     const id = matchOverlay.matchId;
     setMatchOverlay({ visible: false, name: "", matchId: null, avatar: null });
+    // Guardian proxy: the match belongs to the parent's ATHLETE, so the parent
+    // is not one of the two matched users. chat.service rejects non-participants
+    // ("Not authorized"), so opening the thread here would dead-end on a 403.
+    // Send them to their inbox, where the recruiter's outreach lands instead.
+    if (isParent) {
+      router.push("/(tabs)/matches");
+      return;
+    }
     if (id) {
       router.push({ pathname: "/chat/[threadId]", params: { threadId: id } });
     } else {
       // Defensive: a match with no id (shouldn't happen) still lands somewhere useful.
       router.push("/(tabs)/matches");
     }
-  }, [router, matchOverlay.matchId]);
+  }, [router, matchOverlay.matchId, isParent]);
 
   const triggerPass = useCallback(() => {
     if (swipeLock || pendingAction) return;
