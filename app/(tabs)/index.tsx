@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   BackHandler,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -450,6 +451,7 @@ export default function DiscoverScreen() {
     (state: RootState) => state.discoverPreferences,
   );
   const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
+  const isParent = user?.role === "parent";
   const isAdmin = user?.role === "admin";
   // Focus-based redirect: admins → /(tabs)/dashboard. Athletes, coaches and
   // recruiters stay — and so do parents, who draft coaches/agents on behalf of
@@ -902,10 +904,15 @@ export default function DiscoverScreen() {
   const handleDraftBlocked = useCallback(() => {
     setSnackbar({
       visible: true,
-      message: "Out of Drafts this month — upgrade for unlimited",
+      // A guardian drafts against their ATHLETE's monthly allowance, so telling
+      // them to upgrade would sell them a plan on their own account that does
+      // nothing for the athlete's quota. Point at the athlete instead.
+      message: isParent
+        ? "Your athlete is out of Drafts this month"
+        : "Out of Drafts this month — upgrade for unlimited",
       canUndo: false,
     });
-  }, []);
+  }, [isParent]);
 
   const handleTriggerHandled = useCallback(() => {
     setPendingAction(null);
@@ -977,8 +984,18 @@ export default function DiscoverScreen() {
   }, []);
 
   const goToSubscription = useCallback(() => {
+    // Guardians draft against their athlete's allowance. A plan bought on the
+    // parent's own account would NOT raise that quota, so never send them to
+    // checkout — explain whose plan needs upgrading instead.
+    if (isParent) {
+      Alert.alert(
+        "Out of Drafts",
+        "Drafts come from your athlete's monthly allowance, so upgrading here wouldn't add any. Your athlete can upgrade from their own account for unlimited Drafts.",
+      );
+      return;
+    }
     router.push("/subscription");
-  }, [router]);
+  }, [router, isParent]);
 
   // Re-run the feed fetch after a network failure (nonce is a fetch-effect dep).
   const retryFeed = useCallback(() => {
@@ -1331,11 +1348,17 @@ export default function DiscoverScreen() {
                 ]}
                 onPress={goToSubscription}
                 accessibilityRole="button"
-                accessibilityLabel="Out of Drafts this month. Upgrade for unlimited Drafts."
+                accessibilityLabel={
+                  isParent
+                    ? "Your athlete is out of Drafts this month. Tap to learn more."
+                    : "Out of Drafts this month. Upgrade for unlimited Drafts."
+                }
               >
                 <Ionicons name="lock-closed" size={18} color={brand.white} />
                 <Text style={styles.lockedCtaText}>
-                  Out of Drafts this month — Upgrade for unlimited
+                  {isParent
+                    ? "Your athlete is out of Drafts this month"
+                    : "Out of Drafts this month — Upgrade for unlimited"}
                 </Text>
               </Pressable>
               {/* Passing stays free even when Drafts are used up. */}
