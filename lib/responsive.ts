@@ -1,4 +1,4 @@
-import { useWindowDimensions } from "react-native";
+import { Dimensions, useWindowDimensions } from "react-native";
 
 /**
  * The app is phone-first. On tablets (and large foldables) we don't stretch
@@ -11,6 +11,20 @@ import { useWindowDimensions } from "react-native";
  */
 export const PHONE_MAX_WIDTH = 500;
 export const TABLET_BREAKPOINT = 600;
+
+/**
+ * Module-scope equivalent of useResponsive().contentWidth, for the many files
+ * that read layout width once at import time.
+ *
+ * ALWAYS use this instead of `Dimensions.get("window").width` for horizontal
+ * sizing: the app renders inside a PHONE_MAX_WIDTH frame, so on a tablet the
+ * raw window width (~800+) is NOT the space a component actually has. Sizing a
+ * carousel page or a grid off the raw width there overflows the frame and
+ * breaks paging math. Height is unaffected — the frame only caps width.
+ */
+export function getContentWidth(): number {
+  return Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+}
 
 export function useResponsive() {
   const { width, height } = useWindowDimensions();

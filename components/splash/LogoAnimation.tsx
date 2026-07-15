@@ -10,8 +10,10 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { theme } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// Phone-width app frame, not the raw window (tablets are wider than the frame).
+const SCREEN_WIDTH = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
 const LOGO_SIZE = SCREEN_WIDTH * 0.45;
 
 interface LogoAnimationProps {

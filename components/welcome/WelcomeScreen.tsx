@@ -29,11 +29,15 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { images } from "@/config/assets";
+import { getContentWidth } from "@/lib/responsive";
 import { brand, neutral } from "@/config/colors";
 import { welcomeSlides } from "@/constants/welcomeData";
 import { PaginationDots } from "./PaginationDots";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+// Layout width = the phone-width app frame, NOT the raw window (tablets are
+// wider than the frame, which would break the carousel's page math).
+const SCREEN_WIDTH = getContentWidth();
 
 interface WelcomeScreenProps {
   /** Callback when user completes onboarding */

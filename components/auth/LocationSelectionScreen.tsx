@@ -31,8 +31,11 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
+import { getContentWidth } from "@/lib/responsive";
 
-const { width, height } = Dimensions.get("window");
+const { height } = Dimensions.get("window");
+// Phone-width app frame, not the raw window (tablets are wider than the frame).
+const width = getContentWidth();
 const GLOBE_HEIGHT = height * 0.4;
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;

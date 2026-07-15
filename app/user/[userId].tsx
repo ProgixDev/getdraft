@@ -40,7 +40,8 @@ import {
   type RankingRow,
 } from '@/services/rankings';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Phone-width app frame, not the raw window (tablets are wider than the frame).
+const SCREEN_WIDTH = Math.min(Dimensions.get('window').width, PHONE_MAX_WIDTH);
 const PHOTO_SIZE = (SCREEN_WIDTH - 48) / 3 - 8;
 const VIDEO_HEIGHT = 180;
 const BANNER_HEIGHT = 140;

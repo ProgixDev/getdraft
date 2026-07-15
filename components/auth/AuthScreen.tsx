@@ -34,6 +34,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import { useStripe } from "@stripe/stripe-react-native";
 import { images } from "@/config/assets";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { brand, neutral } from "@/config/colors";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { plans as PLAN_CATALOG } from "@/constants/plansData";
@@ -63,7 +64,8 @@ import { KycVerificationScreen } from "./KycVerificationScreen";
 import { OnboardingQuestionsScreen } from "./OnboardingQuestionsScreen";
 import { GuardianLinkScreen } from "./GuardianLinkScreen";
 
-const { width } = Dimensions.get("window");
+// Phone-width app frame, not the raw window (tablets are wider than the frame).
+const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
 
 interface AuthScreenProps {
   onLogin?: () => void;

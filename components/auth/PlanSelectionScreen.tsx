@@ -20,9 +20,11 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { Plan, plans } from "@/constants/plansData";
 
-const { width } = Dimensions.get("window");
+// Phone-width app frame, not the raw window (tablets are wider than the frame).
+const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
 
 interface PlanSelectionScreenProps {
   /**

@@ -6,7 +6,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Dimensions,
   Modal,
   Platform,
   Switch,
@@ -53,7 +52,6 @@ function toIsoDate(d: Date): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-const { width } = Dimensions.get("window");
 
 interface ProfileSetupScreenProps {
   role: string;

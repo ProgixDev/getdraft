@@ -7,8 +7,11 @@ import Animated, {
   SharedValue,
 } from "react-native-reanimated";
 import { brand } from "@/config/colors";
+import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// Must match the carousel's page width (the phone-width app frame), otherwise
+// the dot interpolation drifts out of sync with the slides on tablets.
+const SCREEN_WIDTH = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
 
 interface PaginationDotsProps {
   count: number;

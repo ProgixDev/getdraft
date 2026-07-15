@@ -19,8 +19,12 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
+import { getContentWidth } from "@/lib/responsive";
 
-const { width, height } = Dimensions.get("window");
+const { height } = Dimensions.get("window");
+// Phone-width app frame, not the raw window — otherwise the slide paging math
+// breaks on tablets (slides sized wider than the frame they live in).
+const width = getContentWidth();
 
 interface TutorialScreenProps {
   onComplete: () => void;

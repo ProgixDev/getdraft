@@ -35,7 +35,7 @@ import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { discoverService, type MapPoint } from "@/services/discover";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // Same public token the location search uses. Inlined at build time by
 // Metro; present in every EAS build. Without it the map can't load, so we

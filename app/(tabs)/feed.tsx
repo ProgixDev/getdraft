@@ -34,11 +34,15 @@ import {
 } from "@expo-google-fonts/poppins";
 
 import { brand, theme } from "@/config/colors";
+import { getContentWidth } from "@/lib/responsive";
 import { postsService, type PostItem, type PostKind } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+// Phone-width app frame, not the raw window: on tablets the frame is narrower
+// than the screen, so reels/pages must size against the frame.
+const SCREEN_WIDTH = getContentWidth();
 
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
