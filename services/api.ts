@@ -133,6 +133,53 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// ── Single-flight token refresh ─────────────────────────────────────
+// On a cold open after >1h idle, EVERY launch request (me, feed, matches,
+// unread…) 401s at the same instant. Refresh tokens are ROTATED server-side
+// (single use): without a shared lock each 401 raced /auth/refresh with the
+// same token, the first won and invalidated it, the rest failed → tokens
+// cleared → the user was logged out on basically every app open. That is the
+// "have to log in every time" the client reported — persistence was never
+// missing, the refresh was racing itself. All concurrent 401s now await ONE
+// refresh and retry with its result.
+let refreshInFlight: Promise<Tokens> | null = null;
+
+function refreshTokensOnce(): Promise<Tokens> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const tokens = await loadTokens();
+      if (!tokens?.refreshToken) {
+        const e = new Error("No refresh token") as Error & {
+          isAuthFailure: boolean;
+        };
+        e.isAuthFailure = true;
+        throw e;
+      }
+      try {
+        const { data } = await axios.post(
+          `${api.defaults.baseURL}/auth/refresh`,
+          { refreshToken: tokens.refreshToken },
+        );
+        const newTokens: Tokens = {
+          accessToken: data.data.accessToken,
+          refreshToken: data.data.refreshToken,
+        };
+        await saveTokens(newTokens);
+        return newTokens;
+      } catch (e: any) {
+        // Only a server VERDICT (4xx/5xx response) means the session is dead.
+        // A network drop / timeout says nothing about the session — flagging
+        // it as an auth failure would log people out for riding an elevator.
+        if (e?.response) e.isAuthFailure = true;
+        throw e;
+      }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
 // Response interceptor — auto-refresh on 401
 api.interceptors.response.use(
   (response) => response,
@@ -143,23 +190,16 @@ api.interceptors.response.use(
       original._retry = true;
 
       try {
-        const tokens = await loadTokens();
-        if (!tokens?.refreshToken) throw new Error("No refresh token");
-
-        const { data } = await axios.post(
-          `${api.defaults.baseURL}/auth/refresh`,
-          { refreshToken: tokens.refreshToken },
-        );
-
-        const newTokens: Tokens = {
-          accessToken: data.data.accessToken,
-          refreshToken: data.data.refreshToken,
-        };
-        await saveTokens(newTokens);
-
+        const newTokens = await refreshTokensOnce();
         original.headers.Authorization = `Bearer ${newTokens.accessToken}`;
         return api(original);
-      } catch {
+      } catch (refreshErr: any) {
+        // Transient failure (offline, timeout): the session is probably still
+        // valid — reject THIS request but keep the tokens so the next attempt
+        // can succeed. Never punish a network blip with a logout.
+        if (!refreshErr?.isAuthFailure) {
+          return Promise.reject(error);
+        }
         // Refresh genuinely failed (account deleted, refresh token revoked,
         // …). Tear down auth state so the root layout transitions to login,
         // and rewrite the user-facing message so screens that surface
