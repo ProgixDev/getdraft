@@ -317,12 +317,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0A0A0A",
-    alignItems: "center",
+    // NO alignItems:"center" here — the direct child is KeyboardProvider's
+    // internal view, not appFrame. Centering at this level stops that wrapper
+    // from stretching (default is stretch), so it shrink-wraps to its
+    // content's intrinsic width; with horizontal carousels (welcome slides,
+    // splash) that exceeds the screen and the WHOLE APP rendered wider than
+    // the display, cut off on both edges on phones. The frame centers ITSELF
+    // via alignSelf below instead.
   },
   appFrame: {
     flex: 1,
     width: "100%",
     maxWidth: PHONE_MAX_WIDTH,
+    alignSelf: "center",
   },
   centered: {
     justifyContent: "center",
