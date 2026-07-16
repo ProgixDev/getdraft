@@ -131,6 +131,8 @@ export default function PreferencesCountryScreen() {
   const webViewRef = useRef<WebView | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [globeReady, setGlobeReady] = useState(false);
+  // Globe WebView died (renderer gone / load error) — drop it, keep the list.
+  const [globeDead, setGlobeDead] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryOption>(
     findCountryByName(preferences.country) ?? COUNTRY_OPTIONS[0],
   );
@@ -203,16 +205,23 @@ export default function PreferencesCountryScreen() {
         </Text>
 
         <View style={styles.globeContainer}>
-          <WebView
-            ref={webViewRef}
-            source={{ html: globeHtml }}
-            style={styles.globe}
-            scrollEnabled={false}
-            bounces={false}
-            javaScriptEnabled
-            domStorageEnabled
-            onLoadEnd={() => setGlobeReady(true)}
-          />
+          {/* CRASH-PROOF: an unhandled Android WebView renderer death kills
+              the whole app (see SplashExperience). Decorative globe — drop it
+              on failure, the country list keeps working. */}
+          {!globeDead && (
+            <WebView
+              ref={webViewRef}
+              source={{ html: globeHtml }}
+              style={styles.globe}
+              scrollEnabled={false}
+              bounces={false}
+              javaScriptEnabled
+              domStorageEnabled
+              onLoadEnd={() => setGlobeReady(true)}
+              onRenderProcessGone={() => setGlobeDead(true)}
+              onError={() => setGlobeDead(true)}
+            />
+          )}
         </View>
 
         <View style={styles.card}>

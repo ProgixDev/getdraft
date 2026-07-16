@@ -79,6 +79,8 @@ export const LocationSelectionScreen: React.FC<
   const [isSearching, setIsSearching] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  // Globe WebView died (renderer gone / load error) — drop it, keep the form.
+  const [globeDead, setGlobeDead] = useState(false);
   const webViewRef = useRef<WebView>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -530,17 +532,24 @@ export const LocationSelectionScreen: React.FC<
             <Animated.View
               style={[styles.globeContainer, animatedGlobeStyle]}
             >
-              <WebView
-                ref={webViewRef}
-                source={{ html: globeHtml }}
-                style={styles.globe}
-                scrollEnabled={false}
-                bounces={false}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                allowsInlineMediaPlayback={true}
-                mediaPlaybackRequiresUserAction={false}
-              />
+              {/* CRASH-PROOF: an unhandled Android WebView renderer death
+                  kills the whole app (see SplashExperience). The globe is
+                  decorative — on failure drop it and keep the search usable. */}
+              {!globeDead && (
+                <WebView
+                  ref={webViewRef}
+                  source={{ html: globeHtml }}
+                  style={styles.globe}
+                  scrollEnabled={false}
+                  bounces={false}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  allowsInlineMediaPlayback={true}
+                  mediaPlaybackRequiresUserAction={false}
+                  onRenderProcessGone={() => setGlobeDead(true)}
+                  onError={() => setGlobeDead(true)}
+                />
+              )}
             </Animated.View>
           </Animated.View>
 

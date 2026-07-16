@@ -179,6 +179,9 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
   useFonts({ Poppins_500Medium, Poppins_700Bold, Poppins_800ExtraBold });
 
   const [stats, setStats] = useState<Stat[]>(STATS);
+  // Set when the globe WebView dies (renderer gone / load error) — we drop the
+  // WebView and the intro carries on without it. See the comment at the render.
+  const [globeDead, setGlobeDead] = useState(false);
 
   // Fetch live welcome stats in parallel with animations. Counter targets
   // update reactively if data arrives before the count-up starts (~3.3s).
@@ -327,17 +330,28 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
             <Text style={styles.taglineSub}>where Talent has no Borders</Text>
           </Animated.View>
 
-          {/* Globe in circular container */}
+          {/* Globe in circular container.
+              CRASH-PROOF: on Android, if a WebView's renderer process dies
+              (weak GPU, old system WebView, OOM — all plausible while running
+              WebGL) and onRenderProcessGone is NOT handled, the OS kills the
+              ENTIRE app. This is the startup path, so an unhandled renderer
+              death here crashed the app right after the logo (black screen →
+              dead). The globe is decorative: on any failure we simply unmount
+              it and let the timer-driven intro finish into Welcome. */}
           <View style={styles.globeRing}>
             <View style={styles.globeClip}>
-              <WebView
-                source={{ html: globeHtml }}
-                style={styles.webview}
-                scrollEnabled={false}
-                bounces={false}
-                javaScriptEnabled
-                domStorageEnabled
-              />
+              {!globeDead && (
+                <WebView
+                  source={{ html: globeHtml }}
+                  style={styles.webview}
+                  scrollEnabled={false}
+                  bounces={false}
+                  javaScriptEnabled
+                  domStorageEnabled
+                  onRenderProcessGone={() => setGlobeDead(true)}
+                  onError={() => setGlobeDead(true)}
+                />
+              )}
             </View>
           </View>
 

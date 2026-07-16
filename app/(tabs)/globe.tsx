@@ -234,6 +234,9 @@ export default function GlobeTab() {
   // the big-card modal with Draft / Pass.
   const [selected, setSelected] = useState<MapPoint | null>(null);
   const [bigOpen, setBigOpen] = useState(false);
+  // Map WebView renderer died — show the placeholder instead of crashing.
+  // Re-focusing the tab gives it another chance (isActive remount cycle).
+  const [webviewDead, setWebviewDead] = useState(false);
   const [swiping, setSwiping] = useState(false);
   const [matchMsg, setMatchMsg] = useState<string | null>(null);
 
@@ -380,7 +383,7 @@ export default function GlobeTab() {
     <View style={styles.container}>
       {/* Globe WebView — lazy loaded */}
       <View style={styles.globeContainer}>
-        {isActive && MAPBOX_TOKEN ? (
+        {isActive && MAPBOX_TOKEN && !webviewDead ? (
           <WebView
             // Re-key on the points fingerprint so a fresh fetch fully
             // remounts the WebView (and the Mapbox map state) instead of
@@ -394,6 +397,11 @@ export default function GlobeTab() {
             javaScriptEnabled
             domStorageEnabled
             onMessage={handleWebMessage}
+            // CRASH-PROOF: an unhandled Android WebView renderer death kills
+            // the whole app. Mapbox GL is exactly the kind of GPU load that
+            // can get a weak device's renderer killed — fall back to the
+            // placeholder instead of taking the app down.
+            onRenderProcessGone={() => setWebviewDead(true)}
           />
         ) : (
           <View style={styles.globePlaceholder}>
