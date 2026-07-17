@@ -24,6 +24,7 @@ import {
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
+  Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, semantic, theme } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
@@ -35,6 +36,7 @@ import { matchesService } from "@/services/matches";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { postsService, type PostItem } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
+import { MyCardPreview } from "@/components/profile/MyCardPreview";
 
 // Phone-width app frame, not the raw window: the app renders inside a capped
 // column, so grids must measure against that — not the tablet's full width.
@@ -162,6 +164,9 @@ export default function ProfileScreen() {
     Poppins_500Medium,
     Poppins_600SemiBold,
     Poppins_700Bold,
+    // The card preview's name line uses the same ExtraBold as the real
+    // Discover card — load it here so the replica matches to the pixel.
+    Poppins_800ExtraBold,
   });
 
   const isAthlete = user?.role === "athlete";
@@ -200,6 +205,9 @@ export default function ProfileScreen() {
   const [gridFetchKey, setGridFetchKey] = useState(0);
   // Wired in D4 — the press handler is shared between D3 and D4.
   const [openedPost, setOpenedPost] = useState<PostItem | null>(null);
+  // "See my own card" (client request): athletes/recruiters preview the
+  // exact Discover card scouts see for them.
+  const [cardPreviewVisible, setCardPreviewVisible] = useState(false);
   // Live state for the detail modal. Initialised from openedPost on open
   // and kept in sync with the underlying posts/reels/saved arrays so the
   // grid tiles reflect the latest like/save state after the modal closes.
@@ -591,6 +599,64 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+
+        {/* See My Card — preview the exact Discover card scouts see
+            (client request). Athletes + recruiters only: parents browse
+            as their athlete and have no card of their own. */}
+        {((isAthlete && athleteProfile) ||
+          (isRecruiter && recruiterProfile)) && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.subscriptionCard,
+              pressed && styles.subscriptionCardPressed,
+            ]}
+            onPress={() => setCardPreviewVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="See my card"
+          >
+            <View style={styles.subscriptionIcon}>
+              <Ionicons name="albums" size={20} color={brand.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subscriptionTitle}>See My Card</Text>
+              <Text style={styles.subscriptionSubtitle}>
+                {isAthlete
+                  ? "How scouts see you on Discover"
+                  : "How athletes see you on Discover"}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.textMuted}
+            />
+          </Pressable>
+        )}
+
+        <MyCardPreview
+          visible={cardPreviewVisible}
+          onClose={() => setCardPreviewVisible(false)}
+          role={
+            isAthlete
+              ? "athlete"
+              : (recruiterProfile?.roleType ??
+                (user?.role === "coach" ? "coach" : "agent"))
+          }
+          name={displayName}
+          sport={athleteProfile?.sport ?? recruiterProfile?.sport}
+          position={athleteProfile?.position}
+          level={athleteProfile?.level}
+          organization={recruiterProfile?.organization}
+          bio={athleteProfile?.bio ?? recruiterProfile?.bio}
+          location={location}
+          verified={
+            isAthlete
+              ? me?.kyc_status === "approved"
+              : !!recruiterProfile?.verified
+          }
+          photos={photos}
+          avatarUrl={me?.avatar_url}
+        />
 
         {/* Subscription entry — mirrors the More-tab "My Subscription"
             row but lives on profile so the affordance is right where
