@@ -36,7 +36,11 @@ import { matchesService } from "@/services/matches";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { postsService, type PostItem } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
-import { MyCardPreview } from "@/components/profile/MyCardPreview";
+import {
+  MyCardMini,
+  MyCardPreview,
+  type MyCardData,
+} from "@/components/profile/MyCardPreview";
 
 // Phone-width app frame, not the raw window: the app renders inside a capped
 // column, so grids must measure against that — not the tablet's full width.
@@ -502,6 +506,38 @@ export default function ProfileScreen() {
       ? `${athleteProfile.position} · ${athleteProfile.level}`
       : roleLabel;
 
+  // Data for the "My Card" preview (mini + modal). Null for parents and
+  // for users who haven't built a profile yet — no card to show.
+  const myCardData: MyCardData | null =
+    isAthlete && athleteProfile
+      ? {
+          role: "athlete",
+          name: displayName,
+          sport: athleteProfile.sport,
+          position: athleteProfile.position,
+          level: athleteProfile.level,
+          bio: athleteProfile.bio,
+          location,
+          verified: me?.kyc_status === "approved",
+          photos,
+          avatarUrl: me?.avatar_url,
+        }
+      : isRecruiter && recruiterProfile
+        ? {
+            role:
+              recruiterProfile.roleType ??
+              (user?.role === "coach" ? "coach" : "agent"),
+            name: displayName,
+            sport: recruiterProfile.sport,
+            organization: recruiterProfile.organization,
+            bio: recruiterProfile.bio,
+            location,
+            verified: !!recruiterProfile.verified,
+            photos,
+            avatarUrl: me?.avatar_url,
+          }
+        : null;
+
   if (loading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -600,63 +636,23 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* See My Card — preview the exact Discover card scouts see
-            (client request). Athletes + recruiters only: parents browse
-            as their athlete and have no card of their own. */}
-        {((isAthlete && athleteProfile) ||
-          (isRecruiter && recruiterProfile)) && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.subscriptionCard,
-              pressed && styles.subscriptionCardPressed,
-            ]}
-            onPress={() => setCardPreviewVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="See my card"
-          >
-            <View style={styles.subscriptionIcon}>
-              <Ionicons name="albums" size={20} color={brand.white} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.subscriptionTitle}>See My Card</Text>
-              <Text style={styles.subscriptionSubtitle}>
-                {isAthlete
-                  ? "How scouts see you on Discover"
-                  : "How athletes see you on Discover"}
-              </Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={theme.textMuted}
+        {/* My Card — a small preview of the exact Discover card scouts see,
+            embedded right on the profile (client request: Patrick wanted it
+            visible on the profile, tap to enlarge). Athletes + recruiters
+            only: parents browse as their athlete and have no card. */}
+        {myCardData && (
+          <>
+            <MyCardMini
+              data={myCardData}
+              onPress={() => setCardPreviewVisible(true)}
             />
-          </Pressable>
+            <MyCardPreview
+              visible={cardPreviewVisible}
+              onClose={() => setCardPreviewVisible(false)}
+              data={myCardData}
+            />
+          </>
         )}
-
-        <MyCardPreview
-          visible={cardPreviewVisible}
-          onClose={() => setCardPreviewVisible(false)}
-          role={
-            isAthlete
-              ? "athlete"
-              : (recruiterProfile?.roleType ??
-                (user?.role === "coach" ? "coach" : "agent"))
-          }
-          name={displayName}
-          sport={athleteProfile?.sport ?? recruiterProfile?.sport}
-          position={athleteProfile?.position}
-          level={athleteProfile?.level}
-          organization={recruiterProfile?.organization}
-          bio={athleteProfile?.bio ?? recruiterProfile?.bio}
-          location={location}
-          verified={
-            isAthlete
-              ? me?.kyc_status === "approved"
-              : !!recruiterProfile?.verified
-          }
-          photos={photos}
-          avatarUrl={me?.avatar_url}
-        />
 
         {/* Subscription entry — mirrors the More-tab "My Subscription"
             row but lives on profile so the affordance is right where
