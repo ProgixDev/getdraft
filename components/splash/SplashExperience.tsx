@@ -87,9 +87,15 @@ function a(){G.rotation.y+=0.004;r.render(s,c);requestAnimationFrame(a)}a();
 <\/script></body></html>`;
 
 // ── Stats data ──
+// Five columns (client request): the four roles + countries. Aspirational
+// fallbacks only show when the DB is effectively empty; otherwise each is
+// overwritten with the live count in the effect below. In this app the
+// "recruiter" role IS the agent, so Agents ← recruiters.
 const STATS = [
   { target: 10000, suffix: "+", label: "Athletes" },
-  { target: 500, suffix: "+", label: "Recruiters" },
+  { target: 300, suffix: "+", label: "Coaches" },
+  { target: 200, suffix: "+", label: "Agents" },
+  { target: 150, suffix: "+", label: "Parents" },
   { target: 50, suffix: "+", label: "Countries" },
 ];
 
@@ -152,11 +158,15 @@ function StatColumn({
   return (
     <Animated.View style={[styles.statColumn, style]}>
       <View style={styles.statAccent} />
-      <Text style={styles.statNumber}>
+      <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
         {display}
         <Text style={styles.statSuffix}>{stat.suffix}</Text>
       </Text>
-      <Text style={styles.statLabel}>{stat.label}</Text>
+      {/* numberOfLines + adjustsFontSizeToFit guarantee the longest label
+          ("Countries") never clips or wraps across five tight columns. */}
+      <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>
+        {stat.label}
+      </Text>
     </Animated.View>
   );
 }
@@ -192,13 +202,26 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
         if (!data) return;
         const apiAthletes = Number(data.athletes ?? 0);
         const apiCoaches = Number(data.coaches ?? 0);
-        const apiRecruiters = Number(data.recruiters ?? 0);
-        const totalRecruiters = apiRecruiters + apiCoaches;
-        if (apiAthletes <= 0 && totalRecruiters <= 0) return; // empty DB — keep aspirational mock
+        // "recruiter" role == Agent in this product.
+        const apiAgents = Number(data.recruiters ?? 0);
+        const apiParents = Number(data.parents ?? 0);
+        // Countries: only present once the backend adds the field; until then
+        // (and when empty) we keep the aspirational mock.
+        const apiCountries = Number(data.countries ?? 0);
+        // Empty DB → keep every aspirational mock rather than showing zeros.
+        if (
+          apiAthletes <= 0 &&
+          apiCoaches <= 0 &&
+          apiAgents <= 0 &&
+          apiParents <= 0
+        )
+          return;
         setStats((prev) => [
           { ...prev[0], target: apiAthletes || prev[0].target },
-          { ...prev[1], target: totalRecruiters || prev[1].target },
-          prev[2], // Countries: no matching API field — keep mock
+          { ...prev[1], target: apiCoaches || prev[1].target },
+          { ...prev[2], target: apiAgents || prev[2].target },
+          { ...prev[3], target: apiParents || prev[3].target },
+          { ...prev[4], target: apiCountries || prev[4].target },
         ]);
       })
       .catch(() => {});
@@ -466,12 +489,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.08)",
-    paddingVertical: 20,
+    paddingVertical: 18,
     width: "100%",
   },
+  // Five columns now — sizes trimmed from the old three-column bar so the
+  // longest label ("Countries") fits on a narrow phone without clipping.
   statColumn: {
     flex: 1,
     alignItems: "center",
+    paddingHorizontal: 4,
   },
   statDivider: {
     width: 1,
@@ -479,23 +505,23 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   statAccent: {
-    width: 24,
+    width: 18,
     height: 3,
     borderRadius: 2,
     backgroundColor: "#0984E3",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   statNumber: {
-    fontSize: 22,
+    fontSize: 18,
     fontFamily: "Poppins_800ExtraBold",
     color: "#FFFFFF",
-    lineHeight: 28,
+    lineHeight: 24,
   },
   statSuffix: {
     color: "#0984E3",
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: "Poppins_500Medium",
     color: "rgba(255, 255, 255, 0.5)",
     marginTop: 2,
