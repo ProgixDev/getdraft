@@ -7,7 +7,6 @@ import {
   ScrollView,
   TextInput,
   Linking,
-  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -19,14 +18,14 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
-import { brand, neutral, semantic, theme } from "@/config/colors";
+import { theme } from "@/config/colors";
 
 const FAQ_ITEMS = [
   {
     icon: "heart-outline" as const,
     question: "How do matches work?",
     answer:
-      "When you and a recruiter both express interest in each other, it's a match! You'll see a celebration screen, and the recruiter will appear in your Matches tab where you can start a conversation.",
+      "When you and a recruiter both express interest in each other, it's a Draft! You'll see a celebration screen, and the recruiter will appear in your Draft Board tab where you can start a conversation.",
   },
   {
     icon: "person-outline" as const,
@@ -38,13 +37,13 @@ const FAQ_ITEMS = [
     icon: "card-outline" as const,
     question: "Is GetDraft free?",
     answer:
-      "Athletes get a free Basic plan with 10 swipes per day and core features. Upgrade to Starter, Pro, or Premium for more swipes, advanced filters, and premium features like seeing who liked you.",
+      "Athletes get a free Basic plan with 20 Drafts per month and core features. Upgrade to Starter, Pro, or Premium for unlimited Drafts, advanced filters, and a premium badge. Seeing who drafted you is always free.",
   },
   {
     icon: "chatbubble-outline" as const,
     question: "How do I contact a recruiter?",
     answer:
-      'Once you match with a recruiter, a chat thread opens automatically. Go to the Matches tab, tap on a match, and start messaging. You can also use the "Ask for a call" button in the chat header.',
+      'Once you match with a recruiter, a chat thread opens automatically. Go to the Draft Board tab, tap on a match, and start messaging. You can also use the "Ask for a call" button at the top of the chat.',
   },
   {
     icon: "refresh-outline" as const,
@@ -175,46 +174,19 @@ export default function HelpCenterScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.contactRow,
+              styles.contactRowLast,
               pressed && styles.contactRowPressed,
             ]}
-            onPress={() => Linking.openURL("mailto:support@getdraft.com")}
+            onPress={() => Linking.openURL("mailto:support@getdraft.net")}
           >
             <View style={styles.contactIcon}>
               <Ionicons name="mail-outline" size={20} color={theme.text} />
             </View>
             <View style={styles.contactCopy}>
               <Text style={styles.contactLabel}>Email Support</Text>
-              <Text style={styles.contactValue}>support@getdraft.com</Text>
+              <Text style={styles.contactValue}>support@getdraft.net</Text>
             </View>
             <Ionicons name="open-outline" size={16} color={theme.textMuted} />
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.contactRow,
-              styles.contactRowLast,
-              pressed && styles.contactRowPressed,
-            ]}
-            onPress={() =>
-              Alert.alert("Replay Tutorial", "Tutorial replay is coming soon!")
-            }
-          >
-            <View style={styles.contactIcon}>
-              <Ionicons
-                name="play-circle-outline"
-                size={20}
-                color={theme.text}
-              />
-            </View>
-            <View style={styles.contactCopy}>
-              <Text style={styles.contactLabel}>Replay Tutorial</Text>
-              <Text style={styles.contactValue}>Learn how GetDraft works</Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={theme.textMuted}
-            />
           </Pressable>
         </View>
       </ScrollView>

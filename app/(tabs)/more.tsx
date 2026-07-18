@@ -158,7 +158,7 @@ export default function MoreScreen() {
           ? [
               {
                 icon: "videocam-outline" as const,
-                label: "Verify your guardian link",
+                label: "Verify Guardian Link",
                 onPress: () => router.push("/guardian-link"),
               },
             ]

@@ -443,7 +443,7 @@ export default function EditProfileScreen() {
         kind === "photos" ? "Photo limit" : "Video limit",
         kind === "photos"
           ? `You can have up to ${cap} swipe-card photos. Delete one to add another.`
-          : `You can have up to ${cap} highlight video. Delete it to add another.`,
+          : `You can add ${cap} highlight video. Delete it to add another.`,
       );
       return;
     }
@@ -783,7 +783,7 @@ export default function EditProfileScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Description / Bio</Text>
+            <Text style={styles.fieldLabel}>Bio</Text>
             <TextInput
               value={bio}
               onChangeText={setBio}
@@ -961,7 +961,7 @@ export default function EditProfileScreen() {
         {(isAthlete || isRecruiter) && (
           <View style={styles.section}>
             <View style={styles.mediaHeader}>
-              <Text style={styles.sectionTitle}>Swipe-card photos</Text>
+              <Text style={styles.sectionTitle}>Swipe-Card Photos</Text>
               <Text style={styles.mediaSubLabel}>
                 {galleryPhotos.length}/{MAX_GALLERY_PHOTOS}
               </Text>
@@ -1005,7 +1005,7 @@ export default function EditProfileScreen() {
         {(isAthlete || isRecruiter) && (
           <View style={styles.section}>
             <View style={styles.mediaHeader}>
-              <Text style={styles.sectionTitle}>Highlight video</Text>
+              <Text style={styles.sectionTitle}>Highlight Video</Text>
               <Text style={styles.mediaSubLabel}>
                 {galleryVideos.length}/{MAX_HIGHLIGHT_VIDEOS}
               </Text>

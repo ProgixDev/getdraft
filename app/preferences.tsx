@@ -444,7 +444,7 @@ export default function PreferencesScreen() {
             value={selectedCityLabel}
             helperText={
               preferences.city === ""
-                ? "Showing all cities in selected country"
+                ? "Showing all cities in the selected country"
                 : undefined
             }
             onPress={() => setActiveModal("city")}

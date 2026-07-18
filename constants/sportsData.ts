@@ -203,7 +203,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
       "NCAA Div I (FCS)",
       "NCAA Div I (FBS)",
       "CEGEP (Canada)",
-      "CJFL (Canadian Jr Football)",
+      "CJFL (Canadian Junior Football)",
       "CFL",
       "AFL (Arena League)",
       "NFL",

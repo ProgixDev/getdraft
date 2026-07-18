@@ -213,10 +213,10 @@ export function LocationPicker({
             .map((f: any, i: number) => featureV5ToSuggestion(f, i))
             .filter((x: Suggestion | null): x is Suggestion => x !== null);
         } else {
-          throw new Error(`Mapbox v5 returned ${v5Resp.status}`);
+          throw new Error("Search failed. Please try again.");
         }
       } else {
-        throw new Error(`Mapbox returned ${v6Resp.status}`);
+        throw new Error("Search failed. Please try again.");
       }
 
       if (seq !== searchSeq.current) return;
@@ -249,7 +249,8 @@ export function LocationPicker({
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const resp = await fetch(buildReverseV6(lng, lat));
-      if (!resp.ok) throw new Error(`Reverse geocode failed (${resp.status})`);
+      if (!resp.ok)
+        throw new Error("Couldn't look up that location. Please try again.");
       const json = await resp.json();
       const label = reverseV6ToLabel(json) ?? `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       onChange({ label, latitude: lat, longitude: lng });
@@ -339,7 +340,8 @@ export function LocationPicker({
               <View style={styles.warningBox}>
                 <Ionicons name="alert-circle" size={16} color="#FDCB6E" />
                 <Text style={styles.warningText}>
-                  Location search unavailable: missing EXPO_PUBLIC_MAPBOX_TOKEN.
+                  Location search is temporarily unavailable. You can still set
+                  your location manually.
                 </Text>
               </View>
             )}
@@ -418,7 +420,7 @@ export function LocationPicker({
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search wilaya, city…"
+                placeholder="Search region, city…"
                 placeholderTextColor={theme.inputPlaceholder}
                 style={styles.searchInput}
                 autoCorrect={false}

@@ -325,7 +325,7 @@ function UserRow({
   const confirmAndBan = useCallback(() => {
     Alert.alert(
       "Ban this user?",
-      "They lose API access immediately and disappear from discover/inbox. You can unban later.",
+      "They lose access immediately and disappear from Discover/inbox. You can unban later.",
       [
         { text: "Cancel", style: "cancel" },
         {

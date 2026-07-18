@@ -195,7 +195,8 @@ export default function DraftsReceivedScreen() {
             <Ionicons name="flame" size={22} color={brand.white} />
             <View style={styles.heroTextWrap}>
               <Text style={styles.heroTitle}>
-                {rows.length} drafted you
+                {rows.length} {rows.length === 1 ? "person" : "people"} drafted
+                you
               </Text>
               <Text style={styles.heroSubtitle}>
                 Draft back to make it a match.

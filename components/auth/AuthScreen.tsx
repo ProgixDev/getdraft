@@ -137,7 +137,7 @@ const roleOptions: RoleOption[] = [
     label: "Parent",
     icon: "people",
     price: "Guardian",
-    description: "Manage athlete journey",
+    description: "Manage your athlete's journey",
   },
   {
     id: "coach",
@@ -1146,7 +1146,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     style={styles.input}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder="Password (min. 6 characters)"
+                    placeholder="Password (min. 8 characters)"
                     placeholderTextColor={neutral.gray500}
                     secureTextEntry={!isPasswordVisible}
                     editable={!isLoading}
@@ -1237,7 +1237,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </Text>
             {mode === "signup" && (
               <Text style={styles.planInfo}>
-                Plans start from $0/month • Choose after sign up
+                Plans start from $0/month • Choose after sign-up
               </Text>
             )}
 
@@ -1326,7 +1326,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   style={styles.input}
                   placeholder={
                     mode === "signup"
-                      ? "Password (min. 6 characters)"
+                      ? "Password (min. 8 characters)"
                       : "Password"
                   }
                   placeholderTextColor={neutral.gray400}

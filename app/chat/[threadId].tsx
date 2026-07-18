@@ -478,7 +478,7 @@ export default function ChatScreen() {
             <TextInput
               value={draft}
               onChangeText={onDraftChange}
-              placeholder="Type a message..."
+              placeholder="Type a message…"
               placeholderTextColor={theme.inputPlaceholder}
               style={styles.input}
               multiline

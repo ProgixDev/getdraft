@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import { View, StyleSheet, Text, Pressable, Share } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useSelector } from "react-redux";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -11,14 +12,22 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
-import { brand, neutral, semantic, theme } from "@/config/colors";
-
-const REFERRAL_LINK = "https://getdraft.com/invite/ABC123";
+import { brand, semantic, theme } from "@/config/colors";
+import { RootState } from "@/store";
 
 export default function InviteFriendsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+
+  // A real, per-user invite link on the live domain. The user id is the
+  // attribution key: getdraft.net/invite/<id> lets the landing page (and a
+  // future signup deep-link) record who referred a new signup. Falls back to
+  // the bare site if we somehow render before auth is hydrated.
+  const userId = useSelector((s: RootState) => s.auth.user?.id);
+  const referralLink = userId
+    ? `https://getdraft.net/invite/${userId}`
+    : "https://getdraft.net";
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -28,20 +37,20 @@ export default function InviteFriendsScreen() {
   });
 
   const handleCopy = useCallback(async () => {
-    await Clipboard.setStringAsync(REFERRAL_LINK);
+    await Clipboard.setStringAsync(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, []);
+  }, [referralLink]);
 
   const handleShare = useCallback(async () => {
     try {
       await Share.share({
-        message: `Join me on GetDraft — where talent meets opportunity! Sign up here: ${REFERRAL_LINK}`,
+        message: `Join me on GetDraft — where talent meets opportunity! Sign up here: ${referralLink}`,
       });
     } catch {
       // User cancelled share
     }
-  }, []);
+  }, [referralLink]);
 
   if (!fontsLoaded) return null;
 
@@ -69,7 +78,7 @@ export default function InviteFriendsScreen() {
         {/* Referral link */}
         <View style={styles.linkCard}>
           <Text style={styles.linkText} numberOfLines={1}>
-            {REFERRAL_LINK}
+            {referralLink}
           </Text>
           <Pressable
             style={[styles.copyButton, copied && styles.copyButtonCopied]}
@@ -99,11 +108,12 @@ export default function InviteFriendsScreen() {
 
         {/* Referral benefit */}
         <View style={styles.benefitCard}>
-          <Ionicons name="gift-outline" size={24} color={theme.text} />
+          <Ionicons name="people-outline" size={24} color={theme.text} />
           <View style={styles.benefitCopy}>
-            <Text style={styles.benefitTitle}>Earn Free Premium</Text>
+            <Text style={styles.benefitTitle}>Grow the game</Text>
             <Text style={styles.benefitSubtitle}>
-              Get 1 month free for every friend who signs up!
+              The more of your team on GetDraft, the more coaches and agents
+              scouting. Invite them to get discovered together.
             </Text>
           </View>
         </View>

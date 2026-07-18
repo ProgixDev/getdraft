@@ -1176,7 +1176,7 @@ export default function DiscoverScreen() {
           <Ionicons name="search" size={20} color={theme.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Find people..."
+            placeholder="Find people…"
             placeholderTextColor={theme.inputPlaceholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -1366,7 +1366,7 @@ export default function DiscoverScreen() {
                 <Text style={styles.lockedCtaText}>
                   {isParent
                     ? "Your athlete is out of Drafts this month"
-                    : "Out of Drafts this month — Upgrade for unlimited"}
+                    : "Out of Drafts this month — upgrade for unlimited"}
                 </Text>
               </Pressable>
               {/* Passing stays free even when Drafts are used up. */}

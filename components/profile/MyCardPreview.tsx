@@ -298,7 +298,7 @@ export function MyCardPreview({
     >
       <View style={styles.backdrop}>
         <Text style={styles.heading}>
-          {isAthlete ? "How coaches & agents see you" : "How athletes see you"}
+          {isAthlete ? "How scouts see you" : "How athletes see you"}
         </Text>
 
         <CardFace data={data} width={cardWidth} height={cardHeight} scale={1} />

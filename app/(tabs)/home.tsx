@@ -366,7 +366,7 @@ export default function GuardianHomeScreen() {
           />
           <ActionTile
             icon="person-circle-outline"
-            label="My profile"
+            label="My Profile"
             onPress={() => router.push("/(tabs)/profile")}
           />
           <ActionTile

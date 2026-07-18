@@ -689,7 +689,7 @@ export default function MatchesScreen() {
               />
               <Text style={styles.emptyTitle}>No drafts yet</Text>
               <Text style={styles.emptySubtitle}>
-                Keep scouting to build your draft board
+                Keep scouting to build your Draft Board
               </Text>
               <Pressable
                 style={styles.discoverButton}
@@ -1541,7 +1541,7 @@ function OutreachThread({
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="Type a message..."
+              placeholder="Type a message…"
               placeholderTextColor={theme.inputPlaceholder}
               style={styles.composerInput}
               multiline

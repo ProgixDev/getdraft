@@ -215,7 +215,7 @@ export default function RankingsScreen() {
               contentContainerStyle={styles.chipsRow}
             >
               <Chip
-                label="All sports"
+                label="All Sports"
                 active={!sport}
                 onPress={() => setSport(undefined)}
               />

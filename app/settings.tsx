@@ -317,7 +317,7 @@ export default function SettingsScreen() {
                 size={20}
                 color={theme.text}
               />
-              <Text style={styles.sectionTitle}>Admin tools</Text>
+              <Text style={styles.sectionTitle}>Admin Tools</Text>
             </View>
             <Pressable
               style={({ pressed }) => [
@@ -357,7 +357,7 @@ export default function SettingsScreen() {
                 size={20}
                 color={theme.text}
               />
-              <Text style={styles.sectionTitle}>Guardian link</Text>
+              <Text style={styles.sectionTitle}>Guardian Link</Text>
             </View>
             <Pressable
               style={({ pressed }) => [

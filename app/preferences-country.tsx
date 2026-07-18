@@ -201,7 +201,7 @@ export default function PreferencesCountryScreen() {
         </View>
 
         <Text style={styles.subtitle}>
-          Search and select where you want opportunities.
+          Search and select where you want to find opportunities.
         </Text>
 
         <View style={styles.globeContainer}>

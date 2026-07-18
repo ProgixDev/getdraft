@@ -34,13 +34,13 @@ import { usersService } from "@/services/users";
 const STEPS: { icon: keyof typeof Ionicons.glyphMap; title: string; body: string }[] = [
   {
     icon: "qr-code-outline",
-    title: "Show this QR to your father / guardian",
+    title: "Show this QR to your parent / guardian",
     body: "They open GetDraft on their own phone and scan the code below.",
   },
   {
     icon: "videocam-outline",
     title: "They complete the guardian link",
-    body: "A short questionnaire + a quick declaration video confirms they're your guardian.",
+    body: "A short questionnaire and a quick declaration video confirm they're your guardian.",
   },
   {
     icon: "shield-checkmark-outline",

@@ -222,7 +222,7 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
             onPress={() => setState('phone-input')}
           >
             <Ionicons name="call" size={20} color={brand.white} />
-            <Text style={styles.primaryButtonText}>Sign in with Phone Number</Text>
+            <Text style={styles.primaryButtonText}>Continue with Phone Number</Text>
           </Pressable>
 
           <View style={styles.dividerRow}>

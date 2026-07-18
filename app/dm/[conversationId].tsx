@@ -396,7 +396,7 @@ export default function DmScreen() {
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="Type a message..."
+              placeholder="Type a message…"
               placeholderTextColor={theme.inputPlaceholder}
               style={styles.input}
               multiline

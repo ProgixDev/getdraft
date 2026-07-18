@@ -293,7 +293,7 @@ function getStepsForRole(role: string): Step[] {
       id: 3,
       title: "Physical Attributes",
       subtitle: "Your physical stats",
-      tip: "Accurate stats help better matches",
+      tip: "Accurate stats lead to better matches",
       fields: [
         {
           id: "height",

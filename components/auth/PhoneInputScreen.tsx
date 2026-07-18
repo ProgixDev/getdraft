@@ -214,7 +214,7 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
 
             <Text style={styles.legal}>
               Standard messaging rates may apply. By continuing you agree to our
-              Terms and Privacy Policy.
+              Terms of Service and Privacy Policy.
             </Text>
           </Animated.View>
       </KeyboardAwareScreen>

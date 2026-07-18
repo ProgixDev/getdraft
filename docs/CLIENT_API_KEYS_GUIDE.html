@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GetDraft — Service Accounts & API Keys Setup Guide</title>
+<style>
+  :root{
+    --ink:#0F172A; --muted:#475569; --soft:#64748B;
+    --accent:#6366F1; --accent2:#8B5CF6; --accent-dk:#4338CA;
+    --line:#E2E8F0; --card:#F8FAFC;
+    --send:#ECFDF5; --send-bd:#A7F3D0; --send-ink:#065F46;
+    --warn:#FFFBEB; --warn-bd:#FDE68A; --warn-ink:#92400E;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{
+    margin:0; color:var(--ink);
+    font-family:"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    font-size:13px; line-height:1.6;
+  }
+  @page{ size:A4; margin:14mm 0; }
+  .wrap{ max-width:780px; margin:0 auto; padding:0 26px; }
+
+  /* ---- Cover ---- */
+  .cover{
+    background:linear-gradient(135deg,#4338CA 0%,#6366F1 55%,#8B5CF6 100%);
+    color:#fff; padding:38px 26px 30px; border-radius:0;
+  }
+  .cover .brand{ font-size:13px; letter-spacing:.32em; text-transform:uppercase; font-weight:700; opacity:.85; }
+  .cover h1{ font-size:30px; line-height:1.15; margin:14px 0 6px; font-weight:800; letter-spacing:-.5px;}
+  .cover .sub{ font-size:15px; opacity:.92; margin:0 0 22px; max-width:560px;}
+  .cover .by{
+    display:inline-flex; gap:18px; flex-wrap:wrap; align-items:center;
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.25);
+    padding:11px 16px; border-radius:12px; font-size:12.5px;
+  }
+  .cover .by b{ font-weight:700 }
+  .cover .by .dot{ opacity:.55 }
+
+  /* ---- Intro ---- */
+  .intro{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin:22px 0 6px;}
+  .intro p{ margin:0 0 8px }
+  .meta{ display:flex; gap:22px; flex-wrap:wrap; margin-top:10px; font-size:12.5px; color:var(--muted);}
+  .meta b{ color:var(--ink) }
+  .tip{ margin-top:12px; font-size:12.5px; color:var(--warn-ink); background:var(--warn); border:1px solid var(--warn-bd); padding:10px 12px; border-radius:10px;}
+
+  h2.sec{ font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:var(--soft); margin:30px 0 12px; font-weight:700;}
+
+  /* ---- Service card ---- */
+  .card{ border:1px solid var(--line); border-radius:16px; padding:18px 20px 16px; margin:14px 0; page-break-inside:avoid; background:#fff;}
+  .card .head{ display:flex; align-items:center; gap:12px; margin-bottom:4px;}
+  .num{ width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-weight:800; font-size:15px; display:flex; align-items:center; justify-content:center; flex:0 0 auto;}
+  .card h3{ font-size:18px; margin:0; font-weight:800; letter-spacing:-.2px;}
+  .whatfor{ color:var(--muted); margin:6px 0 12px; }
+  .whatfor b{ color:var(--ink) }
+  ol.steps{ margin:0; padding-left:20px; }
+  ol.steps li{ margin:0 0 9px; }
+  code{ background:#EEF2FF; color:#3730A3; padding:1px 6px; border-radius:5px; font-family:"Consolas",monospace; font-size:12px; font-weight:600;}
+  a.btn{ display:inline-block; background:var(--accent); color:#fff !important; text-decoration:none; padding:4px 11px; border-radius:7px; font-size:12px; font-weight:700; margin:1px 0;}
+  a.lnk{ color:var(--accent-dk); font-weight:700; text-decoration:none; border-bottom:1.5px solid #C7D2FE;}
+  .send{ margin-top:13px; background:var(--send); border:1px solid var(--send-bd); border-radius:11px; padding:11px 13px; color:var(--send-ink); font-size:12.5px;}
+  .send b{ color:#064E3B }
+  .warnote{ background:var(--warn); border:1px solid var(--warn-bd); color:var(--warn-ink); border-radius:9px; padding:8px 11px; margin:9px 0; font-size:12.5px;}
+
+  /* ---- generic boxes ---- */
+  .box{ border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin:12px 0; page-break-inside:avoid;}
+  .box.amber{ background:var(--warn); border-color:var(--warn-bd); color:var(--warn-ink);}
+  .box.amber b{ color:#7C2D12 }
+  .box h3{ margin:0 0 8px; font-size:16px; }
+  ul.clean{ margin:6px 0; padding-left:18px; }
+  ul.clean li{ margin:5px 0 }
+
+  /* ---- checklist ---- */
+  .check{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 18px; page-break-inside:avoid;}
+  .check .row{ display:flex; gap:10px; align-items:flex-start; padding:7px 0; border-bottom:1px dashed var(--line);}
+  .check .row:last-child{ border-bottom:none }
+  .ck{ width:16px; height:16px; border:2px solid var(--accent); border-radius:4px; flex:0 0 auto; margin-top:2px;}
+  .check .svc{ font-weight:800; color:var(--accent-dk); }
+
+  /* ---- footer ---- */
+  .foot{ margin:28px 0 4px; padding-top:16px; border-top:2px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; font-size:12px; color:var(--muted);}
+  .foot b{ color:var(--ink) }
+  .pill{ display:inline-block; background:#EEF2FF; color:#3730A3; padding:2px 9px; border-radius:999px; font-weight:700; font-size:11px;}
+  .emoji{ font-size:17px }
+</style>
+</head>
+<body>
+
+  <div class="cover">
+    <div class="wrap" style="padding:0 26px">
+      <div class="brand">GetDraft · Progix</div>
+      <h1>Setting Up Your Service Accounts</h1>
+      <p class="sub">A simple, step-by-step guide to creating the accounts that power your app — so payments, messages, and emails all run under your own name.</p>
+      <div class="by">
+        <span>Prepared by <b>Achraf Benamrane</b> · Developer</span>
+        <span class="dot">|</span>
+        <span><b>Progix</b></span>
+        <span class="dot">|</span>
+        <span>GetDraft</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+
+    <div class="intro">
+      <p><b>Hi! 👋</b> To launch <b>GetDraft</b> under your own name, a few services need to run on <b>your</b> accounts — so payments go to <b>your</b> bank, text-message and verification costs are billed to <b>you</b>, and emails are sent from <b>your</b> brand.</p>
+      <p>You don't need to be technical. Just follow the steps, copy a few codes, and send them to us <b>safely</b> (see the last page). If you get stuck on any step, <b>take a screenshot and send it to us</b> — we'll point you to the exact spot.</p>
+      <div class="meta">
+        <span>⏱️ <b>Total time:</b> ~30–45 minutes</span>
+        <span>☕ <b>Tip:</b> do them one at a time</span>
+      </div>
+      <div class="tip">📌 <b>Before you start:</b> create every account with your <b>company email</b> (e.g. you@yourcompany.com), not a personal one — so the business owns everything. Use a strong password and save it.</div>
+    </div>
+
+    <h2 class="sec">The 4 accounts we need</h2>
+
+    <!-- 1 STRIPE -->
+    <div class="card">
+      <div class="head"><div class="num">1</div><h3><span class="emoji">💳</span> Stripe — to accept payments</h3></div>
+      <p class="whatfor"><b>What it's for:</b> lets users pay for subscriptions and extra swipes in the app. The money goes straight to <b>your</b> bank account.</p>
+      <ol class="steps">
+        <li>Go to <a class="btn" href="https://dashboard.stripe.com/register">Create a Stripe account</a> → enter email, name, password → confirm the email Stripe sends you.</li>
+        <li>Fill in your <b>business details and bank account</b> when asked (this is how you get paid). <i>You can skip this for now and finish it before going live — testing works without it.</i></li>
+        <li>Get your keys at <a class="lnk" href="https://dashboard.stripe.com/apikeys">Developers → API keys</a>: copy the <b>Publishable key</b> (<code>pk_…</code>) and click <b>“Reveal”</b> to copy the <b>Secret key</b> (<code>sk_…</code>).</li>
+        <li>Create your plans at <a class="lnk" href="https://dashboard.stripe.com/products">Product catalogue</a> → <b>+ Add product</b> → make one per plan (e.g. <b>Starter</b>, <b>Pro</b>) with a monthly price → <b>Save</b>. Open each and copy its <b>Price ID</b> (<code>price_…</code>).</li>
+      </ol>
+      <div class="send">📩 <b>Send us:</b> Publishable key (<code>pk_…</code>), Secret key (<code>sk_…</code>), and each plan's Price ID (<code>price_…</code>). <i>(We'll set up the payment webhook for you — nothing to do there.)</i></div>
+    </div>
+
+    <!-- 2 TWILIO -->
+    <div class="card">
+      <div class="head"><div class="num">2</div><h3><span class="emoji">📱</span> Twilio — to send SMS codes</h3></div>
+      <p class="whatfor"><b>What it's for:</b> when a user signs up with a phone number, Twilio texts them the verification code. The small per-message cost is billed to you.</p>
+      <ol class="steps">
+        <li>Go to <a class="btn" href="https://www.twilio.com/try-twilio">Sign up for Twilio</a> → create the account → verify your own email + phone.</li>
+        <li><b>Upgrade from the free trial</b> (add a payment method). ⚠️ Important — on the trial, Twilio can only text numbers you've manually verified; upgrading lets it text <b>all</b> your users.</li>
+        <li>On the <a class="lnk" href="https://console.twilio.com/">Twilio Console</a> home, in the <b>“Account Info”</b> box, copy the <b>Account SID</b> (<code>AC…</code>) and the <b>Auth Token</b> (click to reveal).</li>
+        <li>Create a verification service at <a class="lnk" href="https://console.twilio.com/us1/develop/verify/services">Verify → Services</a> → <b>Create new</b> → name it <b>“GetDraft”</b> → copy the <b>Service SID</b> (<code>VA…</code>).</li>
+      </ol>
+      <div class="send">📩 <b>Send us:</b> Account SID (<code>AC…</code>), Auth Token, and Verify Service SID (<code>VA…</code>).</div>
+    </div>
+
+    <!-- 3 RESEND -->
+    <div class="card">
+      <div class="head"><div class="num">3</div><h3><span class="emoji">✉️</span> Resend — to send emails</h3></div>
+      <p class="whatfor"><b>What it's for:</b> sends email verification codes and notifications <b>from your own domain</b> (e.g. noreply@yourcompany.com) so they look professional and reach inboxes.</p>
+      <ol class="steps">
+        <li>Go to <a class="btn" href="https://resend.com/signup">Sign up for Resend</a> and create your account.</li>
+        <li>Add your domain at <a class="lnk" href="https://resend.com/domains">Domains</a> → <b>Add Domain</b> → type your domain. Resend shows a few <b>DNS records</b>.
+          <div class="warnote">🛠️ This is the one slightly technical step — just <b>send us a screenshot</b> of those records (or give your website/IT person access) and we'll help you add them. ~5 minutes.</div>
+        </li>
+        <li>Create the key at <a class="lnk" href="https://resend.com/api-keys">API Keys</a> → <b>Create API Key</b> → name it <b>“GetDraft”</b> → copy it (<code>re_…</code>).</li>
+      </ol>
+      <div class="send">📩 <b>Send us:</b> the API key (<code>re_…</code>), your domain, and the “from” address you want (e.g. <code>GetDraft &lt;noreply@yourcompany.com&gt;</code>).</div>
+    </div>
+
+    <!-- 4 DIDIT -->
+    <div class="card">
+      <div class="head"><div class="num">4</div><h3><span class="emoji">🪪</span> Didit — to verify identities (KYC)</h3></div>
+      <p class="whatfor"><b>What it's for:</b> checks a user's ID document + face during signup, so you know real people are on the platform.</p>
+      <ol class="steps">
+        <li>Go to <a class="btn" href="https://didit.me/">Create a Didit business account</a>.</li>
+        <li>In your dashboard, open <b>Workflows</b> (or “Verification”) → find the <b>KYC workflow</b> → copy its <b>Workflow ID</b>.</li>
+        <li>Open <b>Settings / API</b> → copy your <b>API Key</b>.</li>
+        <li>Open <b>Webhooks</b> → copy the <b>Webhook Secret</b> (signing secret).</li>
+      </ol>
+      <div class="warnote">💡 Didit's menus can vary — if you can't find any of these three, send us a <b>screenshot of your dashboard</b> and we'll point to the exact spot.</div>
+      <div class="send">📩 <b>Send us:</b> the API Key, the Workflow ID, and the Webhook Secret.</div>
+    </div>
+
+    <h2 class="sec">Optional — only when you're ready to publish</h2>
+    <div class="box">
+      <h3>📲 App-store accounts</h3>
+      <p style="margin:0 0 6px;color:var(--muted)">Not “keys,” but needed to put the app on the stores under your business name. You can do these later.</p>
+      <ul class="clean">
+        <li><b>Google Play</b> (Android) — one-time <b>$25</b> → <a class="lnk" href="https://play.google.com/console/signup">Google Play Console sign-up</a></li>
+        <li><b>Apple</b> (iPhone) — <b>$99/year</b> → <a class="lnk" href="https://developer.apple.com/programs/enroll/">Apple Developer Program</a></li>
+      </ul>
+      <p style="margin:8px 0 0;color:var(--muted);font-size:12px"><i>Your app's database and server hosting are managed by our team for now — we can transfer them to your own accounts whenever you'd like.</i></p>
+    </div>
+
+    <h2 class="sec">Please read — sending the keys safely</h2>
+    <div class="box amber">
+      <h3>🔒 How to send us the keys safely</h3>
+      <p style="margin:0 0 8px">These keys are like <b>passwords to your money and accounts</b> — never paste them in a normal WhatsApp or email message.</p>
+      <ul class="clean">
+        <li><b>Easiest safe way:</b> create a free <a class="lnk" href="https://bitwarden.com/">Bitwarden</a> account → make a <b>Secure Note</b> → paste all the keys → use <b>“Send”</b> to share it with us.</li>
+        <li><b>Or</b> use a secure link we set up together — just ask and we'll send one.</li>
+        <li>⚠️ If you ever share a key in a normal chat by accident, tell us — we'll have you regenerate it (it's quick).</li>
+      </ul>
+    </div>
+
+    <h2 class="sec">Final checklist — what to send us</h2>
+    <div class="check">
+      <div class="row"><div class="ck"></div><div><span class="svc">Stripe:</span> Publishable key (<code>pk_…</code>), Secret key (<code>sk_…</code>), Plan Price IDs (<code>price_…</code>)</div></div>
+      <div class="row"><div class="ck"></div><div><span class="svc">Twilio:</span> Account SID (<code>AC…</code>), Auth Token, Verify Service SID (<code>VA…</code>)</div></div>
+      <div class="row"><div class="ck"></div><div><span class="svc">Resend:</span> API key (<code>re_…</code>), your domain, your “from” email</div></div>
+      <div class="row"><div class="ck"></div><div><span class="svc">Didit:</span> API Key, Workflow ID, Webhook Secret</div></div>
+      <div class="row"><div class="ck"></div><div><span class="svc">Later:</span> Google Play + Apple Developer accounts</div></div>
+    </div>
+
+    <p style="text-align:center;margin:20px 0 0;font-size:13px;color:var(--muted)">Once we have these, GetDraft runs <b style="color:var(--ink)">100% on your accounts</b> — your payments, your messages, your brand. 🚀<br><span style="font-size:12px">Stuck on any step? Send us a screenshot — we'll guide you through it.</span></p>
+
+    <div class="foot">
+      <div>Prepared by <b>Achraf Benamrane</b> — Developer &nbsp;·&nbsp; <b>Progix</b></div>
+      <div><span class="pill">GetDraft</span></div>
+    </div>
+
+  </div>
+</body>
+</html>

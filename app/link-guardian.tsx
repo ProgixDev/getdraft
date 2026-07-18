@@ -176,7 +176,7 @@ export default function LinkGuardianScreen() {
               ) : issuing ? (
                 <ActivityIndicator size="large" color={brand.primary} />
               ) : (
-                <Text style={styles.errorInline}>Tap refresh to generate a code.</Text>
+                <Text style={styles.errorInline}>Tap Refresh to generate a code.</Text>
               )}
             </View>
             <View style={styles.qrActions}>
