@@ -1230,6 +1230,7 @@ function MessagesInbox({
   onRefresh: () => void;
   onOpen: (c: ConversationItem) => void;
 }) {
+  const router = useRouter();
   if (loading) {
     return (
       <View style={styles.content}>
@@ -1307,17 +1308,32 @@ function MessagesInbox({
             pressed && styles.cardPressed,
           ]}
         >
-          {c.otherUser.avatarUrl ? (
-            <ExpoImage
-              source={{ uri: c.otherUser.avatarUrl }}
-              style={styles.inboxAvatar}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.inboxAvatar, styles.inboxAvatarFallback]}>
-              <Ionicons name="person" size={18} color={theme.textMuted} />
-            </View>
-          )}
+          {/* Instagram-style: tapping the avatar opens the person's profile
+              directly; tapping the rest of the row opens the conversation.
+              The inner Pressable captures the touch so the row's onPress
+              doesn't also fire. */}
+          <Pressable
+            onPress={() =>
+              c.otherUser.id &&
+              router.push({
+                pathname: "/user/[userId]",
+                params: { userId: c.otherUser.id },
+              })
+            }
+            hitSlop={6}
+          >
+            {c.otherUser.avatarUrl ? (
+              <ExpoImage
+                source={{ uri: c.otherUser.avatarUrl }}
+                style={styles.inboxAvatar}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.inboxAvatar, styles.inboxAvatarFallback]}>
+                <Ionicons name="person" size={18} color={theme.textMuted} />
+              </View>
+            )}
+          </Pressable>
           <View style={styles.inboxText}>
             <View style={styles.inboxTopRow}>
               <Text style={styles.inboxName} numberOfLines={1}>
