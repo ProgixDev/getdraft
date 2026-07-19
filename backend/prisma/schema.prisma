@@ -701,6 +701,7 @@ model swipes {
   swiper_id                     String       @db.Uuid
   swiped_id                     String       @db.Uuid
   direction                     String
+  is_super                      Boolean      @default(false)
   created_at                    DateTime?    @default(now()) @db.Timestamptz(6)
   users_swipes_swiped_idTousers public_users @relation("swipes_swiped_idTousers", fields: [swiped_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users_swipes_swiper_idTousers public_users @relation("swipes_swiper_idTousers", fields: [swiper_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -709,6 +710,7 @@ model swipes {
   @@index([swiper_id, created_at], map: "idx_swipes_daily")
   @@index([swiped_id], map: "idx_swipes_swiped")
   @@index([swiper_id], map: "idx_swipes_swiper")
+  @@index([swiper_id, is_super, created_at], map: "idx_swipes_super")
   @@schema("public")
 }
 

@@ -35,6 +35,7 @@ interface DrafterSwiper {
 interface DrafterRow {
   swiper: DrafterSwiper;
   created_at: string;
+  is_super?: boolean;
 }
 
 function formatTimeAgo(iso?: string | null): string {
@@ -236,6 +237,12 @@ export default function DraftsReceivedScreen() {
                         </Text>
                       </View>
                       <View style={styles.metaRow}>
+                        {r.is_super ? (
+                          <View style={styles.superChip}>
+                            <Ionicons name="star" size={11} color="#1A1A1A" />
+                            <Text style={styles.superChipText}>Super Draft</Text>
+                          </View>
+                        ) : null}
                         {s.role ? (
                           <View style={styles.roleChip}>
                             <Text style={styles.roleChipText}>{s.role}</Text>
@@ -407,6 +414,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
+  },
+  superChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#F5A623",
+  },
+  superChipText: {
+    fontSize: 10,
+    fontFamily: "Poppins_700Bold",
+    color: "#1A1A1A",
   },
   roleChip: {
     paddingHorizontal: 8,

@@ -21,6 +21,9 @@ export interface FeedResponse {
   cards: any[];
   hasMore: boolean;
   swipesRemaining: number;
+  // Remaining Super Drafts this month (separate, always-capped allowance).
+  // Optional so an older backend that doesn't send it doesn't break the client.
+  superDraftsRemaining?: number;
   // ISO created_at of the last card on this page, or null when there
   // are no more pages. Send back on the next call as `cursor`.
   nextCursor?: string | null;
@@ -30,6 +33,7 @@ export interface SwipeResponse {
   matched: boolean;
   matchId: string | null;
   swipesRemaining: number;
+  superDraftsRemaining?: number;
 }
 
 // Globe is a TALENT MAP of athletes — everyone sees athletes,
@@ -74,10 +78,14 @@ export const discoverService = {
   async swipe(
     targetUserId: string,
     direction: "draft" | "pass",
+    isSuper = false,
   ): Promise<SwipeResponse> {
     const { data } = await api.post("/discover/swipe", {
       targetUserId,
       direction,
+      // Only send the flag for a Super Draft so a normal swipe payload is
+      // unchanged. A Super Draft is always a draft under the hood.
+      ...(isSuper ? { isSuper: true } : {}),
     });
     return data.data;
   },

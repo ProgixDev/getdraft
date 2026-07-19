@@ -481,6 +481,15 @@ export default function DiscoverScreen() {
   });
   const [apiCards, setApiCards] = useState<any[] | null>(null);
   const [swipesRemaining, setSwipesRemaining] = useState<number | null>(null);
+  // Super Draft allowance this month. null = the backend didn't report it
+  // (older API) → the Super Draft button stays hidden, so we never send an
+  // `isSuper` field an old backend would reject. A number → feature is live.
+  const [superDraftsRemaining, setSuperDraftsRemaining] = useState<
+    number | null
+  >(null);
+  // Set the instant before a draft animation fires so the shared draft handler
+  // knows this one is a Super Draft (reuses the exact fly-up animation).
+  const superNextRef = useRef(false);
   // Cursor-paging state. nextCursor=null after the last page; isFetchingMore
   // gates concurrent loads (another deck-near-end fire while one is in flight
   // would duplicate-fetch and waste an API round-trip). Both reset on every
@@ -580,6 +589,7 @@ export default function DiscoverScreen() {
         );
         setApiCards(cards);
         setSwipesRemaining(res.swipesRemaining);
+        setSuperDraftsRemaining(res.superDraftsRemaining ?? null);
         setNextCursor(res.hasMore ? (res.nextCursor ?? null) : null);
         // Prefetch every card's image up front so browsing to neighbor cards is
         // instant (no per-card network wait). Only ~5-9 small images.
@@ -639,6 +649,8 @@ export default function DiscoverScreen() {
           return [...base, ...fresh];
         });
         setSwipesRemaining(res.swipesRemaining);
+        if (typeof res.superDraftsRemaining === "number")
+          setSuperDraftsRemaining(res.superDraftsRemaining);
         setNextCursor(res.hasMore ? (res.nextCursor ?? null) : null);
         const urls = (res.cards || [])
           .map((c: any) => c.imageUrl || c.photos?.[0])
@@ -773,6 +785,10 @@ export default function DiscoverScreen() {
 
   const handleSwipeRight = useCallback(() => {
     setSwipeLock(true);
+    // A Super Draft rides the same fly-up animation; the ref (set by
+    // triggerSuperDraft just before) tells us which kind this is.
+    const isSuper = superNextRef.current;
+    superNextRef.current = false;
     const cur = currentIndexRef.current;
     const current = discoverItems[cur];
     const name =
@@ -797,9 +813,11 @@ export default function DiscoverScreen() {
     if (targetId) {
       swipedIdsRef.current.add(targetId);
       discoverService
-        .swipe(targetId, "draft")
+        .swipe(targetId, "draft", isSuper)
         .then((res) => {
           setSwipesRemaining(res.swipesRemaining);
+          if (typeof res.superDraftsRemaining === "number")
+            setSuperDraftsRemaining(res.superDraftsRemaining);
           if (res.matched) {
             setMatchOverlay({
               visible: true,
@@ -810,9 +828,16 @@ export default function DiscoverScreen() {
             });
             successNotify();
           } else {
+            const left = res.superDraftsRemaining;
             setSnackbar({
               visible: true,
-              message: name ? `Drafted ${name}` : "Drafted",
+              message: isSuper
+                ? `Super Drafted ${name || "them"} ⭐${
+                    typeof left === "number" ? ` · ${left} left` : ""
+                  }`
+                : name
+                  ? `Drafted ${name}`
+                  : "Drafted",
               canUndo: true,
             });
           }
@@ -833,12 +858,23 @@ export default function DiscoverScreen() {
           // with no approved athlete link) — surfacing "upgrade for unlimited"
           // there would be flat-out wrong, so relay the server's reason.
           if (status === 429) {
-            setSwipesRemaining(0);
-            setSnackbar({
-              visible: true,
-              message: "Out of Drafts this month — upgrade for unlimited",
-              canUndo: false,
-            });
+            // Two separate allowances: a Super Draft 429 must not zero out the
+            // normal Draft counter (and vice-versa).
+            if (isSuper) {
+              setSuperDraftsRemaining(0);
+              setSnackbar({
+                visible: true,
+                message: "Out of Super Drafts this month — upgrade for more",
+                canUndo: false,
+              });
+            } else {
+              setSwipesRemaining(0);
+              setSnackbar({
+                visible: true,
+                message: "Out of Drafts this month — upgrade for unlimited",
+                canUndo: false,
+              });
+            }
             return;
           }
           if (status === 403) {
@@ -906,6 +942,23 @@ export default function DiscoverScreen() {
     if (swipeLock || pendingAction) return;
     setPendingAction("draft");
   }, [swipeLock, pendingAction]);
+
+  // Super Draft: out of Super Drafts → nudge to upgrade without consuming the
+  // card. Otherwise flag the next draft as super and fire the SAME draft
+  // animation, so it flies up and the shared handler sends isSuper.
+  const triggerSuperDraft = useCallback(() => {
+    if (swipeLock || pendingAction) return;
+    if (typeof superDraftsRemaining === "number" && superDraftsRemaining <= 0) {
+      setSnackbar({
+        visible: true,
+        message: "Out of Super Drafts this month — upgrade for more",
+        canUndo: false,
+      });
+      return;
+    }
+    superNextRef.current = true;
+    setPendingAction("draft");
+  }, [swipeLock, pendingAction, superDraftsRemaining]);
 
   // Out of monthly Drafts: a Draft is blocked (card snaps back) but passing
   // stays free. Surface the upgrade nudge without locking the deck.
@@ -1464,6 +1517,33 @@ export default function DiscoverScreen() {
                     color={brand.white}
                   />
                 </Pressable>
+                {/* Super Draft — the GetDraft logo (client request). Shown only
+                    when the backend reports a super allowance, so an older API
+                    never sees the button. Greyed + nudges to upgrade at 0. */}
+                {typeof superDraftsRemaining === "number" && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.circleButton,
+                      styles.superButton,
+                      {
+                        width: circleSize * 0.84,
+                        height: circleSize * 0.84,
+                        borderRadius: (circleSize * 0.84) / 2,
+                      },
+                      superDraftsRemaining <= 0 && styles.superButtonSpent,
+                      pressed && styles.pressed,
+                    ]}
+                    onPress={triggerSuperDraft}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Super Draft ${topCardName}, ${superDraftsRemaining} left`}
+                  >
+                    <ExpoImage
+                      source={require("@/assets/logo_white.png")}
+                      style={styles.superLogo}
+                      contentFit="contain"
+                    />
+                  </Pressable>
+                )}
                 <Pressable
                   style={({ pressed }) => [
                     styles.circleButton,
@@ -2100,6 +2180,21 @@ const styles = StyleSheet.create({
   },
   draftButton: {
     backgroundColor: semantic.success,
+  },
+  // Super Draft — GetDraft-gold with the white logo, sits between Pass and
+  // Draft. Spent state greys it so it reads as unavailable until next month.
+  superButton: {
+    backgroundColor: "#F5A623",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  superButtonSpent: {
+    backgroundColor: "#4A4A4A",
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  superLogo: {
+    width: "50%",
+    height: "50%",
   },
   pressed: {
     transform: [{ scale: 0.96 }],

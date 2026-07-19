@@ -62,6 +62,8 @@ describe('DiscoverService', () => {
         create: jest.fn().mockResolvedValue({}),
         findFirst: jest.fn().mockResolvedValue(null),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        // Super Draft monthly usage counter (getSuperDraftsRemaining).
+        count: jest.fn().mockResolvedValue(0),
       },
       blocks: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -182,6 +184,35 @@ describe('DiscoverService', () => {
         service.swipe(athleteUser, {
           targetUserId: 'rec-1',
           direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(HttpException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('records a Super Draft with is_super and returns a super count', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('pro', 0)); // unlimited normal
+      prisma.swipes.count.mockResolvedValue(0); // no Super Drafts used yet
+      const result = await service.swipe(athleteUser, {
+        targetUserId: 'rec-1',
+        direction: SwipeDirection.DRAFT,
+        isSuper: true,
+      });
+      expect(prisma.swipes.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ is_super: true }),
+        }),
+      );
+      expect(typeof result.superDraftsRemaining).toBe('number');
+    });
+
+    it('throws 429 when the monthly Super Draft limit is reached', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 0)); // normal Drafts fine
+      prisma.swipes.count.mockResolvedValue(1); // basic Super limit is 1 → none left
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.DRAFT,
+          isSuper: true,
         }),
       ).rejects.toThrow(HttpException);
       expect(prisma.swipes.create).not.toHaveBeenCalled();

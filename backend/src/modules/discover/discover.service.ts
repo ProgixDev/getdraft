@@ -18,6 +18,7 @@ import {
   SwipeDirection,
   PlanId,
   PLAN_SWIPE_LIMITS,
+  SUPER_DRAFT_LIMITS,
 } from '../../common/types';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -411,6 +412,7 @@ export class DiscoverService {
     // athlete's Draft allowance. Non-parents act as themselves.
     const actorId = await this.resolveActorId(user, false);
     const swipesRemaining = await this.getSwipesRemaining(actorId);
+    const superDraftsRemaining = await this.getSuperDraftsRemaining(actorId);
 
     // Role-targeted feed (client matrix): athletes — and parents on their
     // athlete's behalf — see coaches/agents; coaches and agents see athletes.
@@ -421,6 +423,7 @@ export class DiscoverService {
       offset,
       limit,
       swipesRemaining,
+      superDraftsRemaining,
     );
   }
 
@@ -495,6 +498,7 @@ export class DiscoverService {
     offset: number,
     limit: number,
     swipesRemaining: number,
+    superDraftsRemaining: number,
   ) {
     const excluded = await this.excludedUserIds(userId);
 
@@ -667,6 +671,7 @@ export class DiscoverService {
       cards,
       hasMore: users.length === limit,
       swipesRemaining,
+      superDraftsRemaining,
       nextCursor,
     };
   }
@@ -935,10 +940,25 @@ export class DiscoverService {
       throw new ForbiddenException('You cannot match with this user');
     }
 
-    // Passes are always free; only Drafts (right-swipes) consume the monthly
-    // allowance. Block a Draft only when its quota is exhausted — the 429 lets
-    // the client show the upgrade CTA (distinct from the 403 role/block paths).
-    if (dto.direction === SwipeDirection.DRAFT) {
+    // A Super Draft is a Draft with isSuper — a standout, always-capped action
+    // with its OWN monthly allowance. It never touches the normal Draft quota,
+    // so a user out of normal Drafts can still Super Draft (and vice-versa).
+    const isSuper =
+      dto.direction === SwipeDirection.DRAFT && dto.isSuper === true;
+
+    // Passes are always free; only Drafts (right-swipes) consume an allowance.
+    // Block when the relevant quota is exhausted — the 429 lets the client show
+    // the upgrade CTA (distinct from the 403 role/block paths). The two messages
+    // differ so the client can tell "out of Drafts" from "out of Super Drafts".
+    if (isSuper) {
+      const superLeft = await this.getSuperDraftsRemaining(actor.id);
+      if (superLeft <= 0) {
+        throw new HttpException(
+          'Out of Super Drafts this month. Upgrade for more Super Drafts.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    } else if (dto.direction === SwipeDirection.DRAFT) {
       const remaining = await this.getSwipesRemaining(actor.id);
       if (remaining === 0) {
         throw new HttpException(
@@ -954,6 +974,7 @@ export class DiscoverService {
           swiper_id: actor.id,
           swiped_id: dto.targetUserId,
           direction: dto.direction,
+          is_super: isSuper,
         },
       });
     } catch (e) {
@@ -963,10 +984,11 @@ export class DiscoverService {
       throw new BadRequestException((e as Error).message);
     }
 
-    // Only Drafts consume the monthly allowance (passes are free). Spend the
-    // plan quota first; if exhausted, dip into bonus_swipes (from swipe-packs).
+    // Only NORMAL Drafts consume the monthly allowance (passes are free; Super
+    // Drafts are metered separately by SUPER_DRAFT_LIMITS). Spend the plan quota
+    // first; if exhausted, dip into bonus_swipes (from swipe-packs).
     // swipes_used_today is reused as the month-to-date Draft counter.
-    if (dto.direction === SwipeDirection.DRAFT) {
+    if (dto.direction === SwipeDirection.DRAFT && !isSuper) {
       const subForSpend = await this.prisma.subscriptions.findUnique({
         where: { user_id: actor.id },
         select: {
@@ -1090,10 +1112,28 @@ export class DiscoverService {
           ),
         ]);
       }
+
+      // Super Draft that didn't instantly match: tell the recipient it stands
+      // out (a match already fires the louder "Game On!" push above, so don't
+      // double-notify). Best-effort; sendPushToUser swallows its own errors.
+      if (isSuper && !matched) {
+        const me = await this.prisma.public_users.findUnique({
+          where: { id: actor.id },
+          select: { name: true },
+        });
+        await this.notificationsService.sendPushToUser(
+          dto.targetUserId,
+          '⭐ Super Draft!',
+          `${me?.name ?? 'Someone'} super drafted you`,
+          { type: 'super_draft' },
+          'recruiterActivity',
+        );
+      }
     }
 
     const swipesRemaining = await this.getSwipesRemaining(actor.id);
-    return { matched, matchId, swipesRemaining };
+    const superDraftsRemaining = await this.getSuperDraftsRemaining(actor.id);
+    return { matched, matchId, swipesRemaining, superDraftsRemaining };
   }
 
   async myDrafts(user: CurrentUserPayload) {
@@ -1214,6 +1254,7 @@ export class DiscoverService {
       select: {
         swiped_id: true,
         created_at: true,
+        is_super: true,
         users_swipes_swiper_idTousers: {
           select: {
             id: true,
@@ -1224,13 +1265,15 @@ export class DiscoverService {
           },
         },
       },
-      orderBy: { created_at: 'desc' },
+      // Super Drafts float to the top of the list, then newest first.
+      orderBy: [{ is_super: 'desc' }, { created_at: 'desc' }],
       take: 50,
     });
 
     return rows.map((r) => ({
       swiped_id: r.swiped_id,
       created_at: r.created_at,
+      is_super: r.is_super,
       swiper: r.users_swipes_swiper_idTousers,
     }));
   }
@@ -1276,5 +1319,32 @@ export class DiscoverService {
 
     if (limit === -1) return UNLIMITED + bonus;
     return Math.max(0, limit - (sub.swipes_used_today ?? 0)) + bonus;
+  }
+
+  // Remaining SUPER DRAFTS this calendar month. Counted straight from the
+  // swipes table (is_super = true, created this month), so there's no counter
+  // column or reset job to keep in sync. Always capped by SUPER_DRAFT_LIMITS —
+  // never unlimited, even on paid plans (scarcity is the point).
+  private async getSuperDraftsRemaining(userId: string): Promise<number> {
+    const sub = await this.prisma.subscriptions.findUnique({
+      where: { user_id: userId },
+      select: { plan_id: true },
+    });
+    const limit =
+      SUPER_DRAFT_LIMITS[String(sub?.plan_id) as PlanId] ??
+      SUPER_DRAFT_LIMITS[PlanId.BASIC];
+
+    const now = new Date();
+    const monthStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const used = await this.prisma.swipes.count({
+      where: {
+        swiper_id: userId,
+        is_super: true,
+        created_at: { gte: monthStart },
+      },
+    });
+    return Math.max(0, limit - used);
   }
 }
