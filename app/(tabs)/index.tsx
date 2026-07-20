@@ -2154,7 +2154,12 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    // Without an explicit width + centering this row shrink-wrapped and sat
+    // hard-left while the hint row above spanned the full width — the buttons
+    // looked shoved into the left corner with dead space on the right.
+    width: "100%",
+    justifyContent: "center",
+    gap: 18,
     paddingTop: 4,
   },
   circleButton: {
