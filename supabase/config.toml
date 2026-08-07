@@ -426,3 +426,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # about bans, guardian activation and roles. One gate, not two.
 [functions.health]
 verify_jwt = false
+
+# Auth happens inside the handler (requireUser), not at the platform gate --
+# see the note on [functions.health].
+[functions.rankings]
+verify_jwt = false
