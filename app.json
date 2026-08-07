@@ -98,8 +98,8 @@
       "eas": {
         "projectId": "5caaadb2-fc65-404a-87ef-cca68dde9138"
       },
-      "supabaseUrl": "https://jzzsnputbvzxssbraetl.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6enNucHV0YnZ6eHNzYnJhZXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3ODg5MzUsImV4cCI6MjA5NjM2NDkzNX0.C-naQs22KGxDPQcBa7k5JLpozmhwEcEr6YX0fQpmecA",
+      "supabaseUrl": "https://icczjnsevyczfllsiamu.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljY3pqbnNldnljemZsbHNpYW11Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjM3ODcsImV4cCI6MjEwMTU5OTc4N30.Omk946JH6XmUKwXyPsd5w0NAH_bX57iGAcs17xGgqp0",
       "stripePublishableKey": "pk_live_51TkmbzAw76WJBP45otMLEZJK7fRguOEM2vNwf2KE0vIlssXk78LhcRCLsEHbJm1FgjPgZADOxjY4Nbj9FZJtY9IF00eehPGTmc"
     },
     "owner": "getdraftprogix"
