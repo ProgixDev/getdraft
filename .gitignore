@@ -67,3 +67,6 @@ app-example
 *firebase-adminsdk*.json
 firebase-admin-key.json
 landing/_build/shots/
+
+# Local DB connection strings for migration runs (never commit)
+.secrets/
