@@ -1,0 +1,58 @@
+# Keeps the Supabase project awake.
+#
+# Free-plan projects pause after ~7 days of inactivity. That is not a
+# theoretical risk here: it is exactly what happened to the previous
+# project -- it paused, Supabase withdrew its DNS, and every request in the
+# app failed with "fetch failed" until we cut over.
+#
+# A scheduled request every 10 minutes counts as activity, so the project
+# never idles out. Costs nothing: GitHub Actions is free for public repos
+# and this uses a few seconds of a runner per call on private ones.
+#
+# Caveat worth knowing: GitHub disables scheduled workflows after 60 days
+# with no commits to the repo. If this project goes quiet for two months,
+# re-enable it from the Actions tab -- or just push something.
+
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # lets you trigger it by hand to test
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the health function
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          # The health Edge Function queries Postgres, so a 200 proves the
+          # DATABASE is awake -- not merely that the API gateway answered.
+          # A check that does not touch its dependencies reports "up" while
+          # the database behind it is gone, which is the failure mode that
+          # cost us tonight.
+          code=$(curl -sS --max-time 30 -o /tmp/out.json -w '%{http_code}' \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/functions/v1/health")
+
+          echo "HTTP ${code}"
+          cat /tmp/out.json || true
+          echo
+
+          if [ "$code" != "200" ]; then
+            echo "::error::health check returned ${code}"
+            exit 1
+          fi
+
+          # 200 with db:"down" means the function is up but Postgres is not
+          # reachable -- still an outage, so fail loudly rather than green.
+          if ! grep -q '"db":"up"' /tmp/out.json; then
+            echo "::error::health reported the database as NOT up"
+            exit 1
+          fi

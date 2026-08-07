@@ -1,0 +1,79 @@
+# Nightly database backup.
+#
+# The Free plan includes NO backups -- Pro is where daily backups and
+# 7-day point-in-time recovery live. Until the project is upgraded this
+# workflow is the only thing standing between a bad DELETE and permanent
+# data loss.
+#
+# Be clear-eyed about what this is: a hand-rolled substitute for a managed
+# feature. It captures data, not point-in-time recovery, so the worst case
+# is losing up to 24 hours. That is a real gap, and the reason to move to
+# Pro before the app holds data anyone would miss.
+#
+# The dump is uploaded as a build artifact rather than committed to the
+# repo: a database dump contains every user's personal data, and git
+# history is forever. Artifacts expire, which is the correct behaviour for
+# a file full of minors' details.
+
+name: Supabase nightly backup
+
+on:
+  schedule:
+    - cron: '17 4 * * *' # 04:17 UTC -- off the hour, when runners are free
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # pg_dump must be >= the server version. The project runs Postgres 17
+    # and the ubuntu-latest image ships an older client, which would fail
+    # with a version mismatch, so run inside the matching image.
+    container: postgres:17-alpine
+
+    steps:
+      - name: Dump and compress
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set"
+            exit 1
+          fi
+
+          stamp=$(date -u +%Y-%m-%d)
+
+          # --no-owner / --no-privileges: restoring into a fresh Supabase
+          # project would otherwise fail on roles that do not exist there.
+          # Schemas: public holds the app; auth holds the accounts. Without
+          # auth, a restore gives you data with nobody able to log in.
+          pg_dump "${DATABASE_URL}" \
+            --no-owner --no-privileges \
+            --schema=public --schema=auth \
+            --format=plain \
+            | gzip -9 > "getdraft-${stamp}.sql.gz"
+
+          ls -lh "getdraft-${stamp}.sql.gz"
+
+          # A dump that is suspiciously small usually means it silently
+          # captured nothing. Fail rather than bank a useless backup.
+          size=$(stat -c%s "getdraft-${stamp}.sql.gz")
+          if [ "$size" -lt 2000 ]; then
+            echo "::error::dump is only ${size} bytes - almost certainly empty"
+            exit 1
+          fi
+
+          echo "stamp=${stamp}" >> "$GITHUB_ENV"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: getdraft-db-${{ env.stamp }}
+          path: getdraft-*.sql.gz
+          # ~30 daily backups retained. Long enough to notice corruption,
+          # short enough that personal data is not kept indefinitely.
+          retention-days: 30
+          if-no-files-found: error
