@@ -12,6 +12,7 @@ import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { CompleteSignupDto } from './dto/email-otp.dto';
 import { UserRole } from '../../common/types';
+import { writeAuthzClaims } from '../../common/utils/authz-claims';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
@@ -81,6 +82,61 @@ export class AuthService {
     }
   }
 
+  /**
+   * Rewrite public.users.role over service_role after an account is minted.
+   *
+   * handle_new_user() populates the column from app_metadata (migration
+   * 033), but the order in which GoTrue applies app_metadata relative to the
+   * auth.users INSERT is an implementation detail we must not depend on —
+   * and a role that silently lands as the 'athlete' default locks a coach or
+   * recruiter out of their entire side of the app. Idempotent; a no-op when
+   * the trigger already got it right.
+   */
+  private async ensureProfileRole(userId: string, role: UserRole) {
+    const admin = this.supabaseService.getAdminClient();
+    try {
+      const { error } = await admin
+        .from('users')
+        .update({ role })
+        .eq('id', userId);
+      if (error) {
+        this.logger.error(
+          `[signup] role reconcile failed for ${userId}: ${error.message}`,
+        );
+      }
+    } catch (err: any) {
+      this.logger.error(
+        `[signup] role reconcile threw for ${userId}: ${err?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Promote the chosen role into auth.users.app_metadata — the only copy
+   * JwtAuthGuard trusts (see common/utils/authz-claims.ts). Needed on the
+   * anon signUp path, which runs on the public key and therefore cannot
+   * write app_metadata itself.
+   *
+   * Best-effort by design: the DB row is written first, so a failure here
+   * degrades to the guard's authoritative public.users read, not to a wrong
+   * role. Throwing instead would strand a just-created account whose
+   * email/phone is now taken and can never be retried.
+   */
+  private async applyRoleClaim(userId: string, role: UserRole) {
+    await this.ensureProfileRole(userId, role);
+    const admin = this.supabaseService.getAdminClient();
+    const { error } = await writeAuthzClaims(admin, userId, {
+      role,
+      is_banned: false,
+      activation_status: 'active',
+    });
+    if (error) {
+      this.logger.error(
+        `[signup] role claim write failed for ${userId}: ${error.message}`,
+      );
+    }
+  }
+
   async signup(dto: SignupDto) {
     // Belt-and-braces — the DTO already rejects ADMIN, but a future change
     // to the validator must not silently re-open the privilege-escalation
@@ -94,8 +150,10 @@ export class AuthService {
       email: dto.email,
       password: dto.password,
       options: {
+        // Only non-authz values here: `data` lands in user_metadata, which
+        // the user can rewrite at will. The role is applied below over
+        // service_role instead.
         data: {
-          role: dto.role,
           name: dto.name,
         },
       },
@@ -104,6 +162,8 @@ export class AuthService {
     if (error) {
       throw new BadRequestException(error.message);
     }
+
+    await this.applyRoleClaim(data.user!.id, dto.role);
 
     return {
       user: {
@@ -404,12 +464,23 @@ export class AuthService {
       ? null
       : `phone-${contact.replace(/\D/g, '')}@phone.getdraft.local`;
 
+    // The authz claims go in app_metadata (service_role-only, and the only
+    // copy JwtAuthGuard trusts — see common/utils/authz-claims.ts); `name`
+    // stays in user_metadata, where handle_new_user() still reads it from.
+    // Seeding is_banned/activation_status with their public.users defaults
+    // keeps the guard on its metadata fast path from the first request.
+    const authzMeta = {
+      role: dto.role,
+      is_banned: false,
+      activation_status: 'active',
+    };
     const createPayload: any = isEmail
       ? {
           email: contact,
           password: dto.password,
           email_confirm: true,
-          user_metadata: { role: dto.role, name: dto.name ?? null },
+          user_metadata: { name: dto.name ?? null },
+          app_metadata: authzMeta,
         }
       : {
           phone: contact,
@@ -417,7 +488,8 @@ export class AuthService {
           password: dto.password,
           phone_confirm: true,
           email_confirm: true,
-          user_metadata: { role: dto.role, name: dto.name ?? null },
+          user_metadata: { name: dto.name ?? null },
+          app_metadata: authzMeta,
         };
 
     let created: any = null;
@@ -465,6 +537,8 @@ export class AuthService {
         );
       }
     }
+
+    await this.ensureProfileRole(created.user.id, dto.role);
 
     // Sign them in. For phone signups, use the synthetic email since
     // the phone-login provider may be disabled.

@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
 import { SupabaseService } from '../../config/supabase.config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { resolveAuthzClaims } from '../../common/utils/authz-claims';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -49,12 +50,26 @@ export class ChatGateway
         this.logger.warn(`WS handshake refused: invalid token (${socket.id})`);
         return next(new Error('invalid token'));
       }
-      // Mirror the REST jwt-auth guard's ban check (jwt-auth.guard.ts:52):
-      // a banned user must not be able to open a chat socket — otherwise
-      // they can still send messages and trigger pushes while banned.
-      if ((user.user_metadata as any)?.is_banned === true) {
-        this.logger.warn(`WS handshake refused: banned user (${socket.id})`);
-        return next(new Error('account suspended'));
+      // Mirror the REST jwt-auth guard's ban check: a banned user must not
+      // be able to open a chat socket — otherwise they can still send
+      // messages and trigger pushes while banned. The flag comes from
+      // app_metadata (service_role-only), never user_metadata, which the
+      // user can write themselves — see common/utils/authz-claims.ts.
+      try {
+        const claims = await resolveAuthzClaims(
+          this.supabaseService.getAdminClient(),
+          user,
+        );
+        if (claims.isBanned) {
+          this.logger.warn(`WS handshake refused: banned user (${socket.id})`);
+          return next(new Error('account suspended'));
+        }
+      } catch (err: any) {
+        // Unresolvable claims are a denial, same as the REST guard.
+        this.logger.warn(
+          `WS handshake refused: ${err?.message ?? 'claims unavailable'} (${socket.id})`,
+        );
+        return next(new Error('unauthorized'));
       }
       socket.data.userId = user.id;
       next();

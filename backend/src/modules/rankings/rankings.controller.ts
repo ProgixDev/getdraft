@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '../../common/types';
 import { RankingsService } from './rankings.service';
 import type { RankingDivision } from './rankings.service';
 
@@ -40,9 +41,15 @@ export class RankingsController {
 
   // Public-profile credibility chip — returns the ranking row for an
   // arbitrary user id (or null when the user isn't a ranked athlete).
+  // The viewer is passed through so the service can hand out the full row
+  // only to the athlete themselves.
   @Get('user/:id')
   @ApiOperation({ summary: "Ranking row for a specific user" })
-  getRankForUser(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.rankings.getRankForUser(id);
+  getRankForUser(
+    @CurrentUser('id') viewerId: string,
+    @CurrentUser('role') viewerRole: UserRole,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.rankings.getRankForUser(id, viewerId, viewerRole);
   }
 }

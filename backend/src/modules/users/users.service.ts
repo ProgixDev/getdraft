@@ -13,6 +13,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
 import { CurrentUserPayload, UserRole } from '../../common/types';
 import { isMinor } from '../../common/utils/age';
+import { writeAuthzClaims } from '../../common/utils/authz-claims';
 import {
   setActivationStatus,
   reevaluateMinorActivation,
@@ -81,13 +82,6 @@ export class UsersService {
   async updateMe(user: CurrentUserPayload, dto: UpdateUserDto) {
     const supabase = this.supabaseService.getAdminClient();
 
-    // If role is being changed (OAuth signup hits this right after the
-    // provider returns), we MUST mirror it onto auth.users.user_metadata.
-    // JwtAuthGuard reads `user_metadata.role` for every request, and
-    // RolesGuard checks against that — without this mirror an OAuth
-    // recruiter gets 403 on /outreach, and an OAuth parent isn't blocked
-    // from /discover/swipe. The public.users column is the authoritative
-    // app value; user_metadata is the JWT view of it.
     // preferences is a SHARED jsonb blob written by independent writers:
     // settings.tsx (5 toggle keys), OnboardingQuestionsScreen
     // (preferences.onboarding — "feeds the matching algorithm"), and
@@ -122,22 +116,23 @@ export class UsersService {
       if (dto.role === UserRole.ADMIN) {
         throw new ForbiddenException('The admin role cannot be self-assigned.');
       }
-      const { data: authUser, error: readErr } =
-        await supabase.auth.admin.getUserById(user.id);
-      if (readErr || !authUser?.user) {
-        throw new BadRequestException(
-          `Could not read auth user: ${readErr?.message ?? 'not found'}`,
-        );
-      }
-      // Merge so we don't clobber other metadata (name set at signup, etc).
-      const mergedMeta = {
-        ...(authUser.user.user_metadata ?? {}),
+      // Mirror onto auth.users.app_metadata, NOT user_metadata. OAuth signup
+      // hits this right after the provider returns, and onboarding hits it
+      // when the user picks a role — JwtAuthGuard resolves `role` from
+      // app_metadata and RolesGuard checks against that, so without this an
+      // OAuth recruiter gets 403 on /outreach and a parent isn't blocked
+      // from /discover/swipe.
+      //
+      // It must be app_metadata specifically, and it must happen even though
+      // the public.users column below is authoritative: resolveAuthzClaims
+      // short-circuits on the metadata copy as soon as all three claims are
+      // present, so writing only the column would leave the signup-time role
+      // winning forever (see common/utils/authz-claims.ts). user_metadata is
+      // also self-writable with the shipped anon key, so it can never hold
+      // an authz claim.
+      const { error: metaErr } = await writeAuthzClaims(supabase, user.id, {
         role: dto.role,
-      };
-      const { error: metaErr } = await supabase.auth.admin.updateUserById(
-        user.id,
-        { user_metadata: mergedMeta },
-      );
+      });
       if (metaErr) {
         throw new BadRequestException(
           `Could not update auth metadata: ${metaErr.message}`,

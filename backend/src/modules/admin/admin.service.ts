@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { writeAuthzClaims } from '../../common/utils/authz-claims';
 
 @Injectable()
 export class AdminService {
@@ -85,18 +86,13 @@ export class AdminService {
 
     // Flipping the column alone left a banned user with full API access:
     // no guard read is_banned, and their existing JWT stayed valid. Mirror
-    // the flag into auth.users.user_metadata so JwtAuthGuard rejects it on
+    // the flag into auth.users.app_metadata so JwtAuthGuard rejects it on
     // the next request, AND revoke every active session so the current
     // token dies immediately (a banned user can't keep using a live token).
+    // app_metadata, not user_metadata — the user can write the latter
+    // themselves and would just un-ban themselves (authz-claims.ts).
     try {
-      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
-      const mergedMeta = {
-        ...(authUser?.user?.user_metadata ?? {}),
-        is_banned: true,
-      };
-      await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: mergedMeta,
-      });
+      await writeAuthzClaims(supabase, userId, { is_banned: true });
       await supabase.auth.admin.signOut(userId, 'global');
     } catch {
       // Best-effort: the DB flag + guard check still apply on next login.
@@ -122,17 +118,11 @@ export class AdminService {
     // Mirror of banUser: clear the JWT-side flag so JwtAuthGuard accepts
     // the next request again. We don't sign existing sessions in — the
     // user has to log in again to get a fresh token (banUser revoked
-    // every session, so they have none).
+    // every session, so they have none). Write `false` rather than
+    // deleting the key: an absent claim sends the guard down its
+    // legacy-account DB fallback on every request until it repairs itself.
     try {
-      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
-      const meta = { ...(authUser?.user?.user_metadata ?? {}) } as Record<
-        string,
-        unknown
-      >;
-      delete meta.is_banned;
-      await supabase.auth.admin.updateUserById(userId, {
-        user_metadata: meta,
-      });
+      await writeAuthzClaims(supabase, userId, { is_banned: false });
     } catch {
       // DB flag is authoritative; metadata mirror is a refresh on next login.
     }

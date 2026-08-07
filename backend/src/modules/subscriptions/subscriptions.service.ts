@@ -186,14 +186,19 @@ export class SubscriptionsService {
       };
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    if (data.swipes_reset_at !== today) {
-      await supabase
-        .from('subscriptions')
-        .update({ swipes_used_today: 0, swipes_reset_at: today })
-        .eq('user_id', userId);
+    // Drafts are a MONTHLY allowance (PLAN_SWIPE_LIMITS) and the persisted
+    // reset is owned by DiscoverService.getSwipesRemaining, which zeroes the
+    // counter on the first read of a new YYYY-MM. This path used to run its
+    // own DAILY reset *and write it back*, so a free user who opened the plan
+    // screen once a day got a fresh 20 Drafts every day. Project the stale
+    // counter for display only — no write, so there stays exactly one reset.
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const resetMonth =
+      typeof data.swipes_reset_at === 'string'
+        ? data.swipes_reset_at.slice(0, 7)
+        : null;
+    if (resetMonth !== currentMonth) {
       data.swipes_used_today = 0;
-      data.swipes_reset_at = today;
     }
 
     // We don't store cancel_at_period_end in the DB (no column for it),
@@ -789,25 +794,55 @@ export class SubscriptionsService {
       return false;
     }
 
-    const { data: sub } = await supabase
-      .from('subscriptions')
-      .select('bonus_swipes')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (!sub) {
-      await supabase.from('subscriptions').insert({
-        user_id: userId,
-        plan_id: PlanId.BASIC,
-        status: 'active',
-        daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
-        bonus_swipes: swipes,
-      });
-    } else {
-      await supabase
+    // Lost-update guard. Two credits for DIFFERENT intents can run at the
+    // same time (webhook + confirm-on-return, or two packs bought back to
+    // back): both read the old bonus_swipes and the second write erases the
+    // first purchase — paid-for swipes vanish. PostgREST can't express
+    // `bonus_swipes = bonus_swipes + n`, so compare-and-swap instead: the
+    // UPDATE only matches while the value we read is still the current one,
+    // and Postgres re-checks that predicate after the other writer commits.
+    let credited = false;
+    for (let attempt = 0; attempt < 3 && !credited; attempt++) {
+      const { data: sub } = await supabase
         .from('subscriptions')
-        .update({ bonus_swipes: (sub.bonus_swipes ?? 0) + swipes })
-        .eq('user_id', userId);
+        .select('bonus_swipes')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!sub) {
+        const { error: insertErr } = await supabase
+          .from('subscriptions')
+          .insert({
+            user_id: userId,
+            plan_id: PlanId.BASIC,
+            status: 'active',
+            daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
+            bonus_swipes: swipes,
+          });
+        // user_id is UNIQUE — if a concurrent credit created the row first
+        // we must add to it, not overwrite it, so loop round and retry.
+        credited = !insertErr;
+        continue;
+      }
+
+      const prior = sub.bonus_swipes ?? 0;
+      const { data: bumped } = await supabase
+        .from('subscriptions')
+        .update({ bonus_swipes: prior + swipes })
+        .eq('user_id', userId)
+        .eq('bonus_swipes', prior)
+        .select('id')
+        .maybeSingle();
+      credited = !!bumped;
+    }
+
+    if (!credited) {
+      // The audit row is already flipped to succeeded, so nothing will retry
+      // this: the user has paid. Log loudly enough to reconcile by hand.
+      this.logger.error(
+        `swipe_pack ${intent.id}: PAID but bonus_swipes not credited for user ${userId} (+${swipes}) — needs manual credit`,
+      );
+      return false;
     }
 
     this.logger.log(

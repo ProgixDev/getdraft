@@ -37,7 +37,14 @@ describe('AuthService', () => {
   const mockAdminClient: any = {
     from: jest.fn(),
     auth: {
-      admin: { signOut: jest.fn(), updateUserById: jest.fn() },
+      admin: {
+        signOut: jest.fn(),
+        updateUserById: jest.fn(),
+        // Was missing, so applyRoleClaim threw "getUserById is not a
+        // function", its catch swallowed it, and the suite stayed green
+        // while proving nothing about the role claim. Stub it properly.
+        getUserById: jest.fn(),
+      },
     },
   };
 
@@ -62,8 +69,40 @@ describe('AuthService', () => {
     });
   };
 
+  /**
+   * .from() stub covering BOTH shapes the signup path uses: the profile
+   * lookup (.select().eq().maybeSingle()) and ensureProfileRole's
+   * .update().eq(). Returns the update spy so tests can assert the role
+   * actually reached public.users.
+   */
+  const mockAdminTable = (row: any = null) => {
+    const updateEq = jest.fn().mockResolvedValue({ error: null });
+    const update = jest.fn().mockReturnValue({ eq: updateEq });
+    mockAdminClient.from.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
+          maybeSingle: jest.fn().mockResolvedValue({ data: row, error: null }),
+          single: jest.fn().mockResolvedValue({ data: row, error: null }),
+        }),
+      }),
+      update,
+    });
+    return { update, updateEq };
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    // GoTrue owns provider/providers inside app_metadata; keep one here so
+    // the merge-not-clobber behaviour is exercised rather than assumed.
+    mockAdminClient.auth.admin.getUserById.mockResolvedValue({
+      data: { user: { id: 'user-1', app_metadata: { provider: 'email' } } },
+      error: null,
+    });
+    mockAdminClient.auth.admin.updateUserById.mockResolvedValue({
+      data: {},
+      error: null,
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -112,6 +151,8 @@ describe('AuthService', () => {
         error: null,
       });
 
+      mockAdminTable();
+
       const result = await service.signup({
         email: 'test@example.com',
         password: 'Password123!',
@@ -125,6 +166,78 @@ describe('AuthService', () => {
       expect(result.isOnboarded).toBe(false);
       expect(result.accessToken).toBe('access-token');
       expect(result.refreshToken).toBe('refresh-token');
+    });
+
+    it('puts the role in app_metadata and never in user_metadata', async () => {
+      mockClient.auth.signUp.mockResolvedValue({
+        data: {
+          user: { id: 'user-1', email: 'coach@example.com' },
+          session: { access_token: 'a', refresh_token: 'r' },
+        },
+        error: null,
+      });
+      const { update, updateEq } = mockAdminTable();
+
+      await service.signup({
+        email: 'coach@example.com',
+        password: 'Password123!',
+        role: UserRole.COACH,
+        name: 'Coach',
+      });
+
+      // user_metadata is self-writable with the anon key that ships inside
+      // the APK, so an authz claim must never be sent there — that was the
+      // privilege-escalation hole (signUp({ data: { role: 'admin' } })).
+      const signUpArg = mockClient.auth.signUp.mock.calls[0][0];
+      expect(signUpArg.options.data).toEqual({ name: 'Coach' });
+
+      // It goes to app_metadata (service_role-only) instead, merged over
+      // GoTrue's own provider key rather than clobbering it.
+      expect(mockAdminClient.auth.admin.updateUserById).toHaveBeenCalledTimes(
+        1,
+      );
+      const [id, payload] =
+        mockAdminClient.auth.admin.updateUserById.mock.calls[0];
+      expect(id).toBe('user-1');
+      expect(payload.app_metadata).toEqual({
+        provider: 'email',
+        role: UserRole.COACH,
+        is_banned: false,
+        activation_status: 'active',
+      });
+      expect(payload.user_metadata).toBeUndefined();
+
+      // ...and the authoritative column is reconciled too, so the guard's
+      // fallback path agrees with the claim.
+      expect(update).toHaveBeenCalledWith({ role: UserRole.COACH });
+      expect(updateEq).toHaveBeenCalledWith('id', 'user-1');
+    });
+
+    it('still returns the account when the claim write fails', async () => {
+      mockClient.auth.signUp.mockResolvedValue({
+        data: {
+          user: { id: 'user-1', email: 'test@example.com' },
+          session: { access_token: 'a', refresh_token: 'r' },
+        },
+        error: null,
+      });
+      mockAdminTable();
+      mockAdminClient.auth.admin.updateUserById.mockResolvedValue({
+        data: null,
+        error: { message: 'gotrue unavailable' },
+      });
+
+      // The email is taken the moment signUp succeeds, so this can never be
+      // retried. A failed mirror must degrade to the guard's public.users
+      // fallback (written by ensureProfileRole), not strand the account.
+      await expect(
+        service.signup({
+          email: 'test@example.com',
+          password: 'Password123!',
+          role: UserRole.ATHLETE,
+          name: 'Test User',
+        }),
+      ).resolves.toMatchObject({ user: { id: 'user-1' } });
     });
 
     it('should throw BadRequestException on signup error', async () => {

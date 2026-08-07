@@ -14,8 +14,10 @@ import { ALLOW_PENDING_KEY } from '../decorators/allow-pending.decorator';
  * feature endpoint. Server-side counterpart to the client route-guard —
  * hiding the UI is not enough; the API must refuse too.
  *
- * Runs AFTER JwtAuthGuard (which surfaces `activationStatus` onto
- * request.user from the JWT's user_metadata). Public routes and routes
+ * Runs AFTER JwtAuthGuard, which resolves `activationStatus` onto
+ * request.user from app_metadata (service_role-only — never user_metadata,
+ * which a minor could rewrite to activate themselves; see
+ * common/utils/authz-claims.ts). Public routes and routes
  * explicitly marked @AllowPending() (read-self, guardian QR, KYC) pass
  * through so the minor can actually complete activation.
  */

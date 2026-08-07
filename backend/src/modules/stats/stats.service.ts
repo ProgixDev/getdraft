@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { UserRole } from '../../common/types';
 
 @Injectable()
 export class StatsService {
@@ -103,14 +104,32 @@ export class StatsService {
     };
   }
 
-  async getProfileStats(userId: string) {
+  /**
+   * Counters behind the profile stats bar.
+   *
+   * Only the athlete's own bar is public (Profile Views / Drafts / Matches on
+   * app/user/[userId].tsx) — everything else here is private. This used to
+   * answer for ANY id, which let a caller enumerate view and match counts for
+   * coaches, recruiters and parents, who surface them nowhere.
+   */
+  async getProfileStats(userId: string, viewerId: string, viewerRole: UserRole) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: user } = await supabase
       .from('users')
-      .select('role')
+      .select('role, is_banned, preferences')
       .eq('id', userId)
       .maybeSingle();
+
+    const isOwnerOrAdmin = viewerId === userId || viewerRole === UserRole.ADMIN;
+    if (!isOwnerOrAdmin) {
+      // Mirrors discover.service: the flag lives in free-form JSONB, so
+      // ABSENT must mean visible; only an explicit `false` hides.
+      const hidden = (user?.preferences as any)?.profileVisible === false;
+      if (user?.role !== 'athlete' || user.is_banned || hidden) {
+        throw new ForbiddenException('Not allowed to view these stats.');
+      }
+    }
 
     const { count: matchCount } = await supabase
       .from('matches')
@@ -130,15 +149,24 @@ export class StatsService {
         .eq('user_id', userId)
         .maybeSingle();
 
-      return {
+      const publicBar = {
         role: user.role,
         profileViews: profile?.profile_views ?? viewCount ?? 0,
         likesReceived: profile?.likes_received ?? 0,
-        profileCompletion: profile?.profile_completion ?? 0,
         totalMatches: matchCount ?? 0,
+      };
+      // profileCompletion is an onboarding nudge for the athlete, not a
+      // public credential — it tells a stranger how much of a minor's
+      // profile is still blank.
+      if (!isOwnerOrAdmin) return publicBar;
+      return {
+        ...publicBar,
+        profileCompletion: profile?.profile_completion ?? 0,
       };
     }
 
+    // Non-athlete (or missing) target — only reachable for self/admin, since
+    // the check above already rejected everyone else.
     return {
       role: user?.role ?? null,
       profileViews: viewCount ?? 0,

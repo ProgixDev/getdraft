@@ -7,12 +7,20 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { CurrentUserPayload, UserRole } from '../types';
+import { CurrentUserPayload } from '../types';
+import { resolveAuthzClaims } from '../utils/authz-claims';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  /**
+   * Service-role client used only to resolve authz claims for accounts that
+   * predate app_metadata. Built lazily and cached — the guard is a
+   * singleton (APP_GUARD), so this is one client for the whole process.
+   */
+  private adminClient: SupabaseClient | null = null;
+
   constructor(
     private reflector: Reflector,
     private configService: ConfigService,
@@ -46,24 +54,25 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid or expired token');
       }
 
-      // Banned users are mirrored into user_metadata by AdminService.banUser
-      // (which also revokes their sessions). Reject here so a banned user who
-      // logs back in still can't reach any endpoint.
-      if (user.user_metadata?.is_banned === true) {
+      // role / is_banned / activation_status come from app_metadata, which
+      // only the service_role key can write. They used to be read from
+      // user_metadata — self-writable with the anon key that ships in the
+      // APK, i.e. any user could grant themselves admin, lift their own ban,
+      // or activate a minor still waiting on guardian consent. A claim set
+      // we can't resolve is a denial (the catch below turns it into a 401).
+      const claims = await resolveAuthzClaims(this.getAdminClient(), user);
+
+      // AdminService.banUser writes the flag and revokes every session, so a
+      // banned user who logs back in still can't reach any endpoint.
+      if (claims.isBanned) {
         throw new ForbiddenException('This account has been suspended.');
       }
 
       const currentUser: CurrentUserPayload = {
         id: user.id,
         email: user.email!,
-        role: (user.user_metadata?.role as UserRole) || UserRole.ATHLETE,
-        // Mirrored from user_metadata so ActivationGuard can gate without a
-        // DB read. Anything other than 'pending_guardian' is treated as
-        // active (covers all existing accounts minted before migration 022).
-        activationStatus:
-          user.user_metadata?.activation_status === 'pending_guardian'
-            ? 'pending_guardian'
-            : 'active',
+        role: claims.role,
+        activationStatus: claims.activationStatus,
       };
 
       request.user = currentUser;
@@ -72,6 +81,16 @@ export class JwtAuthGuard implements CanActivate {
       if (err instanceof UnauthorizedException) throw err;
       throw new UnauthorizedException('Invalid or expired token');
     }
+  }
+
+  private getAdminClient(): SupabaseClient {
+    if (!this.adminClient) {
+      this.adminClient = createClient(
+        this.configService.get<string>('SUPABASE_URL')!,
+        this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY')!,
+      );
+    }
+    return this.adminClient;
   }
 
   private extractToken(request: any): string | null {

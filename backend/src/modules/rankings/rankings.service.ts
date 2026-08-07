@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { UserRole } from '../../common/types';
 
 export type RankingDivision = 'CA' | 'US' | 'OTHER';
 
@@ -26,6 +27,24 @@ export interface RankingRow {
   cohort_size: number;
 }
 
+/**
+ * What a third party may see of someone else's ranking row: exactly what the
+ * public profile's credibility chip renders (standing + the score it is
+ * derived from). The raw counters the score is built from stay private, and
+ * `kyc_status` — identity-verification state on a platform full of minors —
+ * never leaves the owner's own responses.
+ */
+export type PublicRankingRow = Omit<
+  RankingRow,
+  | 'kyc_status'
+  | 'drafts_received'
+  | 'matches_count'
+  | 'outreach_received'
+  | 'profile_views'
+  | 'likes_received'
+  | 'profile_completion'
+>;
+
 const VIEW = 'athlete_ranking_scores';
 
 @Injectable()
@@ -50,6 +69,17 @@ export class RankingsService {
     return (data ?? [])
       .filter((u: any) => u?.preferences?.profileVisible === false)
       .map((u: any) => u.id as string);
+  }
+
+  /** Single-user form of {@link hiddenAthleteIds}, same absent-means-visible rule. */
+  private async isHiddenAthlete(userId: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data } = await supabase
+      .from('users')
+      .select('preferences')
+      .eq('id', userId)
+      .maybeSingle();
+    return (data as any)?.preferences?.profileVisible === false;
   }
 
   /**
@@ -113,15 +143,52 @@ export class RankingsService {
    * athlete (no athlete profile / not role athlete / banned).
    */
   async getMyRank(userId: string): Promise<RankingRow | null> {
-    return this.getRankForUser(userId);
+    return this.fetchRow(userId);
   }
 
   /**
    * Ranking row for an arbitrary user id — used by the public profile to
    * render a credibility chip. Returns null when the user is not a ranked
    * athlete; callers should hide the chip in that case.
+   *
+   * Anyone other than the athlete (and admins) gets the narrowed
+   * {@link PublicRankingRow}: the chip only needs standing + score, so
+   * shipping the whole view row also handed out every engagement counter and
+   * the athlete's KYC state for any id the caller cared to type.
    */
-  async getRankForUser(userId: string): Promise<RankingRow | null> {
+  async getRankForUser(
+    userId: string,
+    viewerId: string,
+    viewerRole: UserRole,
+  ): Promise<RankingRow | PublicRankingRow | null> {
+    const row = await this.fetchRow(userId);
+    if (!row) return null;
+    if (viewerId === userId || viewerRole === UserRole.ADMIN) return row;
+
+    // Same "Profile Visible" contract as the leaderboard: an athlete who
+    // opted out isn't ranked publicly, so the chip disappears for everyone
+    // but themselves.
+    if (await this.isHiddenAthlete(userId)) return null;
+
+    // Allow-list, not a delete-list — a future column added to the view is
+    // then private by default rather than leaking until someone notices.
+    return {
+      user_id: row.user_id,
+      name: row.name,
+      avatar_url: row.avatar_url,
+      country: row.country,
+      sport: row.sport,
+      position: row.position,
+      level: row.level,
+      class_year: row.class_year,
+      division: row.division,
+      score: row.score,
+      division_rank: row.division_rank,
+      cohort_size: row.cohort_size,
+    };
+  }
+
+  private async fetchRow(userId: string): Promise<RankingRow | null> {
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from(VIEW)

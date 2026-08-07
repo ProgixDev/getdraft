@@ -1,16 +1,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isMinor } from './age';
+// authz-claims imports ActivationStatus back from here, but only as a
+// `import type` — erased at compile time, so there is no runtime cycle.
+import { writeAuthzClaims } from './authz-claims';
 
 export type ActivationStatus = 'active' | 'pending_guardian';
 
 /**
  * Set a user's activation_status on public.users AND mirror it into
- * auth.users.user_metadata.
+ * auth.users.app_metadata.
  *
- * JwtAuthGuard reads `user_metadata` on every request, so mirroring here
+ * JwtAuthGuard reads `app_metadata` on every request, so mirroring here
  * means the ActivationGuard sees the new value on the very next request
- * without a DB round-trip. This intentionally follows the same
- * role-mirror pattern already used in UsersService.updateMe().
+ * without a DB round-trip. It must be app_metadata and not user_metadata:
+ * the latter is self-writable with the shipped anon key, which would let a
+ * minor mark their own account 'active' and skip guardian consent
+ * (see common/utils/authz-claims.ts).
  *
  * Pass the SERVICE-ROLE (admin) Supabase client — auth.admin.* requires it.
  */
@@ -30,17 +35,12 @@ export async function setActivationStatus(
     throw new Error(`activation_status update failed: ${updErr.message}`);
   }
 
-  const { data: authUser, error: getErr } =
-    await admin.auth.admin.getUserById(userId);
-  if (getErr) {
-    throw new Error(`activation metadata read failed: ${getErr.message}`);
-  }
-  const mergedMeta = {
-    ...(authUser?.user?.user_metadata ?? {}),
+  // writeAuthzClaims merges, so this doesn't drop the other two claims or
+  // GoTrue's own 'provider'/'providers' keys. Guardian consent is a hard
+  // gate, so a failed mirror fails loudly rather than leaving a minor
+  // half-activated.
+  const { error: metaErr } = await writeAuthzClaims(admin, userId, {
     activation_status: status,
-  };
-  const { error: metaErr } = await admin.auth.admin.updateUserById(userId, {
-    user_metadata: mergedMeta,
   });
   if (metaErr) {
     throw new Error(`activation metadata write failed: ${metaErr.message}`);
