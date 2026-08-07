@@ -411,3 +411,18 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# --------------------------------------------------------------------
+# Edge Functions
+# --------------------------------------------------------------------
+# verify_jwt is Supabase's platform-level gate: when true it rejects any
+# request without a valid JWT BEFORE our code runs. That is wrong for
+# nearly every function here, because each one serves a NestJS module with
+# a MIX of public and authenticated routes -- login and signup must be
+# reachable without a session, exactly as @Public() marks them today.
+#
+# So it stays false and authentication is done inside the handler via
+# _shared/auth.ts requireUser(), which is also the only layer that knows
+# about bans, guardian activation and roles. One gate, not two.
+[functions.health]
+verify_jwt = false
