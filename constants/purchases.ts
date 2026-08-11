@@ -1,38 +1,45 @@
-import { Platform } from 'react-native';
-
 /**
- * Whether this build may sell digital goods inside the app.
+ * Whether the app may sell digital goods in-app.
  *
- * FALSE on Android, deliberately.
+ * Currently TRUE on every platform: Android ships with the Stripe
+ * PaymentSheet exactly as iOS and web do.
  *
- * Google Play's Payments policy requires digital goods -- subscription plans
- * and Draft packs both qualify -- to be sold through Google Play Billing.
- * This app charges with Stripe's native PaymentSheet, which is a fully
- * in-app third-party purchase flow, not a link-out. That is the case the
- * policy is aimed squarely at: grounds for rejection at review, and grounds
- * for removal if it slips through, which is considerably worse than being
- * rejected.
+ * ------------------------------------------------------------------
+ * KNOWN RISK — read before changing this
+ * ------------------------------------------------------------------
+ * Subscription plans and Draft packs are digital goods, and this app
+ * charges for them with Stripe's native PaymentSheet: a complete
+ * third-party purchase flow running inside the app, not a link-out.
+ * Google Play's Payments policy requires digital goods to go through
+ * Google Play Billing, and Apple's equivalent requires StoreKit.
  *
- * The alternative was integrating Play Billing before launch: one to two
- * weeks of work plus roughly 15% of subscription revenue, and a second
- * source of truth for entitlements to keep in sync with Stripe. Shipping
- * Android without a purchase surface costs neither, and the web upgrade path
- * already exists.
+ * So this is a deliberate, informed risk, not an oversight. The possible
+ * outcomes are rejection at review, or -- worse -- approval followed by
+ * removal later, once the app has real users.
  *
- * What the Android build still does:
- *   - shows every plan and its features, so users know what is on offer
- *   - shows the current plan, renewal date and status
- *   - lets an existing subscriber cancel or resume -- MANAGING a
- *     subscription is not SELLING one, and Play does not restrict it
+ * Worth noting the ground has been moving: the Epic v. Google injunction
+ * and the EU DMA have forced both stores to permit alternative payment in
+ * some jurisdictions. Whether that covers this app's markets was not
+ * confirmed. If the listing is rejected on payments, check the current
+ * policy before assuming this flag is the cause.
  *
- * What it does not do: any button that starts a purchase.
+ * ------------------------------------------------------------------
+ * IF A STORE REJECTS THE APP OVER PAYMENTS
+ * ------------------------------------------------------------------
+ * Set this to `Platform.OS === 'web'` (or false) and resubmit. That
+ * hides every purchase entry point while leaving plans visible and
+ * cancel/resume working, which is compliant — managing an existing
+ * subscription is not selling one. Users then upgrade on the web.
  *
- * Note there is deliberately no "upgrade on our website" link either. The
- * policy restricts STEERING users toward an external payment flow, not just
- * processing the payment in-app, so a helpful link here would reintroduce
- * the exact problem this flag exists to avoid.
+ * The gating is already wired up and was tested working:
+ *   - app/subscription.tsx  — per-plan "Upgrade" buttons, "Buy more Drafts"
+ *   - app/buy-swipes.tsx    — redirects out, so a deep link cannot reach
+ *                             the Stripe sheet
  *
- * Revisit when: Play Billing is integrated, or the policy position on
- * external payments changes in the markets this ships to.
+ * Nothing else needs to change; it is one line here.
+ *
+ * The other route is integrating Play Billing / StoreKit properly: one to
+ * two weeks, ~15% of subscription revenue, and a second source of truth
+ * for entitlements to reconcile against Stripe.
  */
-export const PURCHASES_ENABLED = Platform.OS !== 'android';
+export const PURCHASES_ENABLED = true;
