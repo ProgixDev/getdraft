@@ -22,6 +22,7 @@ import {
 import { brand, semantic, theme } from '@/config/colors';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
+import { PURCHASES_ENABLED } from '@/constants/purchases';
 
 interface SwipePack {
   id: string;
@@ -49,6 +50,14 @@ export default function BuySwipesScreen() {
   // Draft packs — deep links bounce them home (focus-based, same pattern
   // as the role-gated tabs).
   const redirecting = useRoleHomeRedirect(['athlete', 'coach', 'recruiter']);
+
+  // Draft packs are digital goods, so on Android this screen must be
+  // UNREACHABLE, not merely unlinked — a deep link or a stale back-stack
+  // entry would otherwise open a Stripe PaymentSheet inside a Play build.
+  // See constants/purchases.ts.
+  useEffect(() => {
+    if (!PURCHASES_ENABLED) router.replace('/subscription');
+  }, [router]);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,

@@ -20,6 +20,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
+import { PURCHASES_ENABLED } from '@/constants/purchases';
 import { plans } from '@/constants/plansData';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
@@ -354,7 +355,7 @@ export default function SubscriptionScreen() {
                   ))}
                 </View>
 
-                {!isCurrent && plan.id !== 'basic' && (
+                {PURCHASES_ENABLED && !isCurrent && plan.id !== 'basic' && (
                   <Pressable
                     style={[
                       styles.upgradeButton,
@@ -384,7 +385,10 @@ export default function SubscriptionScreen() {
             );
           })}
 
-          {/* Buy more Drafts — always shown so free users can top up too. */}
+          {/* Buy more Drafts — shown to free users too, but never on Android:
+              Draft packs are digital goods and Play requires its own billing
+              for those (constants/purchases.ts). */}
+          {PURCHASES_ENABLED && (
           <Pressable
             style={[styles.swipePackButton, pendingAction !== null && styles.upgradeButtonDisabled]}
             onPress={goToBuySwipes}
@@ -393,8 +397,13 @@ export default function SubscriptionScreen() {
             <Ionicons name="add-circle-outline" size={18} color={theme.accentText} />
             <Text style={styles.swipePackButtonText}>Buy more Drafts</Text>
           </Pressable>
+          )}
 
-          {/* Cancel / resume (paid plans only) */}
+          {/* Cancel / resume (paid plans only). Intentionally NOT gated on
+              PURCHASES_ENABLED — managing an existing subscription is not
+              selling one, and Play does not restrict it. Removing it would
+              strand an Android user who subscribed on the web with no way to
+              cancel from the app. */}
           {showManage && apiSub?.cancel_at_period_end ? (
             <Pressable
               style={[styles.resumeButton, pendingAction !== null && styles.upgradeButtonDisabled]}
