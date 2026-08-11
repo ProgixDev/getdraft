@@ -582,26 +582,19 @@ export class AuthService {
 
   async requestPhoneOtp(phone: string, channel: VerifyChannel): Promise<{ message: string }> {
     const normalized = phone.trim();
-    const isTest = this.testPhones().has(normalized);
 
     // Existing-user phones receive the OTP too — verifyPhoneOtp signs
     // them straight in (login mode). The response message is identical
     // either way, so the endpoint still doesn't leak which numbers are
     // registered.
-
-    // TEST_PHONES bypass: skip Prelude entirely; verifyPhoneOtp accepts the
-    // fixed code 000000 for these numbers. Honored in ALL environments, but
-    // ONLY for numbers explicitly allowlisted via the TEST_PHONES env var —
-    // internal QA (some carriers filter international OTP SMS with fake
-    // delivery receipts) and store-review demo accounts. The destructive
-    // account-purge behavior remains dev-only regardless.
-    if (isTest) {
-      this.logger.log(
-        `[test-phone] Prelude bypassed for ${normalized} — use code 000000`,
-      );
-      return { message: 'A code has been sent.' };
-    }
-
+    //
+    // There is deliberately NO test-phone bypass here any more. It used to
+    // skip the provider and accept the fixed code 000000 for allowlisted
+    // numbers, "honored in ALL environments" — which meant anyone who knew
+    // an allowlisted number could authenticate as it without ever receiving
+    // an SMS. Test numbers are now configured provider-side instead
+    // (Prelude dashboard → Verify API → Configure → Numbers), which
+    // exercises the real code path and keeps the bypass out of the app.
     await this.preludeService.startVerification(normalized, channel);
     return { message: 'A code has been sent.' };
   }
@@ -616,19 +609,12 @@ export class AuthService {
    */
   async verifyPhoneOtp(phone: string, code: string) {
     const normalized = phone.trim();
-    const isTest = this.testPhones().has(normalized);
 
-    if (isTest) {
-      // Allowlisted test phone — pairs with the Prelude skip in
-      // requestPhoneOtp (fixed code, all environments).
-      if (code !== '000000') {
-        throw new BadRequestException('Incorrect or expired code.');
-      }
-    } else {
-      const approved = await this.preludeService.checkVerification(normalized, code);
-      if (!approved) {
-        throw new BadRequestException('Incorrect or expired code.');
-      }
+    // Every number goes through the provider — see requestPhoneOtp for why
+    // the fixed-code bypass was removed.
+    const approved = await this.preludeService.checkVerification(normalized, code);
+    if (!approved) {
+      throw new BadRequestException('Incorrect or expired code.');
     }
 
     const authUser = await this.findAuthUserByPhone(normalized);
