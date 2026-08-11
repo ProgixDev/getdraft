@@ -21,7 +21,7 @@ export class SignupOtpService {
 
   /**
    * Persist (or replace) the OTP for this contact. Returns nothing — the
-   * code itself is sent out-of-band by the caller (MailService / Twilio).
+   * code itself is sent out-of-band by the caller (MailService / Prelude).
    */
   async upsert(contact: string, contactType: ContactType, code: string): Promise<void> {
     const supabase = this.supabaseService.getAdminClient();

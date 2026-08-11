@@ -131,9 +131,9 @@ export class AuthController {
 
   @Public()
   @Post('phone/request-otp')
-  // SMS send burns Twilio Verify ($) — tightest budget: 3/min per IP.
+  // SMS send burns Prelude credits ($) — tightest budget: 3/min per IP.
   @Throttle({ default: { ttl: 60_000, limit: 3 } })
-  @ApiOperation({ summary: 'Send a phone OTP via SMS or WhatsApp (Twilio Verify)' })
+  @ApiOperation({ summary: 'Send a phone OTP via SMS or WhatsApp (Prelude)' })
   requestPhoneOtp(@Body() dto: RequestPhoneOtpDto) {
     return this.authService.requestPhoneOtp(dto.phone, dto.channel);
   }

@@ -16,7 +16,7 @@ import { writeAuthzClaims } from '../../common/utils/authz-claims';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
-import { TwilioService, VerifyChannel } from './twilio.service';
+import { PreludeService, VerifyChannel } from './prelude.service';
 
 @Injectable()
 export class AuthService {
@@ -27,7 +27,7 @@ export class AuthService {
     private mailService: MailService,
     private signupOtpService: SignupOtpService,
     private verificationTokenService: VerificationTokenService,
-    private twilioService: TwilioService,
+    private preludeService: PreludeService,
     private configService: ConfigService,
   ) {}
 
@@ -559,7 +559,7 @@ export class AuthService {
       await admin.from('users').update({ email: null }).eq('id', created.user.id);
     }
 
-    // Cleanup any signup_otps row (email path only — phone uses Twilio Verify).
+    // Cleanup any signup_otps row (email path only — phone uses Prelude).
     if (isEmail) {
       await this.signupOtpService.consume(contact, 'email');
     }
@@ -578,7 +578,7 @@ export class AuthService {
     };
   }
 
-  // ----- Phone OTP (Twilio Verify: SMS or WhatsApp) -----
+  // ----- Phone OTP (Prelude: SMS or WhatsApp) -----
 
   async requestPhoneOtp(phone: string, channel: VerifyChannel): Promise<{ message: string }> {
     const normalized = phone.trim();
@@ -589,7 +589,7 @@ export class AuthService {
     // either way, so the endpoint still doesn't leak which numbers are
     // registered.
 
-    // TEST_PHONES bypass: skip Twilio entirely; verifyPhoneOtp accepts the
+    // TEST_PHONES bypass: skip Prelude entirely; verifyPhoneOtp accepts the
     // fixed code 000000 for these numbers. Honored in ALL environments, but
     // ONLY for numbers explicitly allowlisted via the TEST_PHONES env var —
     // internal QA (some carriers filter international OTP SMS with fake
@@ -597,12 +597,12 @@ export class AuthService {
     // account-purge behavior remains dev-only regardless.
     if (isTest) {
       this.logger.log(
-        `[test-phone] Twilio bypassed for ${normalized} — use code 000000`,
+        `[test-phone] Prelude bypassed for ${normalized} — use code 000000`,
       );
       return { message: 'A code has been sent.' };
     }
 
-    await this.twilioService.startVerification(normalized, channel);
+    await this.preludeService.startVerification(normalized, channel);
     return { message: 'A code has been sent.' };
   }
 
@@ -619,13 +619,13 @@ export class AuthService {
     const isTest = this.testPhones().has(normalized);
 
     if (isTest) {
-      // Allowlisted test phone — pairs with the Twilio skip in
+      // Allowlisted test phone — pairs with the Prelude skip in
       // requestPhoneOtp (fixed code, all environments).
       if (code !== '000000') {
         throw new BadRequestException('Incorrect or expired code.');
       }
     } else {
-      const approved = await this.twilioService.checkVerification(normalized, code);
+      const approved = await this.preludeService.checkVerification(normalized, code);
       if (!approved) {
         throw new BadRequestException('Incorrect or expired code.');
       }

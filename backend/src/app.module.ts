@@ -100,7 +100,7 @@ class HealthController {
   controllers: [HealthController],
   providers: [
     // Throttle BEFORE auth so unauthenticated abuse (OTP-spam, brute force)
-    // is rejected before it touches Supabase/Twilio/Gmail.
+    // is rejected before it touches Supabase/Prelude/Gmail.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

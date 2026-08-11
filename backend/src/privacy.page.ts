@@ -75,7 +75,7 @@ export const PRIVACY_HTML = `<!DOCTYPE html>
         <li>Supabase (database, authentication &amp; storage)</li>
         <li>Railway (application hosting)</li>
         <li>Stripe (payments)</li>
-        <li>Twilio (SMS verification codes)</li>
+        <li>Prelude (SMS verification codes)</li>
         <li>Resend (email delivery)</li>
         <li>Didit (identity verification)</li>
         <li>Expo (app builds and push notifications)</li>

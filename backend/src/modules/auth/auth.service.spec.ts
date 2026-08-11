@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
-import { TwilioService } from './twilio.service';
+import { PreludeService } from './prelude.service';
 import { UserRole } from '../../common/types';
 
 // Mock Supabase client chain builder
@@ -124,7 +124,7 @@ describe('AuthService', () => {
           useValue: { issue: jest.fn(), verify: jest.fn(), consume: jest.fn() },
         },
         {
-          provide: TwilioService,
+          provide: PreludeService,
           useValue: {
             startVerification: jest.fn(),
             checkVerification: jest.fn(),
