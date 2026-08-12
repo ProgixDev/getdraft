@@ -8,25 +8,23 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "env": {
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1IjoiYWNocmFmYmVuIiwiYSI6ImNtcTM3dWY5ajBzdm4ydHFzMnk5NThlNXMifQ.cpsJgY2P5kP8TlpvAc_b4A"
-      }
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production.up.railway.app/api",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1IjoiYWNocmFmYmVuIiwiYSI6ImNtcTM3dWY5ajBzdm4ydHFzMnk5NThlNXMifQ.cpsJgY2P5kP8TlpvAc_b4A"
-      }
+        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production.up.railway.app/api"
+      },
+      "environment": "preview"
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production.up.railway.app/api",
-        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1IjoiYWNocmFmYmVuIiwiYSI6ImNtcTM3dWY5ajBzdm4ydHFzMnk5NThlNXMifQ.cpsJgY2P5kP8TlpvAc_b4A"
-      }
+        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production.up.railway.app/api"
+      },
+      "environment": "production"
     }
   },
   "submit": {
