@@ -247,7 +247,14 @@ export function MatchCelebration({
   const { width, height } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
 
-  useFonts({
+  // Capture the flag rather than discarding it. Android measures <Text> with
+  // whatever font is active at layout time, so rendering before the face has
+  // loaded sizes containers to the fallback metrics and then paints wider
+  // glyphs into them -- that is what clipped "Skip" to "Ski" on the splash
+  // screen (SplashExperience). Fonts are bundled and cached across screens,
+  // so by this point the flag is normally already true and the gate costs
+  // nothing.
+  const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
     Poppins_600SemiBold,
@@ -396,6 +403,10 @@ export function MatchCelebration({
   );
 
   const middleHeight = Math.max(238, Math.min(Math.round(height * 0.34), 360));
+
+  // Same reason as the fontsLoaded capture above. This is a celebration
+  // overlay, so a frame without it is preferable to one with clipped text.
+  if (!fontsLoaded) return null;
 
   return (
     <Modal

@@ -215,7 +215,14 @@ function ContinentCard({
 }
 
 export default function GlobeTab() {
-  useFonts({
+  // Capture the flag rather than discarding it. Android measures <Text> with
+  // whatever font is active at layout time, so rendering before the face has
+  // loaded sizes containers to the fallback metrics and then paints wider
+  // glyphs into them -- that is what clipped "Skip" to "Ski" on the splash
+  // screen (SplashExperience). Fonts are bundled and cached across screens,
+  // so by this point the flag is normally already true and the gate costs
+  // nothing.
+  const [fontsLoaded] = useFonts({
     Poppins_500Medium,
     Poppins_600SemiBold,
     Poppins_700Bold,
@@ -383,6 +390,8 @@ export default function GlobeTab() {
   );
 
   if (redirecting) return null;
+  // Same reason as the fontsLoaded capture above.
+  if (!fontsLoaded) return null;
 
   return (
     <View style={styles.container}>

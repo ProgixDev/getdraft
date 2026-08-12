@@ -186,7 +186,20 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
   onAnimationComplete,
   short = false,
 }) => {
-  useFonts({ Poppins_500Medium, Poppins_700Bold, Poppins_800ExtraBold });
+  // The returned flag matters and used to be discarded, which is why the
+  // Skip button rendered as "Ski".
+  //
+  // Android measures a <Text> with whatever font is active at layout time.
+  // Rendering immediately meant "Skip" was measured in the fallback face, the
+  // pill was sized to that, and when Poppins finished loading it swapped in
+  // slightly wider — so the final glyph was clipped by a container already
+  // committed to the narrower width. Every other screen in the app gates on
+  // this flag; this one requested the fonts and rendered anyway.
+  const [fontsLoaded] = useFonts({
+    Poppins_500Medium,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+  });
 
   const [stats, setStats] = useState<Stat[]>(STATS);
   // Set when the globe WebView dies (renderer gone / load error) — we drop the
@@ -322,6 +335,14 @@ export const SplashExperience: React.FC<SplashExperienceProps> = ({
   }));
   const titleStyle = useAnimatedStyle(() => ({ opacity: titleOpacity.value }));
   const fadeStyle = useAnimatedStyle(() => ({ opacity: contentFade.value }));
+
+  // Hold on the plain background until the fonts are ready. Placed after every
+  // hook so the hook order stays stable. The wait is imperceptible — the fonts
+  // are bundled, not fetched — and it is what stops text being measured in one
+  // face and painted in another.
+  if (!fontsLoaded) {
+    return <View style={styles.container} />;
+  }
 
   return (
     <View style={styles.container}>
@@ -538,11 +559,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.15)",
+    // Belt and braces alongside the font gate above: centre the label and give
+    // it a floor wide enough for "Skip" in Poppins at 14px, so no future
+    // measurement mismatch can clip the last glyph again.
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 78,
   },
   skipText: {
     fontSize: 14,
     fontFamily: "Poppins_500Medium",
     color: "rgba(255, 255, 255, 0.7)",
+    // Never let the label be the thing that gives way if the row is squeezed.
+    flexShrink: 0,
   },
 });
 
