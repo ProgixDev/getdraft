@@ -34,10 +34,22 @@ export const subscriptionsService = {
     return data.data;
   },
 
-  /** Web Checkout path — kept for any non-mobile entry points. */
+  /**
+   * Web Checkout path — kept for any non-mobile entry points.
+   *
+   * Note the unwrap: the backend returns { checkoutUrl }, and
+   * TransformInterceptor deliberately does NOT wrap payloads carrying
+   * `checkoutUrl` (see backend/src/common/interceptors/transform.interceptor.ts,
+   * alongside `cards` and `statusCode`). A plain `data.data` therefore
+   * returns undefined and the caller silently opens nothing.
+   *
+   * Handles both shapes, matching how discover.ts:71-75 deals with the feed's
+   * `cards` passthrough. No screen calls this today, which is the only reason
+   * it was never noticed.
+   */
   async createCheckout(planId: string): Promise<{ checkoutUrl: string }> {
     const { data } = await api.post("/subscriptions/checkout", { planId });
-    return data.data;
+    return (data?.data ?? data) as { checkoutUrl: string };
   },
 
   /** Mobile Payment Sheet bundle — the one we use on the device. */

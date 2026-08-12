@@ -30,6 +30,8 @@ import Animated, {
   SlideInDown,
   SlideOutDown,
   useReducedMotion,
+  Easing,
+  withRepeat,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
@@ -71,7 +73,6 @@ import {
   type RankingRow,
 } from "@/services/rankings";
 import type { SharedValue } from "react-native-reanimated";
-import { Easing, withRepeat } from "react-native-reanimated";
 
 type LastSwipe = { index: number; action: "draft" | "pass"; name: string } | null;
 type SnackbarState = { visible: boolean; message: string; canUndo: boolean };

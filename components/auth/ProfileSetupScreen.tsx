@@ -37,12 +37,12 @@ import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
-
-const AGENCY_OTHER = "__OTHER__";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
 import { useAppDispatch } from "@/store/hooks";
 import { updateUser } from "@/store/slices/authSlice";
+
+const AGENCY_OTHER = "__OTHER__";
 
 function toIsoDate(d: Date): string {
   // Format from local date parts — toISOString() converts to UTC, which

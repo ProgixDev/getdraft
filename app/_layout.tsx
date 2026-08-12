@@ -19,20 +19,6 @@ import {
 import Constants from "expo-constants";
 import { StripeProvider } from "@stripe/stripe-react-native";
 
-// @stripe/stripe-react-native 0.50.3: StripeProvider's effect calls
-// NativeStripeSdk.initialise() directly and never runs initStripe(), which
-// is the only place the StripeKeepJsAwakeTask headless task is registered.
-// Android then logs "No task registered for key StripeKeepJsAwakeTask" when
-// the Payment Sheet opens, JS timers pause, and aggressive OEMs (Infinix
-// XOS et al.) kill the paused app — it reboots to the welcome screen.
-// Register the task ourselves before any sheet can open.
-if (Platform.OS === "android") {
-  AppRegistry.registerHeadlessTask(
-    "StripeKeepJsAwakeTask",
-    () => () => new Promise<void>(() => {}),
-  );
-}
-
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { theme } from "@/config/colors";
@@ -53,6 +39,20 @@ import {
 import { usersService } from "@/services/users";
 import { chatService } from "@/services/chat";
 import { API_ORIGIN, setOnSessionExpired } from "@/services/api";
+
+// @stripe/stripe-react-native 0.50.3: StripeProvider's effect calls
+// NativeStripeSdk.initialise() directly and never runs initStripe(), which
+// is the only place the StripeKeepJsAwakeTask headless task is registered.
+// Android then logs "No task registered for key StripeKeepJsAwakeTask" when
+// the Payment Sheet opens, JS timers pause, and aggressive OEMs (Infinix
+// XOS et al.) kill the paused app — it reboots to the welcome screen.
+// Register the task ourselves before any sheet can open.
+if (Platform.OS === "android") {
+  AppRegistry.registerHeadlessTask(
+    "StripeKeepJsAwakeTask",
+    () => () => new Promise<void>(() => {}),
+  );
+}
 
 export const unstable_settings = {
   anchor: "(tabs)",
