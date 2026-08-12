@@ -10,9 +10,21 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpsertAthleteProfileDto {
-  @ApiProperty({ example: 'American Football' })
+  /**
+   * Optional at the DTO layer so PARTIAL updates work; still mandatory when
+   * the profile is first created, enforced in ProfilesService.
+   *
+   * It used to be unconditionally required, which broke onboarding outright:
+   * MediaUploadScreen finishes the media step with
+   * `upsertAthleteProfile({ photos, videos })` -- a deliberate partial update,
+   * since sport was set on the previous step -- and every athlete got
+   * 400 "sport must be a string" on Continue. The service already merges
+   * partial updates correctly; only this decorator stood in the way.
+   */
+  @ApiPropertyOptional({ example: 'American Football' })
+  @IsOptional()
   @IsString()
-  sport: string;
+  sport?: string;
 
   @ApiPropertyOptional({ example: 'Quarterback' })
   @IsOptional()

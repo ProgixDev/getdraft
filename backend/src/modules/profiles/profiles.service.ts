@@ -57,6 +57,16 @@ export class ProfilesService {
       return data;
     }
 
+    // CREATE path. `sport` is optional on the DTO so partial updates work
+    // (see the note there), which means the requirement has to be enforced
+    // here instead -- otherwise the first write could mint a profile with no
+    // sport, and sport is what Discover, rankings and matching all key on.
+    if (!dto.sport) {
+      throw new BadRequestException(
+        'sport is required when creating an athlete profile.',
+      );
+    }
+
     const profileCompletion = this.calculateAthleteCompletion(dto);
     const { data, error } = await supabase
       .from('athlete_profiles')
