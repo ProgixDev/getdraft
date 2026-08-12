@@ -927,10 +927,18 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Recruiters: keep a small read-only thumbnail strip of their
-            showcase photos if they have any. Editing now lives in
-            edit-profile (the pencil up top), so this is display only. */}
-        {isRecruiter && photos.length > 0 && (
+        {/* Read-only strip of showcase photos — the ones uploaded during
+            onboarding and used on the public profile and Discover cards.
+            Editing lives in edit-profile (the pencil up top).
+
+            This used to be gated on isRecruiter, which meant an athlete
+            uploaded four photos during signup and then only ever saw one of
+            them: photos[0] is reused as the avatar above, and the rest were
+            rendered nowhere. Reported as "I uploaded 4 images but I see only
+            one". They were never lost — just invisible to their owner while
+            being shown to everyone else. Athletes also have the posts grid,
+            but posts and showcase photos are different things. */}
+        {photos.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Photos</Text>
