@@ -417,6 +417,25 @@ export default function GlobeTab() {
             // placeholder instead of taking the app down.
             onRenderProcessGone={() => setWebviewDead(true)}
           />
+        ) : !MAPBOX_TOKEN || webviewDead ? (
+          // A spinner used to cover BOTH of these, so a missing token or a
+          // dead WebView looked identical to loading — and span forever. In
+          // every build shipped so far EXPO_PUBLIC_MAPBOX_TOKEN was absent
+          // (it lived only in gitignored .env), which meant this tab was a
+          // permanent loading state and nobody could tell it had failed.
+          // Distinguish "still loading" from "cannot load".
+          <View style={styles.globePlaceholder}>
+            <Ionicons
+              name="earth-outline"
+              size={48}
+              color="rgba(255,255,255,0.3)"
+            />
+            <Text style={styles.globeFallbackTitle}>Map unavailable</Text>
+            <Text style={styles.globeFallbackText}>
+              The talent map couldn&apos;t load. Everything below still works —
+              browse the continent breakdown and hotspots as usual.
+            </Text>
+          </View>
         ) : (
           <View style={styles.globePlaceholder}>
             <ActivityIndicator size="large" color={semantic.success} />
@@ -723,6 +742,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  globeFallbackTitle: {
+    fontSize: 16,
+    fontFamily: "Poppins_600SemiBold",
+    color: "rgba(255, 255, 255, 0.85)",
+    marginTop: 12,
+  },
+  globeFallbackText: {
+    fontSize: 13,
+    // Poppins_500Medium, not 400 — this screen only loads 500/600/700/800.
+    // Naming an unloaded face is what caused the splash "Ski" truncation.
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255, 255, 255, 0.5)",
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
   },
   bottomGradient: {
     position: "absolute",
