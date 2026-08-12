@@ -612,12 +612,13 @@ export default function ProfileScreen() {
                 />
               )}
             </View>
-            <Pressable
-              style={styles.avatarEditBadge}
-              onPress={() => router.push("/edit-profile")}
-            >
-              <Ionicons name="camera" size={14} color={brand.white} />
-            </Pressable>
+            {/* The camera badge that used to sit here pushed /edit-profile —
+                the same destination as the pencil in the header. Two controls,
+                one screen, and the badge implied it would change just the photo
+                rather than open the full editor. Reported as "clicked the
+                profile image and it opened another edit profile page".
+                The pencil is now the single way in; avatar changes live inside
+                the editor, next to everything else that is editable. */}
           </View>
           <Text style={styles.name}>{displayName}</Text>
           <View style={styles.roleBadge}>
@@ -1303,19 +1304,6 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: "100%",
     height: "100%",
-  },
-  avatarEditBadge: {
-    position: "absolute",
-    bottom: 4,
-    right: 4,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: brand.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: theme.surface,
   },
   name: {
     fontSize: 22,
