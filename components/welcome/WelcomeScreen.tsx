@@ -156,7 +156,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
         <View style={styles.headerSpacer} />
         <Image source={images.logo} style={styles.logo} resizeMode="contain" />
         {!isLastSlide ? (
-          <Pressable onPress={handleSkip} style={styles.skipButton}>
+          <Pressable
+            onPress={handleSkip}
+            style={styles.skipButton}
+            // The visible text is ~40px tall, under the 44px minimum touch
+            // target, and it sits in the top corner where thumbs are least
+            // accurate. hitSlop widens the tap area without moving anything.
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Skip introduction"
+          >
             <Text style={styles.skipButtonText}>Skip</Text>
           </Pressable>
         ) : (
@@ -369,19 +378,33 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     zIndex: 10,
   },
+  // Must match skipButton's width, or "space-between" pushes the logo off
+  // centre by the difference — the spacer was 60 while the Skip button
+  // measured ~67, so the logo sat a few pixels left of true centre.
   headerSpacer: {
-    width: 60,
+    width: 72,
   },
   logo: {
     width: 160,
     height: 36,
   },
   skipButton: {
+    // Same width as headerSpacer so the logo lands on true centre; the text
+    // is pushed to the right edge inside it, where the padding used to put it.
+    width: 72,
+    alignItems: "flex-end",
+    justifyContent: "center",
     paddingVertical: 8,
-    paddingHorizontal: 16,
   },
   skipButtonText: {
-    color: neutral.gray500,
+    // gray500 (#64748B) on GrainyGradient's near-black (#0c1322 -> #070707)
+    // is about 4.3:1 — under the 4.5:1 minimum, and worse in practice
+    // because the grain texture breaks up the glyph edges. It was legible
+    // only if you already knew it was there.
+    //
+    // gray300 on the same ground is ~11:1: clearly readable while still
+    // reading as secondary next to the white logo and the primary button.
+    color: neutral.gray300,
     fontSize: 16,
     fontFamily: "Poppins_400Regular",
   },
