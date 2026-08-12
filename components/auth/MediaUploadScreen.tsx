@@ -4,11 +4,22 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Image,
   ScrollView,
   ActivityIndicator,
   Alert,
 } from "react-native";
+// expo-image, NOT react-native's Image. On Android the built-in Image decodes
+// each remote photo at full resolution into memory: a handful of 12MP camera
+// photos is ~48MB of bitmap each, and this screen shows up to MAX_PHOTOS of
+// them at once. That overruns the heap and Android kills the process — which
+// looks like a grey screen and is invisible to ErrorBoundary, because the
+// crash is native rather than JavaScript.
+//
+// expo-image renders through Glide, which downsamples to the target view size
+// and manages its own cache. The rest of the media-heavy app (feed, Discover
+// cards, matches, posts) already uses it; this screen was the exception, and
+// it is the one that renders the most photos simultaneously.
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -136,7 +147,19 @@ export const MediaUploadScreen: React.FC<Props> = ({ onComplete, onBack }) => {
           <View style={styles.grid}>
             {photos.map((url) => (
               <View key={url} style={styles.thumbWrap}>
-                <Image source={{ uri: url }} style={styles.thumb} />
+                <Image
+                  source={{ uri: url }}
+                  style={styles.thumb}
+                  contentFit="cover"
+                  // Measured on a real upload: a 323 kB / 2048x1536 photo is
+                  // 12 MB once decoded. Four of those is ~48 MB of bitmap for
+                  // thumbnails. recyclingKey lets Glide reuse the bitmap when
+                  // the list changes instead of allocating a fresh one, and
+                  // memory-disk caching keeps re-renders from re-decoding.
+                  recyclingKey={url}
+                  cachePolicy="memory-disk"
+                  transition={120}
+                />
                 <Pressable
                   style={styles.removeBtn}
                   onPress={() => setPhotos((p) => p.filter((u) => u !== url))}
