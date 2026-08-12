@@ -56,6 +56,11 @@ interface LocationSelectionScreenProps {
     country: string,
     lat: number,
     lng: number,
+    // Wilaya / state / province. Geocoding has always returned it and this
+    // screen has always parsed it — it just had nowhere to go, so filtering
+    // by wilaya matched nothing. Optional because not every place has one
+    // (city-states) and the popularCities fallback only fills it for some.
+    region?: string,
   ) => void;
   onBack: () => void;
 }
@@ -401,6 +406,7 @@ export const LocationSelectionScreen: React.FC<
         selectedLocation.country,
         selectedLocation.lat,
         selectedLocation.lng,
+        selectedLocation.state,
       );
     }
   };

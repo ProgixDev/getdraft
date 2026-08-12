@@ -566,6 +566,7 @@ export default function DiscoverScreen() {
         distanceKm: preferences.distanceKm ?? undefined,
         includeInternational: preferences.includeInternational,
         country: preferences.country || undefined,
+        region: preferences.region || undefined,
         city: preferences.city || undefined,
         recruiterType:
           preferences.recruiterType !== "all"
@@ -623,6 +624,7 @@ export default function DiscoverScreen() {
         distanceKm: preferences.distanceKm ?? undefined,
         includeInternational: preferences.includeInternational,
         country: preferences.country || undefined,
+        region: preferences.region || undefined,
         city: preferences.city || undefined,
         recruiterType:
           preferences.recruiterType !== "all"

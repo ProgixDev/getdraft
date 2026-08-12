@@ -596,6 +596,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     country: string,
     lat?: number,
     lng?: number,
+    region?: string,
   ) => {
     setLocation({ city, country });
     // Persist to backend so the user's discover feed can geo-filter AND
@@ -605,6 +606,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       await usersService.updateMe({
         location: city ? `${city}${country ? `, ${country}` : ""}` : undefined,
         country: country || undefined,
+        // Stored as its own column rather than folded into the `location`
+        // string: "Blida, Algeria" cannot be filtered on by wilaya without
+        // guessing where the city ends and the region begins.
+        region: region?.trim() || undefined,
         latitude: Number.isFinite(lat) ? lat : undefined,
         longitude: Number.isFinite(lng) ? lng : undefined,
       });

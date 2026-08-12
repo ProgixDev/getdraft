@@ -729,6 +729,7 @@ model public_users {
   stripe_subscription_id                                  String?
   location                                                String?
   country                                                 String?
+  region                                                  String?
   latitude                                                Float?
   longitude                                               Float?
   is_banned                                               Boolean?             @default(false)

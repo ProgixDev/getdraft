@@ -4,6 +4,8 @@ export interface DiscoverPreferences {
   distanceKm: number | null;
   includeInternational: boolean;
   country: string;
+  /** Wilaya / state / province. Narrows within `country`; "" means no filter. */
+  region: string;
   city: string;
   sport: string;
   recruiterType: "all" | "agent" | "coach";
@@ -18,6 +20,7 @@ export const defaultDiscoverPreferences: DiscoverPreferences = {
   // turns "Include international" off and/or picks a country in Preferences.
   includeInternational: true,
   country: "",
+  region: "",
   city: "",
   sport: "all",
   recruiterType: "all",

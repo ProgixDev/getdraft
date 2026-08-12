@@ -378,6 +378,32 @@ function hashString(s: string): number {
   return h;
 }
 
+/**
+ * Narrows a feed to one wilaya / state / province. Shared by the card feed and
+ * the globe so the two can never disagree about what a filter means.
+ *
+ * Exact match rather than the `contains` the city filter uses, because both
+ * sides of this comparison come from the same source: the value stored at
+ * signup and the value picked in the filter are both a Mapbox `region.name`,
+ * so they are the same string. Case-insensitive only because geocoding results
+ * are not guaranteed to be capitalised identically across calls.
+ *
+ * Exactness is also what makes it indexable — migration 039 indexes
+ * `lower(region)`, which an ILIKE '%x%' could not use.
+ *
+ * Deliberately independent of `includeInternational`: that toggle answers
+ * "outside my country?", and a region is already narrower than a country, so
+ * gating one on the other would make picking a wilaya silently do nothing.
+ */
+function applyRegionFilter(
+  where: Prisma.public_usersWhereInput,
+  region: string | undefined,
+) {
+  const value = (region ?? '').trim();
+  if (value.length === 0) return;
+  where.region = { equals: value, mode: 'insensitive' };
+}
+
 function placeByCountry(
   country: string | null,
   userId: string,
@@ -517,6 +543,7 @@ export class DiscoverService {
     if (cityFilter.length > 0) {
       where.location = { contains: cityFilter, mode: 'insensitive' };
     }
+    applyRegionFilter(where, query.region);
 
     // Cursor-paging (preferred over offset): on the client we send the
     // created_at of the last card we received. New signups landing between
@@ -709,6 +736,7 @@ export class DiscoverService {
     if (cityFilter.length > 0) {
       where.location = { contains: cityFilter, mode: 'insensitive' };
     }
+    applyRegionFilter(where, query.region);
 
     const users = await this.prisma.public_users.findMany({
       where,

@@ -38,6 +38,12 @@ export class DiscoverQueryDto {
   @IsString()
   city?: string;
 
+  /** Wilaya / state / province. Narrows within `country`. */
+  @ApiPropertyOptional({ example: 'Blida' })
+  @IsOptional()
+  @IsString()
+  region?: string;
+
   @ApiPropertyOptional({ example: 'American Football' })
   @IsOptional()
   @IsString()

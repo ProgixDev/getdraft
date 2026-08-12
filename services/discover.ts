@@ -4,6 +4,8 @@ export interface DiscoverQuery {
   distanceKm?: number;
   includeInternational?: boolean;
   country?: string;
+  /** Wilaya / state / province. Narrows within `country`. */
+  region?: string;
   city?: string;
   sport?: string;
   recruiterType?: string;

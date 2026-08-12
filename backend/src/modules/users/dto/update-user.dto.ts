@@ -18,6 +18,15 @@ export class UpdateUserDto {
   @IsString()
   country?: string;
 
+  /**
+   * Sub-national division: wilaya, state, province, région. Mapbox returns all
+   * of them as `region`, so the column and the filter use that word too.
+   */
+  @ApiPropertyOptional({ example: 'Blida' })
+  @IsOptional()
+  @IsString()
+  region?: string;
+
   @ApiPropertyOptional({ example: 'https://storage.supabase.co/avatars/...' })
   @IsOptional()
   @IsString()

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -31,6 +32,18 @@ import {
 } from "@/constants/countryData";
 import { RootState } from "@/store";
 import { setDiscoverPreferences } from "@/store/slices/discoverPreferencesSlice";
+
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+const REGION_SEARCH_DEBOUNCE_MS = 350;
+const REGION_SEARCH_MIN_LEN = 2;
+
+/** A first-level division: wilaya, state, province, région. */
+interface RegionOption {
+  name: string;
+  country: string;
+  lat: number | null;
+  lng: number | null;
+}
 
 const globeHtml = `
 <!DOCTYPE html>
@@ -136,6 +149,20 @@ export default function PreferencesCountryScreen() {
   const [selectedCountry, setSelectedCountry] = useState<CountryOption>(
     findCountryByName(preferences.country) ?? COUNTRY_OPTIONS[0],
   );
+  // "" means no region filter — the whole country. Persisted preferences from
+  // before this screen learned about regions have no `region` key at all.
+  const [selectedRegion, setSelectedRegion] = useState<string>(
+    preferences.region ?? "",
+  );
+  // Only for aiming the globe. Not persisted: the filter itself is the
+  // region name, and a stale centroid should never outlive the selection.
+  const [selectedRegionCoords, setSelectedRegionCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [regionResults, setRegionResults] = useState<RegionOption[]>([]);
+  const [regionSearching, setRegionSearching] = useState(false);
+  const regionSearchSeq = useRef(0);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -156,17 +183,129 @@ export default function PreferencesCountryScreen() {
     );
   }, [searchQuery]);
 
+  // Regions come from Mapbox rather than a bundled list. There are ~3,000
+  // first-level divisions worldwide and they get renamed and resplit (Algeria
+  // went from 48 wilayas to 58 in 2019), so shipping them as a constant means
+  // shipping something already out of date. Countries stay local because the
+  // list is small, stable, and has to work with no network.
+  useEffect(() => {
+    const q = searchQuery.trim();
+
+    if (!MAPBOX_TOKEN || q.length < REGION_SEARCH_MIN_LEN) {
+      setRegionResults([]);
+      setRegionSearching(false);
+      return;
+    }
+
+    setRegionSearching(true);
+    const seq = ++regionSearchSeq.current;
+    const timer = setTimeout(() => {
+      void searchRegions(q, seq);
+    }, REGION_SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  async function searchRegions(q: string, seq: number) {
+    try {
+      const params = new URLSearchParams({
+        q,
+        access_token: MAPBOX_TOKEN as string,
+        // `region` is Mapbox's name for the first-level division: wilaya in
+        // Algeria, state in the US, province in Canada, région in France.
+        types: "region",
+        autocomplete: "true",
+        limit: "8",
+        language: "en",
+      });
+      const resp = await fetch(
+        `https://api.mapbox.com/search/geocode/v6/forward?${params.toString()}`,
+      );
+      if (!resp.ok) throw new Error(`geocode ${resp.status}`);
+      const json = await resp.json();
+
+      const results: RegionOption[] = (json.features ?? [])
+        .map((feature: any): RegionOption | null => {
+          const props = feature.properties ?? {};
+          const name = props.name;
+          // The parent country is what makes a region filterable — "Blida"
+          // alone cannot be resolved, and the row would read ambiguously.
+          const country = props.context?.country?.name;
+          if (!name || !country) return null;
+          const coords = props.coordinates ?? {};
+          const lat = Number(
+            coords.latitude ?? feature.geometry?.coordinates?.[1],
+          );
+          const lng = Number(
+            coords.longitude ?? feature.geometry?.coordinates?.[0],
+          );
+          return {
+            name,
+            country,
+            lat: Number.isFinite(lat) ? lat : null,
+            lng: Number.isFinite(lng) ? lng : null,
+          };
+        })
+        .filter((r: RegionOption | null): r is RegionOption => r !== null);
+
+      // A slower earlier request must not overwrite a newer one's results.
+      if (seq !== regionSearchSeq.current) return;
+      setRegionResults(results);
+    } catch {
+      // Countries still filter fine without this — degrade quietly rather
+      // than putting a network error in front of someone picking a filter.
+      if (seq === regionSearchSeq.current) setRegionResults([]);
+    } finally {
+      if (seq === regionSearchSeq.current) setRegionSearching(false);
+    }
+  }
+
+  // One writer for the globe camera. Selecting a wilaya also sets its country,
+  // so if this effect only watched `selectedCountry` it would fire on that
+  // change and yank the camera back to the country centroid — the region
+  // coordinates have to be part of the same decision, not a separate post.
   useEffect(() => {
     if (!globeReady || !selectedCountry) return;
 
-    const message = JSON.stringify({
-      type: "selectCountry",
-      lat: selectedCountry.lat,
-      lng: selectedCountry.lng,
-    });
+    const target =
+      selectedRegionCoords ?? { lat: selectedCountry.lat, lng: selectedCountry.lng };
 
-    webViewRef.current?.postMessage(message);
-  }, [globeReady, selectedCountry]);
+    webViewRef.current?.postMessage(
+      JSON.stringify({
+        type: "selectCountry",
+        lat: target.lat,
+        lng: target.lng,
+      }),
+    );
+  }, [globeReady, selectedCountry, selectedRegionCoords]);
+
+  /** Picking a country clears any wilaya — the region belonged to the old one. */
+  const handleSelectCountry = (country: CountryOption) => {
+    setSelectedCountry(country);
+    setSelectedRegion("");
+    setSelectedRegionCoords(null);
+  };
+
+  /**
+   * Picking a wilaya implies its country, so both are set at once. Without
+   * this the filter would read "Algeria off, Blida on" and match nobody.
+   */
+  const handleSelectRegion = (region: RegionOption) => {
+    const country = findCountryByName(region.country);
+    if (country) setSelectedCountry(country);
+    setSelectedRegion(region.name);
+    setSelectedRegionCoords(
+      region.lat !== null && region.lng !== null
+        ? { lat: region.lat, lng: region.lng }
+        : null,
+    );
+  };
+
+  const handleClearRegion = () => {
+    setSelectedRegion("");
+    setSelectedRegionCoords(null);
+  };
 
   const handleApplyCountry = () => {
     const countryChanged = selectedCountry.name !== preferences.country;
@@ -174,6 +313,7 @@ export default function PreferencesCountryScreen() {
       setDiscoverPreferences({
         ...preferences,
         country: selectedCountry.name,
+        region: selectedRegion,
         // Reset city when country changes so stale selections don't persist
         city: countryChanged ? "" : preferences.city,
       }),
@@ -229,26 +369,114 @@ export default function PreferencesCountryScreen() {
             <Ionicons name="search" size={18} color={theme.textMuted} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search country..."
+              placeholder="Search country or wilaya..."
               placeholderTextColor={theme.inputPlaceholder}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCorrect={false}
               autoCapitalize="words"
             />
+            {regionSearching && (
+              <ActivityIndicator size="small" color={theme.textMuted} />
+            )}
           </View>
+
+          {selectedRegion !== "" && (
+            <View style={styles.activeRegionRow}>
+              <Ionicons name="location" size={14} color={brand.white} />
+              <Text style={styles.activeRegionText} numberOfLines={1}>
+                {selectedRegion}, {selectedCountry.name}
+              </Text>
+              <Pressable
+                onPress={handleClearRegion}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Clear wilaya filter"
+              >
+                <Ionicons name="close-circle" size={18} color={brand.white} />
+              </Pressable>
+            </View>
+          )}
 
           <ScrollView
             style={styles.results}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
+            {regionResults.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>
+                  Wilayas · states · provinces
+                </Text>
+                {regionResults.map((region) => {
+                  const selected =
+                    selectedRegion === region.name &&
+                    selectedCountry.name === region.country;
+                  return (
+                    <Pressable
+                      key={`${region.country}-${region.name}`}
+                      onPress={() => handleSelectRegion(region)}
+                      style={({ pressed }) => [
+                        styles.countryRow,
+                        selected && styles.countryRowSelected,
+                        pressed && styles.rowPressed,
+                      ]}
+                    >
+                      <View style={styles.countryLeft}>
+                        <View
+                          style={[
+                            styles.countryCodeBadge,
+                            selected && styles.countryCodeBadgeSelected,
+                          ]}
+                        >
+                          <Ionicons
+                            name="location-outline"
+                            size={14}
+                            color={selected ? brand.white : theme.textMuted}
+                          />
+                        </View>
+                        <View style={styles.regionTextBlock}>
+                          <Text
+                            style={[
+                              styles.countryName,
+                              selected && styles.countryNameSelected,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {region.name}
+                          </Text>
+                          <Text style={styles.regionCountry} numberOfLines={1}>
+                            {region.country}
+                          </Text>
+                        </View>
+                      </View>
+                      {selected ? (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={brand.white}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color={theme.textMuted}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+                <Text style={styles.sectionLabel}>Countries</Text>
+              </>
+            )}
+
             {filteredCountries.map((country) => {
-              const selected = selectedCountry.name === country.name;
+              const selected =
+                selectedCountry.name === country.name && selectedRegion === "";
               return (
                 <Pressable
                   key={country.code}
-                  onPress={() => setSelectedCountry(country)}
+                  onPress={() => handleSelectCountry(country)}
                   style={({ pressed }) => [
                     styles.countryRow,
                     selected && styles.countryRowSelected,
@@ -441,6 +669,45 @@ const styles = StyleSheet.create({
     color: theme.text,
   },
   countryNameSelected: {
+    color: brand.white,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.textMuted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  // A region row carries two lines (wilaya over its country), so it needs to
+  // shrink rather than push the chevron off the row on a narrow screen.
+  regionTextBlock: {
+    flexShrink: 1,
+  },
+  regionCountry: {
+    fontSize: 11,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textMuted,
+    marginTop: 1,
+  },
+  activeRegionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(31,170,89,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(31,170,89,0.45)",
+  },
+  activeRegionText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
     color: brand.white,
   },
   footer: {
