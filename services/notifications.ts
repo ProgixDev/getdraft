@@ -41,8 +41,13 @@ export const notificationsService = {
     }
   },
 
-  async getNotifications(): Promise<any[]> {
-    const { data } = await api.get("/notifications");
-    return data.data;
-  },
+  // Removed: getNotifications() called GET /notifications, which no
+  // controller declares — it would have 404'd on every call. Nothing in the
+  // app used it, so this was dead code with a trap in it: the next person to
+  // build a notifications screen would have wired it up and spent a while
+  // wondering why the endpoint was empty.
+  //
+  // NotificationsController currently exposes only register-token and
+  // token (delete). If a notifications inbox is wanted, the backend route
+  // has to be written first.
 };
