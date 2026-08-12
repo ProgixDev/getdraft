@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -10,6 +9,12 @@ import {
   TextInput,
   View,
 } from "react-native";
+// expo-image, NOT react-native's Image: the built-in one decodes remote
+// photos at full resolution (a 2048x1536 upload is 12 MB of bitmap even at
+// 320 kB on disk). In a list that is per-row, which overruns the Android
+// heap and gets the process killed -- a grey screen ErrorBoundary cannot
+// catch, because the crash is native. Glide downsamples to the view size.
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 
@@ -312,7 +317,7 @@ export function LocationPicker({
           <Image
             source={{ uri: staticPreviewUri }}
             style={styles.previewImage}
-            resizeMode="cover"
+            contentFit="cover"
           />
         </View>
       )}

@@ -6,11 +6,16 @@ import {
   Pressable,
   Dimensions,
   ActivityIndicator,
-  Image,
   Modal,
   ScrollView,
   Alert,
 } from "react-native";
+// expo-image, NOT react-native's Image: the built-in one decodes remote
+// photos at full resolution (a 2048x1536 upload is 12 MB of bitmap even at
+// 320 kB on disk). In a list that is per-row, which overruns the Android
+// heap and gets the process killed -- a grey screen ErrorBoundary cannot
+// catch, because the crash is native. Glide downsamples to the view size.
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import Animated, {
@@ -583,7 +588,7 @@ export default function GlobeTab() {
                       uri: (selected.avatar_url ?? selected.photo)!,
                     }}
                     style={styles.bigHeroImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 ) : (
                   <View style={styles.bigHeroFallback}>

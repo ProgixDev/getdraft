@@ -5,13 +5,20 @@ import {
   Text,
   ScrollView,
   Pressable,
-  Image,
   Dimensions,
   Alert,
   ActivityIndicator,
   Modal,
   Platform,
 } from "react-native";
+// expo-image, NOT react-native's Image. The built-in Image decodes every
+// remote photo at full resolution into memory -- a 2048x1536 upload is 12 MB
+// of bitmap regardless of being 320 kB on disk -- and this screen renders
+// many at once. That overruns the Android heap and the process is killed,
+// which looks like a grey screen and is invisible to ErrorBoundary because
+// the crash is native. expo-image renders via Glide, which downsamples to
+// the view size. Measured from a real upload during onboarding testing.
+import { Image } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
@@ -589,7 +596,7 @@ export default function ProfileScreen() {
                       : avatarSource
                   }
                   style={styles.avatarImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
               ) : (
                 <Ionicons
@@ -934,7 +941,7 @@ export default function ProfileScreen() {
                   <Image
                     source={typeof photo === "string" ? { uri: photo } : photo}
                     style={styles.photoImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 </View>
               ))}
@@ -1056,7 +1063,7 @@ function DetailModalContents({
           <Image
             source={{ uri: post.mediaUrl }}
             style={styles.detailMedia}
-            resizeMode="cover"
+            contentFit="cover"
           />
         )}
       </View>
@@ -1201,7 +1208,7 @@ function GridContent({
               <Image
                 source={{ uri: poster }}
                 style={styles.gridTileImage}
-                resizeMode="cover"
+                contentFit="cover"
               />
             ) : (
               <View style={[styles.gridTileImage, styles.gridTilePlaceholder]}>

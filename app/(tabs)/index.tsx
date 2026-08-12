@@ -11,7 +11,6 @@ import {
   Text,
   Pressable,
   TextInput,
-  Image,
   ScrollView,
   useWindowDimensions,
   BackHandler,

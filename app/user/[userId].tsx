@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   Pressable,
-  Image,
   ActivityIndicator,
   Alert,
   Dimensions,
@@ -14,6 +13,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+// expo-image, NOT react-native's Image. The built-in Image decodes every
+// remote photo at full resolution into memory -- a 2048x1536 upload is 12 MB
+// of bitmap regardless of being 320 kB on disk -- and this screen renders a
+// whole photo gallery at once. That overruns the Android heap and the
+// process is killed, which looks like a grey screen and is invisible to
+// ErrorBoundary because the crash is native. expo-image renders via Glide,
+// which downsamples to the view size.
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -304,13 +311,13 @@ export default function PublicProfileScreen() {
                   <Image
                     source={{ uri: profile.avatar_url }}
                     style={styles.avatarImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 ) : photos.length > 0 ? (
                   <Image
                     source={{ uri: photos[0] }}
                     style={styles.avatarImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 ) : (
                   <Ionicons
@@ -475,7 +482,7 @@ export default function PublicProfileScreen() {
               <View style={styles.photoGrid}>
                 {photos.map((url, i) => (
                   <View key={i} style={styles.photoItem}>
-                    <Image source={{ uri: url }} style={styles.photoImage} resizeMode="cover" />
+                    <Image source={{ uri: url }} style={styles.photoImage} contentFit="cover" />
                   </View>
                 ))}
               </View>

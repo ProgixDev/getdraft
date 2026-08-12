@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -12,6 +11,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+// expo-image, NOT react-native's Image. The built-in Image decodes every
+// remote photo at full resolution into memory -- a 2048x1536 upload is 12 MB
+// of bitmap regardless of being 320 kB on disk -- and this screen renders
+// many at once. That overruns the Android heap and the process is killed,
+// which looks like a grey screen and is invisible to ErrorBoundary because
+// the crash is native. expo-image renders via Glide, which downsamples to
+// the view size. Measured from a real upload during onboarding testing.
+import { Image } from "expo-image";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -735,7 +742,7 @@ export default function EditProfileScreen() {
                 <Image
                   source={{ uri: avatarPreview }}
                   style={styles.avatarImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
               ) : (
                 <Ionicons name="person" size={56} color={theme.textMuted} />
@@ -981,7 +988,7 @@ export default function EditProfileScreen() {
                   <Image
                     source={{ uri: url }}
                     style={styles.galleryImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 </Pressable>
               ))}
