@@ -127,35 +127,37 @@ Declare **collected and linked to the user**:
 Also declare: encrypted in transit · users can request deletion · identity
 verification performed by a third party (Didit).
 
-### The storage question — settled
+### The storage question — closed
 
-Measured against the live project rather than assumed:
+User media is **no longer publicly readable**. Verified on the live project:
 
-| | |
-|---|---|
-| Can a stranger **list** the buckets? | **No.** Anonymous list returns `[]` — migration 036 |
-| Can a stranger **guess** a path? | **No.** `<userId-uuid>/<ms>-<ms>-<6 digits>.jpeg` |
-| Can a stranger **fetch a URL they were given?** | **Yes** — 200, no login, no expiry |
-| `guardian-videos` | Already private; anonymous fetch returns 400 |
+| Bucket | Public? | |
+|---|---|---|
+| `avatars`, `photos`, `videos`, `posts` | **No** | signed URLs only |
+| `guardian-videos` | No | was already private |
+| `sports` | Yes | product icons, not user data |
 
-So the exposure is **URL leakage, not discovery**. Anyone the app already
-shows an athlete to can keep that URL forever.
+Every response now carries a signed URL instead of a public one, issued by a
+global interceptor so no endpoint can be missed. Confirmed end to end:
 
-`photos`, `videos`, `posts` and `avatars` stay **public** for launch. Moving
-them behind signed URLs is the better end state, but it is not a bucket
-toggle: full public URLs are stored in the database rather than paths, so it
-needs a data migration plus signing on every read path, and a mistake means
-no images anywhere in the app. That is a poor trade in launch week when
-enumeration is already blocked.
+- The old public URL of a real photo → **400**. The leak is closed.
+- The same photo through the API → signed URL, **200**, image loads.
+- A signed URL submitted back on save → **token stripped**, canonical URL
+  stored. Without that, the app would have persisted an expiring token and
+  the photo would have vanished a week later.
 
-What *was* wrong has been fixed: deleting an account removed the database
-rows but left the files, so a deleted user's photos stayed publicly
-downloadable indefinitely. Storage does not cascade. `purgeUserMedia` now
-clears all five buckets on deletion, which is what makes the "users can
-request deletion" answer below truthful.
+Deletion was fixed alongside it: storage does not cascade, so removing an
+account previously left every file in place and a deleted user's photos
+stayed downloadable indefinitely. `purgeUserMedia` now clears all five
+buckets.
+
+**Kill switch:** set `MEDIA_SIGNING=off` in Railway to fall back to public
+URLs instantly, without a deploy. The buckets would need flipping back to
+public as well.
 
 Answer Data Safety accordingly — **encrypted in transit: yes** (HTTPS
-throughout), **users can request deletion: yes** (now genuinely true).
+throughout), **users can request deletion: yes**, and media is access
+controlled rather than open to anyone holding a link.
 
 ---
 
