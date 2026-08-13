@@ -127,11 +127,35 @@ Declare **collected and linked to the user**:
 Also declare: encrypted in transit · users can request deletion · identity
 verification performed by a third party (Didit).
 
-> **Settle the storage question before filling this in.** `photos` and `videos`
-> are currently **public buckets** — readable by anyone with the URL, no login,
-> no expiry — and they hold media of athletes who are minors. Declaring strong
-> protection while that is true is an inconsistency. Either make them private
-> (needs an app change to signed URLs) or declare accurately.
+### The storage question — settled
+
+Measured against the live project rather than assumed:
+
+| | |
+|---|---|
+| Can a stranger **list** the buckets? | **No.** Anonymous list returns `[]` — migration 036 |
+| Can a stranger **guess** a path? | **No.** `<userId-uuid>/<ms>-<ms>-<6 digits>.jpeg` |
+| Can a stranger **fetch a URL they were given?** | **Yes** — 200, no login, no expiry |
+| `guardian-videos` | Already private; anonymous fetch returns 400 |
+
+So the exposure is **URL leakage, not discovery**. Anyone the app already
+shows an athlete to can keep that URL forever.
+
+`photos`, `videos`, `posts` and `avatars` stay **public** for launch. Moving
+them behind signed URLs is the better end state, but it is not a bucket
+toggle: full public URLs are stored in the database rather than paths, so it
+needs a data migration plus signing on every read path, and a mistake means
+no images anywhere in the app. That is a poor trade in launch week when
+enumeration is already blocked.
+
+What *was* wrong has been fixed: deleting an account removed the database
+rows but left the files, so a deleted user's photos stayed publicly
+downloadable indefinitely. Storage does not cascade. `purgeUserMedia` now
+clears all five buckets on deletion, which is what makes the "users can
+request deletion" answer below truthful.
+
+Answer Data Safety accordingly — **encrypted in transit: yes** (HTTPS
+throughout), **users can request deletion: yes** (now genuinely true).
 
 ---
 
