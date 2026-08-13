@@ -3,11 +3,13 @@ import type { FastifyReply } from 'fastify';
 import { PRIVACY_HTML } from './privacy.page';
 import { TERMS_HTML } from './terms.page';
 import { LICENSES_HTML } from './licenses.page';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseService } from './config/supabase.config';
+import { MediaUrlService } from './common/media/media-url.service';
+import { SignedMediaInterceptor } from './common/interceptors/signed-media.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { ActivationGuard } from './common/guards/activation.guard';
@@ -175,6 +177,13 @@ class HealthController {
     // HealthController injects this to probe the database. Feature modules
     // provide their own instance; this one is only for the health check.
     SupabaseService,
+    // Media signing. Registered here rather than per-module because the
+    // interceptor below is global and needs it injected.
+    MediaUrlService,
+    // Turns stored media URLs into signed ones on every response. Bound via
+    // APP_INTERCEPTOR (not useGlobalInterceptors in main.ts) because it takes
+    // a dependency and therefore has to come out of the DI container.
+    { provide: APP_INTERCEPTOR, useClass: SignedMediaInterceptor },
     // Throttle BEFORE auth so unauthenticated abuse (OTP-spam, brute force)
     // is rejected before it touches Supabase/Prelude/Gmail.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
