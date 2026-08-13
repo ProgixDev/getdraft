@@ -9,6 +9,7 @@ import {
   Modal,
   ScrollView,
   TextInput,
+  FlatList,
   Alert,
 } from "react-native";
 // expo-image, NOT react-native's Image: the built-in one decodes remote
@@ -47,6 +48,9 @@ import {
 import { COUNTRY_OPTIONS, type CountryOption } from "@/constants/countryData";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+/** Fixed so the strip can snap and so scrollToIndex offsets are exact. */
+const TALENT_CARD_W = 232;
 
 // Same public token the location search uses. Inlined at build time by
 // Metro; present in every EAS build. Without it the map can't load, so we
@@ -238,6 +242,68 @@ window.addEventListener('message',function(e){handleRnMessage(e.data)});
 <\/script></body></html>`;
 }
 
+/** One entry in the strip along the bottom of the map. */
+function TalentStripCard({
+  point,
+  onPress,
+}: {
+  point: MapPoint;
+  onPress: () => void;
+}) {
+  // avatar_url is the profile picture; `photo` is the first gallery shot and
+  // is often the only image an athlete has set.
+  const image = point.avatar_url || point.photo;
+  const subtitle =
+    point.role === "athlete"
+      ? [point.sport, point.position].filter(Boolean).join(" · ")
+      : [point.organization, point.sport].filter(Boolean).join(" · ");
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.talentCard,
+        pressed && styles.talentCardPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`Show ${point.name ?? "this profile"} on the map`}
+    >
+      {image ? (
+        <Image
+          source={{ uri: image }}
+          style={styles.talentAvatar}
+          contentFit="cover"
+          transition={150}
+        />
+      ) : (
+        <View style={[styles.talentAvatar, styles.talentAvatarEmpty]}>
+          <Ionicons name="person" size={18} color="rgba(255,255,255,0.4)" />
+        </View>
+      )}
+      <View style={styles.talentInfo}>
+        <View style={styles.talentNameRow}>
+          <Text style={styles.talentName} numberOfLines={1}>
+            {point.name ?? "Athlete"}
+          </Text>
+          {point.verified && (
+            <Ionicons name="checkmark-circle" size={13} color={semantic.success} />
+          )}
+        </View>
+        {subtitle.length > 0 && (
+          <Text style={styles.talentSub} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
+      <Ionicons
+        name="chevron-forward"
+        size={16}
+        color="rgba(255,255,255,0.35)"
+      />
+    </Pressable>
+  );
+}
+
 function ContinentCard({
   continent,
   index,
@@ -366,6 +432,8 @@ export default function GlobeTab() {
     zoom: number;
   } | null>(null);
 
+  const stripRef = useRef<FlatList<MapPoint>>(null);
+
   const flyTo = useCallback((lat: number, lng: number, zoom = 4.2) => {
     setFlyTarget({ lat, lng, zoom });
     webviewRef.current?.postMessage(
@@ -405,6 +473,36 @@ export default function GlobeTab() {
   // Clearing the filter widens the data back to everyone, so the camera
   // should widen with it rather than staying parked on the place that is no
   // longer being filtered for.
+  /** Strip card tapped: centre the map on that person and open their card. */
+  const focusPoint = useCallback(
+    (p: MapPoint) => {
+      setMatchMsg(null);
+      setBigOpen(false);
+      setSelected(p);
+      flyTo(p.lat, p.lng, 6);
+    },
+    [flyTo],
+  );
+
+  // Keep the strip in step when the selection came from tapping a dot rather
+  // than from the strip itself, so the two views never disagree about who is
+  // being looked at.
+  useEffect(() => {
+    if (!selected) return;
+    const index = points.findIndex((p) => p.id === selected.id);
+    if (index < 0) return;
+    // Guard: scrollToIndex throws if the row is not rendered yet.
+    try {
+      stripRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+    } catch {
+      // Off-screen row — harmless, the strip is hidden while a card is open.
+    }
+  }, [selected, points]);
+
   const clearFilter = useCallback(() => {
     setFilter(null);
     setFlyTarget(null);
@@ -655,15 +753,53 @@ export default function GlobeTab() {
         <Text style={styles.hotspotsButtonText}>Filters & Hotspots</Text>
       </Pressable>
 
-      {/* Instruction hint — centered above the hotspots button */}
-      {!showStats && !selected && !matchMsg && (
+      {/* Talent strip. Dots alone gave no way to tell who is on the map or
+          that anyone is on it at all — with a handful of users you had to
+          find a pin before you could see a single name. The strip lists
+          every point currently plotted; tapping one flies to it and opens
+          the card, and tapping a dot scrolls the strip to match. */}
+      {!showStats && !selected && !matchMsg && points.length > 0 && (
+        <View style={[styles.stripWrap, { bottom: insets.bottom + 96 }]}>
+          <FlatList
+            ref={stripRef}
+            data={points}
+            horizontal
+            keyExtractor={(p) => p.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.stripContent}
+            snapToInterval={TALENT_CARD_W + 10}
+            decelerationRate="fast"
+            // Fixed width, so the offset is exact — needed for scrollToIndex
+            // to land correctly when a map dot drives the selection.
+            getItemLayout={(_, index) => ({
+              length: TALENT_CARD_W + 10,
+              offset: (TALENT_CARD_W + 10) * index,
+              index,
+            })}
+            renderItem={({ item }) => (
+              <TalentStripCard point={item} onPress={() => focusPoint(item)} />
+            )}
+          />
+        </View>
+      )}
+
+      {/* Nothing plotted. Distinguish "filtered to nowhere" from "nobody
+          yet", because the fix is different for each. */}
+      {!showStats && !selected && !matchMsg && points.length === 0 && (
         <View style={[styles.hint, { bottom: insets.bottom + 84 }]}>
           <Ionicons
-            name="hand-left-outline"
+            name={filter ? "funnel-outline" : "people-outline"}
             size={14}
             color="rgba(255,255,255,0.7)"
           />
-          <Text style={styles.hintText}>Pinch to zoom · Tap a dot</Text>
+          <Text style={styles.hintText}>
+            {filter ? `No one in ${filter.label}` : "No talent on the map yet"}
+          </Text>
+          {filter && (
+            <Pressable onPress={clearFilter} hitSlop={8}>
+              <Text style={styles.hintAction}>Clear</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -1234,6 +1370,68 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.06)",
+  },
+  stripWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+  },
+  stripContent: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  talentCard: {
+    width: TALENT_CARD_W,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+    borderRadius: 14,
+    // Opaque rather than translucent: the map underneath is busy, and
+    // athlete names have to stay readable over streets and coastlines.
+    backgroundColor: "rgba(18,18,20,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  talentCardPressed: {
+    borderColor: semantic.success,
+    backgroundColor: "rgba(28,28,32,0.96)",
+  },
+  talentAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  talentAvatarEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  talentInfo: {
+    flex: 1,
+  },
+  talentNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  talentName: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#fff",
+  },
+  talentSub: {
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.5)",
+    marginTop: 1,
+  },
+  hintAction: {
+    fontSize: 12,
+    fontFamily: "Poppins_600SemiBold",
+    color: semantic.success,
   },
   continentCardPressed: {
     backgroundColor: "rgba(255,255,255,0.12)",
