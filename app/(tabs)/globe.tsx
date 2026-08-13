@@ -159,6 +159,31 @@ var map=new mapboxgl.Map({
 });
 // Zoom in/out control (no compass) — bottom-right, above the tab bar.
 map.addControl(new mapboxgl.NavigationControl({showCompass:false,visualizePitch:false}),'bottom-right');
+// "Back to globe". Mapbox only renders the globe projection when zoomed out;
+// pinch in and it becomes an ordinary flat street map, which is what the tab
+// looks like after any exploring. The only way back was repeated taps on the
+// minus button, so the globe read as broken once you had left it.
+var HOME={center:[-40,25],zoom:1.35};
+function ResetCtrl(){}
+ResetCtrl.prototype.onAdd=function(m){
+  this._map=m;
+  var wrap=document.createElement('div');
+  wrap.className='mapboxgl-ctrl mapboxgl-ctrl-group';
+  var b=document.createElement('button');
+  b.type='button';
+  b.title='Back to globe';
+  b.setAttribute('aria-label','Back to globe');
+  b.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:block;margin:auto"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3.2 9h17.6M3.2 15h17.6"/></svg>';
+  b.onclick=function(){m.flyTo({center:HOME.center,zoom:HOME.zoom,duration:1400,essential:true})};
+  wrap.appendChild(b);
+  this._c=wrap;
+  return wrap;
+};
+ResetCtrl.prototype.onRemove=function(){
+  if(this._c&&this._c.parentNode)this._c.parentNode.removeChild(this._c);
+  this._map=undefined;
+};
+map.addControl(new ResetCtrl(),'bottom-right');
 map.on('style.load',function(){
   // Space + atmosphere so the globe reads as a 3D planet, not a flat map.
   map.setFog({
@@ -199,6 +224,10 @@ map.on('load',function(){
 function handleRnMessage(raw){
   try{
     var m=JSON.parse(raw);
+    if(m.type==='resetView'){
+      map.flyTo({center:HOME.center,zoom:HOME.zoom,duration:1400,essential:true});
+      return;
+    }
     if(m.type!=='flyTo')return;
     map.flyTo({center:[m.lng,m.lat],zoom:m.zoom||4.2,duration:1800,essential:true});
   }catch(e){}
@@ -373,9 +402,13 @@ export default function GlobeTab() {
     [flyTo],
   );
 
+  // Clearing the filter widens the data back to everyone, so the camera
+  // should widen with it rather than staying parked on the place that is no
+  // longer being filtered for.
   const clearFilter = useCallback(() => {
     setFilter(null);
     setFlyTarget(null);
+    webviewRef.current?.postMessage(JSON.stringify({ type: "resetView" }));
   }, []);
 
   const countryFilteredList = useMemo(() => {
