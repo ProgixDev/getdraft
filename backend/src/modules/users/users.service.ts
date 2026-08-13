@@ -397,6 +397,69 @@ export class UsersService {
    * fatal: a card-processor outage must not strand the user with an
    * undeletable account.
    */
+  /**
+   * Deletes every stored object belonging to a user, across all buckets.
+   *
+   * Safe to key on the prefix: getSignedUploadUrl builds every path as
+   * `${userId}/${Date.now()}-${safeName}`, and deleteFile already refuses
+   * any path that does not start with the caller's own id, so a user's
+   * objects can only ever live under their own folder.
+   *
+   * guardian-videos is included even though it is a private bucket — a
+   * consent recording of a parent has no reason to outlive the account, and
+   * "private" only means it needs a signed URL, not that it is gone.
+   *
+   * Best-effort by design: this runs during account deletion, and a storage
+   * hiccup must not leave someone with an account they cannot delete. Failures
+   * are logged loudly because the leftover is a privacy problem, not litter.
+   */
+  private async purgeUserMedia(userId: string) {
+    const supabase = this.supabaseService.getAdminClient();
+    const buckets = [
+      'avatars',
+      'photos',
+      'videos',
+      'posts',
+      'guardian-videos',
+    ];
+
+    for (const bucket of buckets) {
+      try {
+        const { data: objects, error: listErr } = await supabase.storage
+          .from(bucket)
+          .list(userId, { limit: 1000 });
+
+        if (listErr) {
+          this.logger.error(
+            `[purge] could not list ${bucket}/${userId}: ${listErr.message}`,
+          );
+          continue;
+        }
+        if (!objects || objects.length === 0) continue;
+
+        const paths = objects.map((o) => `${userId}/${o.name}`);
+        const { error: rmErr } = await supabase.storage
+          .from(bucket)
+          .remove(paths);
+
+        if (rmErr) {
+          this.logger.error(
+            `[purge] could not remove ${paths.length} object(s) from ${bucket}: ${rmErr.message}`,
+          );
+          continue;
+        }
+
+        this.logger.log(
+          `[purge] removed ${paths.length} object(s) from ${bucket} for ${userId}`,
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `[purge] ${bucket} failed for ${userId}: ${err?.message ?? err}`,
+        );
+      }
+    }
+  }
+
   async deleteAccount(userId: string) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -427,6 +490,17 @@ export class UsersService {
         );
       }
     }
+
+    // Storage does NOT cascade. Deleting the auth row removes every database
+    // reference to this media while leaving the objects themselves in place —
+    // and photos/videos/posts/avatars are public buckets, so those files stay
+    // downloadable by anyone holding the URL, forever, with no login. Every
+    // user of the app has been handed those URLs by the API.
+    //
+    // That makes "delete my account" untrue for exactly the data it matters
+    // most for: this platform's users include minors. Runs BEFORE the auth
+    // delete, while we can still resolve what belongs to this user.
+    await this.purgeUserMedia(userId);
 
     const { error } = await supabase.auth.admin.deleteUser(userId);
     if (error) {
