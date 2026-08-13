@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  TextInput,
   Alert,
 } from "react-native";
 // expo-image, NOT react-native's Image: the built-in one decodes remote
@@ -39,6 +40,11 @@ import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { discoverService, type MapPoint } from "@/services/discover";
+import {
+  useRegionSearch,
+  type RegionOption,
+} from "@/hooks/use-region-search";
+import { COUNTRY_OPTIONS, type CountryOption } from "@/constants/countryData";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -51,18 +57,41 @@ const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 // Counts come EXCLUSIVELY from the live stats API — no invented figures.
 // Until the API answers (or when it has nothing for a continent) the card
 // shows a neutral "Growing" label instead.
+// lat/lng is where the camera lands when a hotspot row is tapped, and `zoom`
+// is per-continent because one value cannot frame both Oceania and Europe.
 const CONTINENT_META = [
-  { name: "North America", icon: "american-football" as const },
-  { name: "Europe", icon: "football" as const },
-  { name: "Africa", icon: "fitness" as const },
-  { name: "South America", icon: "football" as const },
-  { name: "Asia", icon: "tennisball" as const },
-  { name: "Oceania", icon: "basketball" as const },
+  {
+    name: "North America",
+    icon: "american-football" as const,
+    lat: 44,
+    lng: -100,
+    zoom: 2.4,
+  },
+  { name: "Europe", icon: "football" as const, lat: 52, lng: 12, zoom: 3 },
+  { name: "Africa", icon: "fitness" as const, lat: 2, lng: 20, zoom: 2.4 },
+  {
+    name: "South America",
+    icon: "football" as const,
+    lat: -18,
+    lng: -60,
+    zoom: 2.5,
+  },
+  { name: "Asia", icon: "tennisball" as const, lat: 36, lng: 95, zoom: 2.2 },
+  {
+    name: "Oceania",
+    icon: "basketball" as const,
+    lat: -25,
+    lng: 140,
+    zoom: 2.7,
+  },
 ];
 
 type ContinentRow = {
   name: string;
   icon: (typeof CONTINENT_META)[number]["icon"];
+  lat: number;
+  lng: number;
+  zoom: number;
   athletes: number | null;
   recruiters: number | null;
 };
@@ -160,16 +189,34 @@ map.on('load',function(){
   });
   map.on('mouseenter','pts',function(){map.getCanvas().style.cursor='pointer'});
   map.on('mouseleave','pts',function(){map.getCanvas().style.cursor=''});
+  if(window.ReactNativeWebView){
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
+  }
 });
+// Inbound: fly the camera somewhere. Until now this bridge was one-way --
+// the map could report a tapped dot but nothing could move it, so picking a
+// place in the filter sheet had nowhere to go.
+function handleRnMessage(raw){
+  try{
+    var m=JSON.parse(raw);
+    if(m.type!=='flyTo')return;
+    map.flyTo({center:[m.lng,m.lat],zoom:m.zoom||4.2,duration:1800,essential:true});
+  }catch(e){}
+}
+// Android delivers on document, iOS on window. Both, or it works on one OS.
+document.addEventListener('message',function(e){handleRnMessage(e.data)});
+window.addEventListener('message',function(e){handleRnMessage(e.data)});
 <\/script></body></html>`;
 }
 
 function ContinentCard({
   continent,
   index,
+  onPress,
 }: {
   continent: ContinentRow;
   index: number;
+  onPress?: () => void;
 }) {
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(-20);
@@ -202,14 +249,32 @@ function ContinentCard({
       : `${continent.athletes ?? "—"} athlete${continent.athletes === 1 ? "" : "s"} · ${continent.recruiters ?? "—"} recruiter${continent.recruiters === 1 ? "" : "s"}`;
 
   return (
-    <Animated.View style={[styles.continentCard, style]}>
-      <View style={styles.continentIcon}>
-        <Ionicons name={continent.icon} size={16} color={semantic.success} />
-      </View>
-      <View style={styles.continentInfo}>
-        <Text style={styles.continentName}>{continent.name}</Text>
-        <Text style={styles.continentStats}>{statsLine}</Text>
-      </View>
+    <Animated.View style={style}>
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        accessibilityRole={onPress ? "button" : undefined}
+        accessibilityLabel={onPress ? `Show ${continent.name}` : undefined}
+        style={({ pressed }) => [
+          styles.continentCard,
+          pressed && onPress ? styles.continentCardPressed : null,
+        ]}
+      >
+        <View style={styles.continentIcon}>
+          <Ionicons name={continent.icon} size={16} color={semantic.success} />
+        </View>
+        <View style={styles.continentInfo}>
+          <Text style={styles.continentName}>{continent.name}</Text>
+          <Text style={styles.continentStats}>{statsLine}</Text>
+        </View>
+        {onPress && (
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color="rgba(255,255,255,0.3)"
+          />
+        )}
+      </Pressable>
     </Animated.View>
   );
 }
@@ -252,6 +317,76 @@ export default function GlobeTab() {
   const [swiping, setSwiping] = useState(false);
   const [matchMsg, setMatchMsg] = useState<string | null>(null);
 
+  // Filter sheet. The sheet was titled "Filters & Hotspots" but offered no
+  // filter of any kind — getMapPoints() was called with no arguments, so the
+  // globe always showed everyone and there was no way to narrow it.
+  const [sheetQuery, setSheetQuery] = useState("");
+  const { results: regionResults, searching: regionSearching } =
+    useRegionSearch(sheetQuery);
+  const [filter, setFilter] = useState<{
+    country: string;
+    region: string;
+    label: string;
+  } | null>(null);
+  // Where the camera should sit. Kept in state rather than posted once,
+  // because changing the filter refetches points, which remounts the WebView
+  // (its key includes the point count) and loses anything already sent.
+  const [flyTarget, setFlyTarget] = useState<{
+    lat: number;
+    lng: number;
+    zoom: number;
+  } | null>(null);
+
+  const flyTo = useCallback((lat: number, lng: number, zoom = 4.2) => {
+    setFlyTarget({ lat, lng, zoom });
+    webviewRef.current?.postMessage(
+      JSON.stringify({ type: "flyTo", lat, lng, zoom }),
+    );
+  }, []);
+
+  /**
+   * A wilaya implies its country, so both go into the filter. Sending the
+   * region alone would leave the backend matching a region name across every
+   * country that happens to share it.
+   */
+  const applyRegionFilter = useCallback(
+    (r: RegionOption) => {
+      setFilter({
+        country: r.country,
+        region: r.name,
+        label: `${r.name}, ${r.country}`,
+      });
+      setSheetQuery("");
+      setShowStats(false);
+      if (r.lat !== null && r.lng !== null) flyTo(r.lat, r.lng, 5.5);
+    },
+    [flyTo],
+  );
+
+  const applyCountryFilter = useCallback(
+    (c: CountryOption) => {
+      setFilter({ country: c.name, region: "", label: c.name });
+      setSheetQuery("");
+      setShowStats(false);
+      flyTo(c.lat, c.lng, 3.6);
+    },
+    [flyTo],
+  );
+
+  const clearFilter = useCallback(() => {
+    setFilter(null);
+    setFlyTarget(null);
+  }, []);
+
+  const countryFilteredList = useMemo(() => {
+    const q = sheetQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return COUNTRY_OPTIONS.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+    ).slice(0, 6);
+  }, [sheetQuery]);
+
   // Fetch globe stats from API. The backend returns an object keyed by
   // continent name ({ "North America": { athletes, recruiters, ... } });
   // only numeric server counts are shown — missing continents stay null
@@ -282,13 +417,17 @@ export default function GlobeTab() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      discoverService.getMapPoints().then((rows) => {
-        if (!cancelled) setPoints(rows);
-      });
+      discoverService
+        .getMapPoints(
+          filter ? { country: filter.country, region: filter.region } : undefined,
+        )
+        .then((rows) => {
+          if (!cancelled) setPoints(rows);
+        });
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [filter]),
   );
 
   // Lazy load: only render WebView when tab is focused
@@ -325,6 +464,17 @@ export default function GlobeTab() {
           type?: string;
           id?: string;
         };
+        // The map finished loading. Changing the filter refetches points,
+        // which remounts the WebView, so restore the camera the user chose
+        // rather than snapping back to the default world view.
+        if (msg.type === "ready") {
+          if (flyTarget) {
+            webviewRef.current?.postMessage(
+              JSON.stringify({ type: "flyTo", ...flyTarget }),
+            );
+          }
+          return;
+        }
         if (msg.type !== "point" || !msg.id) return;
         const hit = points.find((p) => p.id === msg.id);
         if (!hit) return;
@@ -335,7 +485,7 @@ export default function GlobeTab() {
         // Malformed payload — ignore.
       }
     },
-    [points],
+    [points, flyTarget],
   );
 
   const dismissAll = useCallback(() => {
@@ -492,14 +642,20 @@ export default function GlobeTab() {
         statusBarTranslucent
         onRequestClose={() => setShowStats(false)}
       >
-        <Pressable
-          style={styles.sheetBackdrop}
-          onPress={() => setShowStats(false)}
-        >
-          <Pressable style={styles.sheet} onPress={() => {}}>
+        {/* The backdrop is a SIBLING behind the sheet, not its parent. As a
+            parent Pressable it swallowed the drag gesture on Android, which
+            is why the hotspot list could not be scrolled. */}
+        <View style={styles.sheetRoot}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowStats(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          />
+          <View style={styles.sheet}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Talent Hotspots</Text>
+              <Text style={styles.sheetTitle}>Filters & Hotspots</Text>
               <Pressable
                 hitSlop={10}
                 onPress={() => setShowStats(false)}
@@ -514,19 +670,144 @@ export default function GlobeTab() {
                 />
               </Pressable>
             </View>
+
+            <View style={styles.sheetSearch}>
+              <Ionicons name="search" size={16} color="rgba(255,255,255,0.5)" />
+              <TextInput
+                style={styles.sheetSearchInput}
+                placeholder="Search country or wilaya..."
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                value={sheetQuery}
+                onChangeText={setSheetQuery}
+                autoCorrect={false}
+                autoCapitalize="words"
+              />
+              {regionSearching && (
+                <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
+              )}
+              {sheetQuery.length > 0 && !regionSearching && (
+                <Pressable onPress={() => setSheetQuery("")} hitSlop={10}>
+                  <Ionicons
+                    name="close-circle"
+                    size={16}
+                    color="rgba(255,255,255,0.4)"
+                  />
+                </Pressable>
+              )}
+            </View>
+
+            {filter && (
+              <View style={styles.activeFilterRow}>
+                <Ionicons name="funnel" size={13} color={semantic.success} />
+                <Text style={styles.activeFilterText} numberOfLines={1}>
+                  {filter.label}
+                </Text>
+                <Pressable
+                  onPress={clearFilter}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear filter"
+                >
+                  <Ionicons name="close-circle" size={17} color="#fff" />
+                </Pressable>
+              </View>
+            )}
+
             <ScrollView
               contentContainerStyle={{
                 gap: 6,
                 paddingBottom: insets.bottom + 16,
               }}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
-              {CONTINENTS.map((c, i) => (
-                <ContinentCard key={c.name} continent={c} index={i} />
-              ))}
+              {regionResults.length > 0 && (
+                <>
+                  <Text style={styles.sheetSectionLabel}>
+                    Wilayas · states · provinces
+                  </Text>
+                  {regionResults.map((r) => (
+                    <Pressable
+                      key={`${r.country}-${r.name}`}
+                      onPress={() => applyRegionFilter(r)}
+                      style={({ pressed }) => [
+                        styles.sheetResultRow,
+                        pressed && styles.sheetResultPressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name="location-outline"
+                        size={16}
+                        color={semantic.success}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sheetResultName} numberOfLines={1}>
+                          {r.name}
+                        </Text>
+                        <Text style={styles.sheetResultSub} numberOfLines={1}>
+                          {r.country}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={15}
+                        color="rgba(255,255,255,0.35)"
+                      />
+                    </Pressable>
+                  ))}
+                </>
+              )}
+
+              {countryFilteredList.length > 0 && (
+                <>
+                  <Text style={styles.sheetSectionLabel}>Countries</Text>
+                  {countryFilteredList.map((c) => (
+                    <Pressable
+                      key={c.code}
+                      onPress={() => applyCountryFilter(c)}
+                      style={({ pressed }) => [
+                        styles.sheetResultRow,
+                        pressed && styles.sheetResultPressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name="flag-outline"
+                        size={16}
+                        color="rgba(255,255,255,0.6)"
+                      />
+                      <Text style={[styles.sheetResultName, { flex: 1 }]}>
+                        {c.name}
+                      </Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={15}
+                        color="rgba(255,255,255,0.35)"
+                      />
+                    </Pressable>
+                  ))}
+                </>
+              )}
+
+              {sheetQuery.trim().length < 2 && (
+                <>
+                  <Text style={styles.sheetSectionLabel}>Talent Hotspots</Text>
+                  {CONTINENTS.map((c, i) => (
+                    <ContinentCard
+                      key={c.name}
+                      continent={c}
+                      index={i}
+                      onPress={() => {
+                        // Hotspot rows looked tappable and did nothing.
+                        flyTo(c.lat, c.lng, c.zoom);
+                        setShowStats(false);
+                      }}
+                    />
+                  ))}
+                </>
+              )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Match toast — replaces the mini card after a mutual draft. */}
@@ -804,11 +1085,83 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     color: "#FFFFFF",
   },
-  sheetBackdrop: {
+  // Holds the dim layer and the sheet as siblings. The dim used to be the
+  // sheet's parent Pressable, which ate the scroll gesture on Android.
+  sheetRoot: {
     flex: 1,
     justifyContent: "flex-end",
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.55)",
+  },
+  sheetSearch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 42,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.09)",
+  },
+  sheetSearchInput: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: "Poppins_500Medium",
+    // Android centres short text oddly in a fixed-height row without this.
+    paddingVertical: 0,
+  },
+  sheetSectionLabel: {
+    fontSize: 10,
+    fontFamily: "Poppins_600SemiBold",
+    color: "rgba(255,255,255,0.45)",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  sheetResultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  sheetResultPressed: {
+    backgroundColor: "rgba(255,255,255,0.11)",
+  },
+  sheetResultName: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#fff",
+  },
+  sheetResultSub: {
+    fontSize: 11,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.45)",
+    marginTop: 1,
+  },
+  activeFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(31,170,89,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(31,170,89,0.45)",
+  },
+  activeFilterText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#fff",
   },
   sheet: {
     width: "100%",
@@ -848,6 +1201,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.06)",
+  },
+  continentCardPressed: {
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
   continentCard: {
     flexDirection: "row",

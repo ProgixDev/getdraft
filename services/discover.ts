@@ -110,9 +110,26 @@ export const discoverService = {
   // Globe map — the REAL athletes only (the backend places them by precise
   // coords or by country). No mock fallback by request: an empty or failed
   // result yields an empty globe, never generated players.
-  async getMapPoints(): Promise<MapPoint[]> {
+  /**
+   * `query` was previously not accepted at all, so the globe always showed
+   * everyone: the backend has supported country filtering the whole time and
+   * nothing ever sent it. Region (wilaya / state / province) rides along the
+   * same way.
+   */
+  async getMapPoints(query?: {
+    country?: string;
+    region?: string;
+  }): Promise<MapPoint[]> {
     try {
-      const { data } = await api.get("/discover/map");
+      const params: Record<string, string> = {};
+      if (query?.country) params.country = query.country;
+      if (query?.region) params.region = query.region;
+      // The backend gates `country` behind !includeInternational, so a filter
+      // picked here has to turn that off or it is silently ignored.
+      if (query?.country || query?.region) params.includeInternational = "false";
+
+      const qs = new URLSearchParams(params).toString();
+      const { data } = await api.get(`/discover/map${qs ? `?${qs}` : ""}`);
       const rows = (data?.data ?? data) as MapPoint[];
       return Array.isArray(rows) ? rows : [];
     } catch {

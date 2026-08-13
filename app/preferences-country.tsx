@@ -32,18 +32,8 @@ import {
 } from "@/constants/countryData";
 import { RootState } from "@/store";
 import { setDiscoverPreferences } from "@/store/slices/discoverPreferencesSlice";
+import { useRegionSearch, type RegionOption } from "@/hooks/use-region-search";
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
-const REGION_SEARCH_DEBOUNCE_MS = 350;
-const REGION_SEARCH_MIN_LEN = 2;
-
-/** A first-level division: wilaya, state, province, région. */
-interface RegionOption {
-  name: string;
-  country: string;
-  lat: number | null;
-  lng: number | null;
-}
 
 const globeHtml = `
 <!DOCTYPE html>
@@ -160,9 +150,6 @@ export default function PreferencesCountryScreen() {
     lat: number;
     lng: number;
   } | null>(null);
-  const [regionResults, setRegionResults] = useState<RegionOption[]>([]);
-  const [regionSearching, setRegionSearching] = useState(false);
-  const regionSearchSeq = useRef(0);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -183,83 +170,9 @@ export default function PreferencesCountryScreen() {
     );
   }, [searchQuery]);
 
-  // Regions come from Mapbox rather than a bundled list. There are ~3,000
-  // first-level divisions worldwide and they get renamed and resplit (Algeria
-  // went from 48 wilayas to 58 in 2019), so shipping them as a constant means
-  // shipping something already out of date. Countries stay local because the
-  // list is small, stable, and has to work with no network.
-  useEffect(() => {
-    const q = searchQuery.trim();
-
-    if (!MAPBOX_TOKEN || q.length < REGION_SEARCH_MIN_LEN) {
-      setRegionResults([]);
-      setRegionSearching(false);
-      return;
-    }
-
-    setRegionSearching(true);
-    const seq = ++regionSearchSeq.current;
-    const timer = setTimeout(() => {
-      void searchRegions(q, seq);
-    }, REGION_SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
-
-  async function searchRegions(q: string, seq: number) {
-    try {
-      const params = new URLSearchParams({
-        q,
-        access_token: MAPBOX_TOKEN as string,
-        // `region` is Mapbox's name for the first-level division: wilaya in
-        // Algeria, state in the US, province in Canada, région in France.
-        types: "region",
-        autocomplete: "true",
-        limit: "8",
-        language: "en",
-      });
-      const resp = await fetch(
-        `https://api.mapbox.com/search/geocode/v6/forward?${params.toString()}`,
-      );
-      if (!resp.ok) throw new Error(`geocode ${resp.status}`);
-      const json = await resp.json();
-
-      const results: RegionOption[] = (json.features ?? [])
-        .map((feature: any): RegionOption | null => {
-          const props = feature.properties ?? {};
-          const name = props.name;
-          // The parent country is what makes a region filterable — "Blida"
-          // alone cannot be resolved, and the row would read ambiguously.
-          const country = props.context?.country?.name;
-          if (!name || !country) return null;
-          const coords = props.coordinates ?? {};
-          const lat = Number(
-            coords.latitude ?? feature.geometry?.coordinates?.[1],
-          );
-          const lng = Number(
-            coords.longitude ?? feature.geometry?.coordinates?.[0],
-          );
-          return {
-            name,
-            country,
-            lat: Number.isFinite(lat) ? lat : null,
-            lng: Number.isFinite(lng) ? lng : null,
-          };
-        })
-        .filter((r: RegionOption | null): r is RegionOption => r !== null);
-
-      // A slower earlier request must not overwrite a newer one's results.
-      if (seq !== regionSearchSeq.current) return;
-      setRegionResults(results);
-    } catch {
-      // Countries still filter fine without this — degrade quietly rather
-      // than putting a network error in front of someone picking a filter.
-      if (seq === regionSearchSeq.current) setRegionResults([]);
-    } finally {
-      if (seq === regionSearchSeq.current) setRegionSearching(false);
-    }
-  }
+  // Shared with the Globe tab's filter sheet — see hooks/use-region-search.
+  const { results: regionResults, searching: regionSearching } =
+    useRegionSearch(searchQuery);
 
   // One writer for the globe camera. Selecting a wilaya also sets its country,
   // so if this effect only watched `selectedCountry` it would fire on that
