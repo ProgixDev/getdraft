@@ -64,7 +64,7 @@ marks the app broken and rejects it. This field exists precisely for that.
 Add an instruction set:
 
 ```
-Name:     Athlete account
+Name:     Recruiter demo account
 Username: +213558780131
 Password: 123456
 ```
@@ -73,16 +73,30 @@ And in the notes field, paste this verbatim:
 
 ```
 Sign in with the phone number above. The verification code is
-always 123456 — this is a sandboxed test number, no SMS is sent.
+always 123456 — this is a sandboxed test number, no SMS is sent
+and no code is required from your side.
 
-When asked for a date of birth, please enter an ADULT date.
-Accounts under 18 are held for guardian approval by design,
-and the app will correctly stop there.
+This account is already set up, so signing in takes you straight
+into the app. It is a recruiter account: the Discover deck shows
+athlete profiles, which you can Draft (swipe right) or Pass
+(swipe left).
 ```
 
-**Why the date-of-birth note matters:** an under-18 account lands in
-guardian-approval and cannot proceed. That is intended behaviour, but a
-reviewer who trips it sees a dead end and rejects the app.
+**The account is deliberately pre-onboarded.** Left as a fresh signup it
+would land the reviewer in onboarding, which requires a date of birth and
+then third-party identity verification (Didit) — a reviewer will not upload
+a real passport, so they would reach "Finish later — log out" and never see
+the app. That is the single most likely rejection for this product, and it
+is avoided by the account already being complete.
+
+**It is a recruiter, not an athlete, on purpose.** An athlete's Discover deck
+shows recruiters, and there are none in the database yet, so an athlete
+reviewer would see an empty app. A recruiter sees the real athlete profiles
+that do exist.
+
+Verified against production: sign-in returns `onboarded: true`,
+`activation: active`, and the Discover feed and talent map both return a real
+athlete profile with photos.
 
 ---
 
@@ -245,7 +259,7 @@ Version        1.0.0
 API            https://getdraft-api-production.up.railway.app/api
 Privacy        https://getdraft-api-production.up.railway.app/api/privacy
 Terms          https://getdraft-api-production.up.railway.app/api/terms
-Reviewer login +213558780131  /  123456
+Reviewer login +213558780131  /  123456   (recruiter, pre-onboarded)
 Build          npx eas build --platform android --profile production
 OTA (JS only)  npx eas update --branch production --platform android
 ```
