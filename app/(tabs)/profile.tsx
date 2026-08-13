@@ -475,10 +475,82 @@ export default function ProfileScreen() {
     };
   }, [isParent, profileRaw]);
 
-  const photos: MediaSource[] =
-    athleteProfile?.photos ?? recruiterProfile?.photos ?? [];
+  // Memoised because handlePhotoPress depends on it: the `??` chain builds a
+  // fresh array every render, which would rebuild the callback every render
+  // and defeat the memo on everything below it.
+  const photos: MediaSource[] = useMemo(
+    () => athleteProfile?.photos ?? recruiterProfile?.photos ?? [],
+    [athleteProfile?.photos, recruiterProfile?.photos],
+  );
   const videos: MediaSource[] =
     athleteProfile?.videos ?? recruiterProfile?.videos ?? [];
+
+  /**
+   * Choose which photo scouts see on the card.
+   *
+   * MyCardPreview and the Discover card both read photos[0], so "make this
+   * the card photo" is a reorder rather than a new column: move the chosen
+   * URL to the front and keep the rest in order. No schema change, and
+   * anything already reading photos[0] picks it up for free.
+   *
+   * Only remote URLs can be reordered -- a bundled fallback asset is a
+   * number, not something the backend can store.
+   */
+  const handlePhotoPress = useCallback(
+    (index: number) => {
+      const current = photos.filter(
+        (p): p is string => typeof p === "string",
+      );
+      if (current.length === 0 || index >= current.length) return;
+
+      if (index === 0) {
+        Alert.alert(
+          "Card photo",
+          "This is the photo scouts see on your card. Tap another photo to use that one instead.",
+        );
+        return;
+      }
+
+      Alert.alert(
+        "Use as card photo?",
+        "This becomes the photo scouts see first on your card and in Discover.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Use this photo",
+            onPress: async () => {
+              const chosen = current[index];
+              const reordered = [
+                chosen,
+                ...current.filter((_, i) => i !== index),
+              ];
+              // Optimistic: the grid and the card both read this, and a
+              // round-trip before any feedback makes the tap feel dead.
+              setProfileRaw((prev: any) =>
+                prev ? { ...prev, photos: reordered } : prev,
+              );
+              try {
+                await profilesService.upsertAthleteProfile({
+                  photos: reordered,
+                });
+              } catch {
+                // Put it back rather than leaving the UI claiming a change
+                // the server never accepted.
+                setProfileRaw((prev: any) =>
+                  prev ? { ...prev, photos: current } : prev,
+                );
+                Alert.alert(
+                  "Couldn't update",
+                  "Your card photo didn't change. Check your connection and try again.",
+                );
+              }
+            },
+          },
+        ],
+      );
+    },
+    [photos],
+  );
 
   const avatarSource: MediaSource | null = useMemo(() => {
     if (me?.avatar_url) return me.avatar_url as MediaSource;
@@ -924,22 +996,19 @@ export default function ProfileScreen() {
                 setGridFetchKey((k) => k + 1);
               }}
               onTilePress={setOpenedPost}
+              showcasePhotos={photos}
+              onPhotoPress={handlePhotoPress}
             />
           </View>
         )}
 
-        {/* Read-only strip of showcase photos — the ones uploaded during
-            onboarding and used on the public profile and Discover cards.
-            Editing lives in edit-profile (the pencil up top).
+        {/* Showcase photos — uploaded during onboarding, used on the public
+            profile and Discover cards. Editing lives in edit-profile.
 
-            This used to be gated on isRecruiter, which meant an athlete
-            uploaded four photos during signup and then only ever saw one of
-            them: photos[0] is reused as the avatar above, and the rest were
-            rendered nowhere. Reported as "I uploaded 4 images but I see only
-            one". They were never lost — just invisible to their owner while
-            being shown to everyone else. Athletes also have the posts grid,
-            but posts and showcase photos are different things. */}
-        {photos.length > 0 && (
+            Athletes see these in the grid above instead (with the card photo
+            marked and tappable to change), so this strip would repeat them.
+            Recruiters have no grid, so it is still their only view of them. */}
+        {photos.length > 0 && !isAthlete && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Photos</Text>
@@ -1140,13 +1209,27 @@ function GridContent({
   error,
   onRetry,
   onTilePress,
+  showcasePhotos = [],
+  onPhotoPress,
 }: {
   tab: "posts" | "reels" | "saved";
   posts: PostItem[] | null;
   error: boolean;
   onRetry: () => void;
   onTilePress: (post: PostItem) => void;
+  /**
+   * Photos chosen during signup. They live on athlete_profiles.photos and
+   * are what Discover and the player card are built from -- but they were
+   * only rendered in a separate strip further down the page, so the grid
+   * said "Share your first post" to someone who had already uploaded four
+   * images. Shown here first, because to their owner these are simply
+   * "my photos".
+   */
+  showcasePhotos?: MediaSource[];
+  onPhotoPress?: (index: number) => void;
 }) {
+  const showPhotos = tab === "posts" && showcasePhotos.length > 0;
+
   if (posts === null) {
     return (
       <View style={styles.gridLoading}>
@@ -1170,7 +1253,7 @@ function GridContent({
       </View>
     );
   }
-  if (posts.length === 0) {
+  if (posts.length === 0 && !showPhotos) {
     const copy =
       tab === "posts"
         ? "Share your first post from the Feed tab."
@@ -1192,6 +1275,33 @@ function GridContent({
   }
   return (
     <View style={styles.gridTiles}>
+      {showPhotos &&
+        showcasePhotos.map((photo, i) => (
+          <Pressable
+            key={`showcase-${i}`}
+            style={styles.gridTile}
+            onPress={() => onPhotoPress?.(i)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              i === 0 ? "Card photo options" : "Photo options"
+            }
+          >
+            <Image
+              source={typeof photo === "string" ? { uri: photo } : photo}
+              style={styles.gridTileImage}
+              contentFit="cover"
+            />
+            {/* photos[0] is what MyCardPreview and the Discover card use,
+                so mark it -- otherwise "which one do scouts see?" is
+                invisible and unanswerable. */}
+            {i === 0 && (
+              <View style={styles.gridTileBadge}>
+                <Ionicons name="star" size={10} color="#fff" />
+                <Text style={styles.gridTileBadgeText}>Card</Text>
+              </View>
+            )}
+          </Pressable>
+        ))}
       {posts.map((p) => {
         // A reel's mediaUrl is a video file (.mp4) — feeding it to <Image>
         // renders a blank tile. Only show an <Image> when we have a real
@@ -1609,6 +1719,23 @@ const styles = StyleSheet.create({
   gridTiles: {
     flexDirection: "row",
     flexWrap: "wrap",
+  },
+  gridTileBadge: {
+    position: "absolute",
+    left: 5,
+    bottom: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.62)",
+  },
+  gridTileBadgeText: {
+    fontSize: 9,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#fff",
   },
   gridTile: {
     width: "33.3333%",
