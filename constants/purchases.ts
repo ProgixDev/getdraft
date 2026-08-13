@@ -1,8 +1,14 @@
 /**
  * Whether the app may sell digital goods in-app.
  *
- * Currently TRUE on every platform: Android ships with the Stripe
- * PaymentSheet exactly as iOS and web do.
+ * Currently TRUE on Android and web, FALSE on iOS.
+ *
+ * Android ships with the Stripe PaymentSheet as before -- that risk was
+ * taken knowingly and is unchanged. iOS is gated off ahead of its first
+ * submission, because Apple enforces StoreKit for digital goods far more
+ * strictly than Google enforces Play Billing, and the iOS app has never
+ * been reviewed. Shipping an approved iOS build with no purchases beats
+ * shipping nothing while StoreKit gets built.
  *
  * ------------------------------------------------------------------
  * KNOWN RISK — read before changing this
@@ -42,4 +48,6 @@
  * two weeks, ~15% of subscription revenue, and a second source of truth
  * for entitlements to reconcile against Stripe.
  */
-export const PURCHASES_ENABLED = true;
+import { Platform } from "react-native";
+
+export const PURCHASES_ENABLED = Platform.OS !== 'ios';
