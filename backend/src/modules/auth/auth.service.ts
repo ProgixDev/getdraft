@@ -197,12 +197,21 @@ export class AuthService {
       // to tell that from a wrong password. Sign-up still refuses to confirm
       // existence, and the login rate limit (10/min per IP) bounds how fast
       // an address list could be probed.
-      const admin = this.supabaseService.getAdminClient();
-      const { data: known } = await admin
-        .from('users')
-        .select('id')
-        .eq('email', dto.email.trim().toLowerCase())
-        .maybeSingle();
+      // Guarded: this lookup is a nicety on top of an auth failure that has
+      // already happened. If it throws for any reason, fall back to the
+      // generic message rather than turning a clean 401 into a 500.
+      let known: { id: string } | null = null;
+      try {
+        const admin = this.supabaseService.getAdminClient();
+        const res = await admin
+          .from('users')
+          .select('id')
+          .eq('email', dto.email.trim().toLowerCase())
+          .maybeSingle();
+        known = (res?.data as { id: string } | null) ?? null;
+      } catch {
+        throw new UnauthorizedException('Invalid email or password');
+      }
 
       if (!known) {
         throw new UnauthorizedException(

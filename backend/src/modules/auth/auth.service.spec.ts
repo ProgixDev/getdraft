@@ -377,9 +377,7 @@ describe('AuthService', () => {
       otpMock.generateCode.mockReturnValue('123456');
 
       const result = await service.forgotPassword('Test@Example.com');
-      expect(result.message).toBe(
-        'If an account exists, a reset code has been sent.',
-      );
+      expect(result.message).toBe('A reset code has been sent to your email.');
       expect(otpMock.upsert).toHaveBeenCalledWith(
         'reset:test@example.com',
         'email',
@@ -391,14 +389,17 @@ describe('AuthService', () => {
       );
     });
 
-    it('silently no-ops for unknown emails (no enumeration)', async () => {
+    // Enumeration protection was removed here deliberately (client, 14 Aug):
+    // a silent success left people waiting for an email that never came.
+    // Pinned so the trade-off stays a decision rather than drifting back.
+    it('tells the caller when no account exists, and sends nothing', async () => {
       mockUserLookup(null);
 
-      const result = await service.forgotPassword('ghost@example.com');
-      expect(result.message).toBe(
-        'If an account exists, a reset code has been sent.',
+      await expect(service.forgotPassword('ghost@example.com')).rejects.toThrow(
+        'No account found with this email. Please sign up first.',
       );
       expect(mailMock.sendPasswordReset).not.toHaveBeenCalled();
+      expect(otpMock.upsert).not.toHaveBeenCalled();
     });
   });
 
