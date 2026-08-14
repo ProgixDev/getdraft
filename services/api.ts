@@ -56,7 +56,7 @@ function resolveDevApiUrl(): string {
 // build hits Railway and a dev build can still be aimed at LAN/staging/etc.
 const ENV_OVERRIDE = process.env.EXPO_PUBLIC_API_URL;
 export const API_BASE_URL =
-  ENV_OVERRIDE ?? (__DEV__ ? resolveDevApiUrl() : "https://getdraft-api-production.up.railway.app/api");
+  ENV_OVERRIDE ?? (__DEV__ ? resolveDevApiUrl() : "https://getdraft-api-production-8671.up.railway.app/api");
 
 // Same host without the /api suffix — used for WebSocket connections
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
