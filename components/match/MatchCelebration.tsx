@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from "react";
 import {
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -402,7 +403,8 @@ export function MatchCelebration({
     [otherCardType, myRole, otherName],
   );
 
-  const middleHeight = Math.max(238, Math.min(Math.round(height * 0.34), 360));
+  // Was 34% (up to 360pt), which alone pushed the CTA off a tall phone.
+  const middleHeight = Math.max(150, Math.min(Math.round(height * 0.22), 220));
 
   // Same reason as the fontsLoaded capture above. This is a celebration
   // overlay, so a frame without it is preferable to one with clipped text.
@@ -438,22 +440,32 @@ export function MatchCelebration({
 
         {!reducedMotion && <Confetti width={width} height={height} />}
 
-        <View
-          style={[
+        {/* Close sits OUTSIDE the scroller so it stays pinned to the corner
+            rather than scrolling away with the content. */}
+        <Pressable
+          onPress={onDismiss}
+          hitSlop={12}
+          style={[styles.closeBtn, { top: insets.top + 8 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+        </Pressable>
+
+        {/* A ScrollView, not a View. The layout is unchanged when everything
+            fits — flexGrow + space-between reproduce it exactly — but on a
+            short or large-font device the content can now be reached instead
+            of the CTA being clipped off the bottom edge, which is what
+            happened on a real phone. */}
+        <ScrollView
+          style={styles.scroller}
+          contentContainerStyle={[
             styles.content,
             { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 18 },
           ]}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          {/* Close */}
-          <Pressable
-            onPress={onDismiss}
-            hitSlop={12}
-            style={styles.closeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-          >
-            <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
-          </Pressable>
 
           {/* ── TOP: headline + avatars ── */}
           <View style={styles.top}>
@@ -562,7 +574,7 @@ export function MatchCelebration({
               <Text style={styles.secondaryCtaText}>Keep Scouting</Text>
             </Pressable>
           </Animated.View>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -575,8 +587,8 @@ const styles = StyleSheet.create({
   },
   brandGlow: {
     position: "absolute",
-    width: 300,
-    height: 300,
+    width: 230,
+    height: 230,
     borderRadius: 150,
     backgroundColor: "rgba(9,132,227,0.16)",
   },
@@ -585,10 +597,15 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 260,
+    height: 210,
+  },
+  scroller: {
+    flex: 1,
   },
   content: {
-    flex: 1,
+    // flexGrow, not flex: as a contentContainerStyle this keeps
+    // space-between when the content fits and lets it scroll when it does not.
+    flexGrow: 1,
     paddingHorizontal: 22,
     justifyContent: "space-between",
   },
@@ -627,8 +644,8 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   title: {
-    marginTop: 12,
-    fontSize: 40,
+    marginTop: 8,
+    fontSize: 32,
     lineHeight: 46,
     fontFamily: "Poppins_800ExtraBold",
     color: "#FFFFFF",
@@ -636,7 +653,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   avatarRow: {
-    marginTop: 20,
+    marginTop: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -644,11 +661,11 @@ const styles = StyleSheet.create({
   },
   avatarCol: {
     alignItems: "center",
-    width: 96,
+    width: 80,
   },
   avatarRing: {
-    width: 78,
-    height: 78,
+    width: 64,
+    height: 64,
     borderRadius: 39,
     padding: 3,
     backgroundColor: "rgba(255,255,255,0.10)",
@@ -665,7 +682,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1C2128",
   },
   avatarInitials: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: "Poppins_700Bold",
     color: "#FFFFFF",
   },
@@ -677,11 +694,11 @@ const styles = StyleSheet.create({
     maxWidth: 96,
   },
   linkBadge: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     borderRadius: 20,
     marginHorizontal: -6,
-    marginBottom: 22,
+    marginBottom: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: ACCENT,
@@ -695,8 +712,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   subtitle: {
-    marginTop: 14,
-    fontSize: 15,
+    marginTop: 10,
+    fontSize: 14,
     fontFamily: "Poppins_400Regular",
     color: "rgba(255,255,255,0.65)",
     textAlign: "center",
@@ -709,8 +726,8 @@ const styles = StyleSheet.create({
   },
   middleGlow: {
     position: "absolute",
-    width: 240,
-    height: 240,
+    width: 180,
+    height: 180,
     borderRadius: 120,
     backgroundColor: "rgba(9,132,227,0.10)",
   },
