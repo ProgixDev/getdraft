@@ -19,6 +19,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, neutral } from '@/config/colors';
+import { apiErrorMessage } from '@/services/api';
 import { authService } from '@/services/auth';
 
 interface ForgotPasswordScreenProps {
@@ -65,14 +66,13 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
       await authService.forgotPassword(trimmed);
       setStep('code');
     } catch (err: any) {
-      // Even on error, prefer the "if exists" success message to avoid
-      // leaking which emails are registered. Only surface a hard error
-      // if the request itself failed (network).
-      if (err?.message === 'Network Error' || err?.code === 'ERR_NETWORK') {
-        setError('Cannot reach the server. Try again in a moment.');
-      } else {
-        setStep('code');
-      }
+      // This used to advance to the code step on ANY error, because the
+      // backend deliberately never admitted an address was unknown. It now
+      // does (client request, 14 Aug), so swallowing the error sent people to
+      // "Check your email" to wait for a mail that was never sent.
+      setError(
+        apiErrorMessage(err, 'Could not send the reset code. Try again.'),
+      );
     } finally {
       setLoading(false);
     }

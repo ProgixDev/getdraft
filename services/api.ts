@@ -235,3 +235,22 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+/**
+ * The human-readable message the API sent, if there is one.
+ *
+ * Axios puts it at error.response.data.message; err.toString() gives
+ * "AxiosError: Request failed with status code 401", which is what the
+ * sign-in screen was showing users. Anything without a server message falls
+ * back to the caller's wording rather than leaking an axios internal.
+ */
+export function apiErrorMessage(err: any, fallback: string): string {
+  const msg = err?.response?.data?.message;
+  if (typeof msg === "string" && msg.trim().length > 0) return msg;
+  // NestJS validation errors arrive as an array of strings.
+  if (Array.isArray(msg) && typeof msg[0] === "string") return msg[0];
+  if (err?.message === "Network Error" || err?.code === "ERR_NETWORK") {
+    return "Cannot reach the server. Try again in a moment.";
+  }
+  return fallback;
+}

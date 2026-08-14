@@ -48,6 +48,7 @@ import {
   clearError,
   logout,
 } from "@/store/slices/authSlice";
+import { apiErrorMessage } from '@/services/api';
 import { authService } from "@/services/auth";
 import { usersService } from "@/services/users";
 import { subscriptionsService } from "@/services/subscriptions";
@@ -788,9 +789,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           }
         }
         setIsLoading(false);
+        // err.toString() rendered "AxiosError: Request failed with status
+        // code 401". The API now distinguishes an unknown address from a
+        // wrong password, and that wording is what the user needs to see.
         Alert.alert(
           "Sign-in failed",
-          err?.toString?.() || "Invalid email or password.",
+          apiErrorMessage(err, "Invalid email or password."),
         );
       }
     }
