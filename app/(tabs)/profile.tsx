@@ -38,6 +38,7 @@ import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { RootState } from "@/store";
 import type { MediaSource } from "@/constants/discoverData";
 import { profilesService } from "@/services/profiles";
+import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { usersService } from "@/services/users";
 import { matchesService } from "@/services/matches";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
@@ -196,6 +197,7 @@ export default function ProfileScreen() {
   ]);
 
   const [me, setMe] = useState<any | null>(null);
+  const { confirmDelete, deleting: deletingAccount } = useDeleteAccount();
   const [profileRaw, setProfileRaw] = useState<any | null>(null);
   const [childRaw, setChildRaw] = useState<any | null>(null);
   const [matchesCount, setMatchesCount] = useState<number>(0);
@@ -1031,6 +1033,37 @@ export default function ProfileScreen() {
             minimal (identity + About + avatar via Edit). The child's
             media lives on the child's own profile, reachable from the
             guardian dashboard. */}
+
+        {/* Account deletion. Also in Settings; surfaced here because that is
+            where people look for it, and both call the same hook so the two
+            can never delete different things. Last in the scroll, visually
+            separated, and behind two confirmations — it is irreversible. */}
+        <View style={styles.dangerZone}>
+          <Pressable
+            onPress={confirmDelete}
+            disabled={deletingAccount}
+            style={({ pressed }) => [
+              styles.deleteAccountButton,
+              pressed && styles.deleteAccountPressed,
+              deletingAccount && styles.deleteAccountBusy,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Delete my account permanently"
+          >
+            <Ionicons
+              name="trash-outline"
+              size={16}
+              color={semantic.error}
+            />
+            <Text style={styles.deleteAccountText}>
+              {deletingAccount ? "Deleting…" : "Delete my account"}
+            </Text>
+          </Pressable>
+          <Text style={styles.dangerHint}>
+            Permanently erases your profile, photos, posts, matches and
+            messages. This cannot be undone.
+          </Text>
+        </View>
       </ScrollView>
 
       {/* Post / reel detail. Uses the same like + comment + save
@@ -1719,6 +1752,43 @@ const styles = StyleSheet.create({
   gridTiles: {
     flexDirection: "row",
     flexWrap: "wrap",
+  },
+  dangerZone: {
+    marginTop: 28,
+    marginHorizontal: 16,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: theme.border ?? "rgba(255,255,255,0.08)",
+  },
+  deleteAccountButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: semantic.error,
+    backgroundColor: "transparent",
+  },
+  deleteAccountPressed: {
+    backgroundColor: "rgba(220,68,55,0.12)",
+  },
+  deleteAccountBusy: {
+    opacity: 0.6,
+  },
+  deleteAccountText: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: semantic.error,
+  },
+  dangerHint: {
+    marginTop: 8,
+    fontSize: 11,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textMuted ?? theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 16,
   },
   gridTileBadge: {
     position: "absolute",

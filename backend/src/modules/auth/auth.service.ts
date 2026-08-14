@@ -187,7 +187,29 @@ export class AuthService {
     });
 
     if (error) {
-      throw new UnauthorizedException('Invalid email or password');
+      // Product decision (client, 14 Aug): tell someone plainly when no
+      // account exists for the address they typed, instead of the generic
+      // "invalid email or password" they cannot act on.
+      //
+      // This deliberately trades away account-enumeration protection on this
+      // endpoint: a caller can now discover which addresses are registered.
+      // Accepted because a user who mistypes their email otherwise has no way
+      // to tell that from a wrong password. Sign-up still refuses to confirm
+      // existence, and the login rate limit (10/min per IP) bounds how fast
+      // an address list could be probed.
+      const admin = this.supabaseService.getAdminClient();
+      const { data: known } = await admin
+        .from('users')
+        .select('id')
+        .eq('email', dto.email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (!known) {
+        throw new UnauthorizedException(
+          'No account found with this email. Please sign up first.',
+        );
+      }
+      throw new UnauthorizedException('Incorrect password. Please try again.');
     }
 
     // Fetch user data from public.users table
@@ -294,7 +316,7 @@ export class AuthService {
   async forgotPassword(email: string) {
     const normalized = email.trim().toLowerCase();
 
-    // Silent no-op for unknown emails — never leak which addresses exist.
+    // Look the address up so we can tell the user plainly when it is unknown.
     const admin = this.supabaseService.getAdminClient();
     const { data: existing } = await admin
       .from('users')
@@ -302,15 +324,22 @@ export class AuthService {
       .eq('email', normalized)
       .maybeSingle();
 
-    if (existing) {
-      const code = this.signupOtpService.generateCode();
-      // 'reset:' prefix keeps reset codes in their own (contact, type)
-      // slot so they never collide with a signup OTP for the same email.
-      await this.signupOtpService.upsert(`reset:${normalized}`, 'email', code);
-      await this.mailService.sendPasswordReset(normalized, code);
+    // Same product decision as login (client, 14 Aug): say so rather than
+    // leaving someone waiting for an email that will never arrive. Same
+    // enumeration trade-off, and this endpoint is rate limited to 3/min per IP.
+    if (!existing) {
+      throw new BadRequestException(
+        'No account found with this email. Please sign up first.',
+      );
     }
 
-    return { message: 'If an account exists, a reset code has been sent.' };
+    const code = this.signupOtpService.generateCode();
+    // 'reset:' prefix keeps reset codes in their own (contact, type)
+    // slot so they never collide with a signup OTP for the same email.
+    await this.signupOtpService.upsert(`reset:${normalized}`, 'email', code);
+    await this.mailService.sendPasswordReset(normalized, code);
+
+    return { message: 'A reset code has been sent to your email.' };
   }
 
   /** Verify the emailed code and set the new password. */

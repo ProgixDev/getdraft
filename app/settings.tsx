@@ -25,6 +25,7 @@ import { usersService } from "@/services/users";
 import { chatService } from "@/services/chat";
 import { clearTokens } from "@/services/api";
 import { clearAuth } from "@/store/authStorage";
+import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { logout } from "@/store/slices/authSlice";
 
 const PREF_DEFAULTS = {
@@ -40,7 +41,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
-  const [deleting, setDeleting] = useState(false);
 
   const [matchAlerts, setMatchAlerts] = useState(PREF_DEFAULTS.matchAlerts);
   const [messageNotifications, setMessageNotifications] = useState(
@@ -137,60 +137,12 @@ export default function SettingsScreen() {
     persist({ showDistance: v }, () => setShowDistance(!v));
   };
 
-  if (!fontsLoaded) return null;
+  // Shared with the profile screen — see hooks/use-delete-account.
+  // Must sit above the fontsLoaded early return: hooks run in the same order
+  // on every render or React throws.
+  const { confirmDelete: handleDeleteAccount, deleting } = useDeleteAccount();
 
-  const handleDeleteAccount = () => {
-    if (deleting) return;
-    Alert.alert(
-      "Delete Account",
-      "Are you sure? This action cannot be undone. All your data, matches, and messages will be permanently deleted.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () =>
-            Alert.alert(
-              "Permanently delete your account?",
-              "This will erase your profile, posts, matches, and messages. This cannot be undone.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: async () => {
-                    setDeleting(true);
-                    try {
-                      await usersService.deleteAccount();
-                      // Tear down the local session WITHOUT hitting
-                      // /auth/logout — the backend user no longer
-                      // exists, that call would 401 and our api.ts
-                      // session-expired hook would already have
-                      // taken over. The _layout effect picks up
-                      // !isAuthenticated and routes to auth.
-                      await clearTokens().catch(() => {});
-                      await clearAuth().catch(() => {});
-                      try {
-                        chatService.disconnectSocket();
-                      } catch {
-                        // ignore socket teardown errors
-                      }
-                      dispatch(logout());
-                    } catch {
-                      setDeleting(false);
-                      Alert.alert(
-                        "Couldn't delete your account",
-                        "Please try again.",
-                      );
-                    }
-                  },
-                },
-              ],
-            ),
-        },
-      ],
-    );
-  };
+  if (!fontsLoaded) return null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
