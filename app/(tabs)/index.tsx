@@ -2181,9 +2181,16 @@ const styles = StyleSheet.create({
   // Super Draft — GetDraft-gold with the white logo, sits between Pass and
   // Draft. Spent state greys it so it reads as unavailable until next month.
   superButton: {
-    backgroundColor: "#F5A623",
+    // The app icon exactly: #121212 plate, white GD monogram. Sampled from
+    // assets/images/icon.png rather than eyeballed, and it happens to be
+    // brand.primary, so the button is on-brand as well as recognisable.
+    //
+    // Gold (#F5A623) was the only orange thing in the product. The ring does
+    // the separating work now instead of the fill: a near-black circle on a
+    // dark deck needs an edge, or it reads as a hole.
+    backgroundColor: brand.primary,
     borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.35)",
+    borderColor: "rgba(255,255,255,0.9)",
   },
   superButtonSpent: {
     backgroundColor: "#4A4A4A",
