@@ -42,8 +42,8 @@ export type UseCarouselGestureArgs = {
    * JS-thread boolean (which previously could wrongly block going back).
    */
   totalCountSV: SharedValue<number>;
-  onSwipeLeft: () => void; // PASS (down)
-  onSwipeRight: () => void; // DRAFT (up)
+  onSwipeLeft: () => void; // PASS  — left
+  onSwipeRight: () => void; // DRAFT — right
   /** When true, a Draft (up) is blocked: the card snaps back and
    *  onDraftBlocked fires instead. Passing (down) still works. */
   draftLocked?: boolean;

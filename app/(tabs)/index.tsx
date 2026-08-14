@@ -1442,7 +1442,7 @@ export default function DiscoverScreen() {
                   accessibilityLabel={`Pass on ${topCardName}`}
                 >
                   <Ionicons
-                    name="arrow-down"
+                    name="arrow-back"
                     size={actionIconSize}
                     color={brand.white}
                   />
@@ -1514,7 +1514,7 @@ export default function DiscoverScreen() {
                   accessibilityLabel={`Pass on ${topCardName}`}
                 >
                   <Ionicons
-                    name="arrow-down"
+                    name="arrow-back"
                     size={actionIconSize}
                     color={brand.white}
                   />
@@ -1562,7 +1562,7 @@ export default function DiscoverScreen() {
                   accessibilityLabel={`Draft ${topCardName}`}
                 >
                   <Ionicons
-                    name="arrow-up"
+                    name="arrow-forward"
                     size={actionIconSize}
                     color={brand.white}
                   />

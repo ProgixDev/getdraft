@@ -166,7 +166,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
             accessibilityRole="button"
             accessibilityLabel="Skip introduction"
           >
-            <Text style={styles.skipButtonText}>Skip</Text>
+            <Text
+              style={styles.skipButtonText}
+              numberOfLines={1}
+              // Caps how far the OS font setting can stretch this one
+              // label. Without a ceiling, "Largest" pushes it wide
+              // enough to crowd the logo out of the header.
+              maxFontSizeMultiplier={1.3}
+            >
+              Skip
+            </Text>
           </Pressable>
         ) : (
           <View style={styles.headerSpacer} />
@@ -389,9 +398,15 @@ const styles = StyleSheet.create({
     height: 36,
   },
   skipButton: {
-    // Same width as headerSpacer so the logo lands on true centre; the text
-    // is pushed to the right edge inside it, where the padding used to put it.
-    width: 72,
+    // minWidth, NOT width. A hard 72 clipped the label to "Ski" on any device
+    // with the OS font size turned up: React Native scales text with that
+    // setting, and a fixed-width box has nowhere for the extra to go. It read
+    // as a font-loading bug and was reported twice, but the cause is the box.
+    //
+    // 72 matches headerSpacer, so at default text size the logo still lands
+    // on true centre; past that the button grows and the logo shifts a few
+    // pixels, which is the right trade against losing a letter.
+    minWidth: 72,
     alignItems: "flex-end",
     justifyContent: "center",
     paddingVertical: 8,
@@ -407,6 +422,8 @@ const styles = StyleSheet.create({
     color: neutral.gray300,
     fontSize: 16,
     fontFamily: "Poppins_400Regular",
+    // Never the element that gives way when the header is tight.
+    flexShrink: 0,
   },
   scrollView: {
     flex: 1,

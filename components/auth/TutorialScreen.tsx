@@ -41,17 +41,17 @@ interface TutorialSlide {
 const tutorialSlides: TutorialSlide[] = [
   {
     id: "1",
-    icon: "arrow-up-circle",
-    title: "Swipe Up to Draft",
+    icon: "arrow-forward-circle",
+    title: "Swipe Right to Draft",
     description:
-      "When you see talent you want, swipe up to Draft them and show your interest.",
+      "When you see talent you want, swipe right to Draft them and show your interest.",
   },
   {
     id: "2",
-    icon: "arrow-down-circle",
-    title: "Swipe Down to Pass",
+    icon: "arrow-back-circle",
+    title: "Swipe Left to Pass",
     description:
-      "Not the right fit? Swipe down to Pass and move on to the next profile.",
+      "Not the right fit? Swipe left to Pass and move on to the next profile.",
   },
   {
     id: "3",
