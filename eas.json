@@ -14,7 +14,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production-8671.up.railway.app/api"
+        "EXPO_PUBLIC_API_URL": "https://api.getdraft.net/api"
       },
       "environment": "preview"
     },
@@ -22,7 +22,7 @@
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://getdraft-api-production-8671.up.railway.app/api"
+        "EXPO_PUBLIC_API_URL": "https://api.getdraft.net/api"
       },
       "environment": "production"
     }

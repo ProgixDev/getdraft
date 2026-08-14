@@ -49,7 +49,7 @@ type OAuthProvider = 'apple' | 'google';
 // Served by the backend; there is no separate Terms of Service URL yet, so
 // only "Privacy Policy" is a live link below.
 const PRIVACY_POLICY_URL =
-  'https://getdraft-api-production-8671.up.railway.app/api/privacy';
+  'https://api.getdraft.net/api/privacy';
 
 /**
  * Post-welcome auth entry. User picks how to continue: phone (primary),

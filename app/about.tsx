@@ -31,7 +31,7 @@ const SOCIAL_LINKS = [
   },
 ];
 
-const LEGAL_BASE_URL = "https://getdraft-api-production-8671.up.railway.app/api";
+const LEGAL_BASE_URL = "https://api.getdraft.net/api";
 
 const LEGAL_LINKS = [
   {

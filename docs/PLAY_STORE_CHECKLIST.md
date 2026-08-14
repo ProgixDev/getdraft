@@ -200,7 +200,7 @@ on data collection and ads.
 
 ## 8 · Remaining declarations
 
-- **Privacy policy** → `https://getdraft-api-production-8671.up.railway.app/api/privacy`
+- **Privacy policy** → `https://api.getdraft.net/api/privacy`
 - **Ads** → No
 - **Government apps** → No
 - **Financial features** → No (subscriptions are not a financial product)
@@ -256,9 +256,9 @@ longer.
 ```
 Package        com.getdraft.app
 Version        1.0.0
-API            https://getdraft-api-production-8671.up.railway.app/api
-Privacy        https://getdraft-api-production-8671.up.railway.app/api/privacy
-Terms          https://getdraft-api-production-8671.up.railway.app/api/terms
+API            https://api.getdraft.net/api
+Privacy        https://api.getdraft.net/api/privacy
+Terms          https://api.getdraft.net/api/terms
 Reviewer login +213558780131  /  123456   (recruiter, pre-onboarded)
 Build          npx eas build --platform android --profile production
 OTA (JS only)  npx eas update --branch production --platform android
