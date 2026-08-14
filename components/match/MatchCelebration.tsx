@@ -31,7 +31,7 @@ import {
   Poppins_700Bold,
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
-import { brand, semantic } from "@/config/colors";
+import { semantic } from "@/config/colors";
 import type { UserRole } from "@/store/slices/authSlice";
 
 const ACCENT = semantic.infoDark; // #0984E3 brand blue
@@ -404,7 +404,7 @@ export function MatchCelebration({
   );
 
   // Was 34% (up to 360pt), which alone pushed the CTA off a tall phone.
-  const middleHeight = Math.max(150, Math.min(Math.round(height * 0.22), 220));
+  const middleHeight = Math.max(112, Math.min(Math.round(height * 0.17), 164));
 
   // Same reason as the fontsLoaded capture above. This is a celebration
   // overlay, so a frame without it is preferable to one with clipped text.
@@ -424,13 +424,6 @@ export function MatchCelebration({
           <LinearGradient
             colors={["#0B0E12", "#070809"]}
             style={StyleSheet.absoluteFill}
-          />
-          {/* Brand glow pooled behind the headline */}
-          <View
-            style={[
-              styles.brandGlow,
-              { top: insets.top + 40, left: width / 2 - 150 },
-            ]}
           />
           <LinearGradient
             colors={["rgba(9,132,227,0.12)", "transparent"]}
@@ -510,7 +503,6 @@ export function MatchCelebration({
           <Animated.View
             style={[styles.middle, { height: middleHeight }, middleStyle]}
           >
-            <View style={styles.middleGlow} />
             <Animated.View style={[styles.handshakeWrap, handshakeStyle]}>
               <ExpoImage
                 source={HANDSHAKE_IMG}
@@ -584,13 +576,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#070809",
-  },
-  brandGlow: {
-    position: "absolute",
-    width: 230,
-    height: 230,
-    borderRadius: 150,
-    backgroundColor: "rgba(9,132,227,0.16)",
   },
   topWash: {
     position: "absolute",
@@ -723,13 +708,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-  },
-  middleGlow: {
-    position: "absolute",
-    width: 180,
-    height: 180,
-    borderRadius: 120,
-    backgroundColor: "rgba(9,132,227,0.10)",
   },
   handshakeWrap: {
     width: "100%",
