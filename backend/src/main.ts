@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import helmet from '@fastify/helmet';
 import {
   FastifyAdapter,
   NestFastifyApplication,
@@ -36,6 +37,17 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Security headers. The API is mostly JSON for the mobile app, but it also
+  // serves browser-facing HTML at /api/privacy, /api/terms and /api/licenses —
+  // the URLs Play Console and the App Store link to — and those were going out
+  // with no HSTS, no frame protection and no MIME-sniffing protection.
+  //
+  // CSP is disabled deliberately: Swagger UI at /docs loads inline scripts and
+  // styles, and the default policy blocks it. The HTML this serves is static
+  // and takes no user input, so the sniffing and framing headers are what
+  // carry the value here.
+  await app.register(helmet, { contentSecurityPolicy: false });
 
   // Global filters & interceptors
   app.useGlobalFilters(new HttpExceptionFilter());
