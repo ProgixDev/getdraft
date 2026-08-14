@@ -67,6 +67,9 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     canGesture,
     cardHeight,
     slotWidth,
+    // Retained on the interface (callers still pass them) but unused since
+    // Draft/Pass moved to the horizontal axis and browse-by-drag was removed:
+    // screenHeight, totalCountSV, goNext, goPrev.
     screenHeight,
     focusedIndexSV,
     carouselTranslateX,
@@ -89,13 +92,14 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   //    NOT gated by canGesture, so rapid flicks aren't held by a settle/lock.
   //  - vertical Draft/Pass keeps the canGesture gate (used by parent for the
   //    swipeLock/out-of-swipes guards).
-  const horizontalEnabled = isFocused;
-  const verticalEnabled = isFocused && (canGesture ?? true);
+  // The decision axis keeps the canGesture gate the parent uses for its
+  // swipeLock / out-of-swipes guards.
+  const decideEnabled = isFocused && (canGesture ?? true);
 
-  const translateY = useSharedValue(0);
-  // Baseline captured at each new pan start so a gesture begun mid-settle
-  // picks up from the current animated position with no jump.
-  const horizontalStartTx = useSharedValue(0);
+  // Per-card decision drag. Horizontal, because Draft/Pass commit on the
+  // horizontal axis -- see the header note. Distinct from carouselTranslateX,
+  // which is the shared rail position for the neighbour filmstrip.
+  const decideX = useSharedValue(0);
 
   const verticalThreshold = Math.min(160, Math.max(110, cardHeight * 0.18));
   // Easier horizontal commit: 25% of a slot OR a velocity flick > 350.
@@ -104,93 +108,40 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
   const horizontalVelocity = 350;
   const overlayDivisor = Math.max(80, cardHeight * 0.2);
 
-  // Fast, crisp settle — lands in ~160-200ms with no soft overshoot.
-  const fastSpring = { damping: 24, stiffness: 280, mass: 0.6 } as const;
-  const fastTiming = { duration: 160, easing: Easing.out(Easing.cubic) };
-
   // When this card transitions back to focused (e.g. user browsed back to an
   // already-decided card whose translateY was flung off-screen), bring it home.
   useEffect(() => {
     if (isFocused) {
-      translateY.value = 0;
+      decideX.value = 0;
     }
   }, [isFocused]);
 
+  // HORIZONTAL = the decision axis. Left commits Pass, right commits Draft.
+  //
+  // This used to browse the carousel while Draft/Pass lived on the vertical
+  // axis. The client asked for left/right on 13 July and every swipe product
+  // works this way, so the axes were swapped rather than relabelled -- an
+  // earlier attempt changed only the labels, which made the tutorial and the
+  // buttons describe a gesture the deck did not have.
+  //
+  // Browse-without-deciding is gone with it: the two cannot share an axis, and
+  // Pass already covers "not this one". handleSwipeLeft/Right advance the
+  // focused index themselves, so the deck still moves.
   const horizontalPan = Gesture.Pan()
-    .enabled(horizontalEnabled)
+    .enabled(decideEnabled)
     .activeOffsetX([-20, 20])
     // Cross-axis fail window is deliberately wider (±40) than the activation
-    // window (±20) — a diagonal swipe that crosses ±24 on BOTH axes would
+    // window (±20) -- a diagonal swipe that crosses ±24 on BOTH axes would
     // otherwise fail both recognizers and drop the gesture entirely.
     .failOffsetY([-40, 40])
-    .onStart(() => {
-      // Interruptible carousel: pick up from wherever the previous animation
-      // left off. Direct writes to carouselTranslateX in onUpdate also
-      // implicitly cancel any in-flight spring/timing.
-      horizontalStartTx.value = carouselTranslateX.value;
-    })
     .onUpdate((e) => {
-      let dx = e.translationX;
-      // Derive bounds from live SharedValues (UI thread) — never a stale
-      // JS-thread boolean. A right-drag (dx>0) browses to the PREVIOUS card.
-      const atStart = focusedIndexSV.value <= 0;
-      const atEnd = focusedIndexSV.value >= totalCountSV.value - 1;
-      if (atStart && dx > 0) dx = dx * 0.3;
-      if (atEnd && dx < 0) dx = dx * 0.3;
-      carouselTranslateX.value = horizontalStartTx.value + dx;
-    })
-    .onEnd((e) => {
-      const dx = e.translationX;
-      const atStart = focusedIndexSV.value <= 0;
-      const atEnd = focusedIndexSV.value >= totalCountSV.value - 1;
-      const shouldNext =
-        !atEnd &&
-        (dx < -horizontalThreshold || e.velocityX < -horizontalVelocity);
-      const shouldPrev =
-        !atStart &&
-        (dx > horizontalThreshold || e.velocityX > horizontalVelocity);
-
-      if (shouldNext) {
-        runOnJS(lightImpact)();
-        // EAGER COMMIT: advance focus on the UI thread NOW so the new centre
-        // card is gesture-live (its slot math uses focusedIndexSV directly).
-        // Compensate carouselTranslateX by +slot so the visual position is
-        // identical at the commit instant, then spring it to 0. React state
-        // catches up on the same tick via runOnJS(goNext).
-        focusedIndexSV.value = focusedIndexSV.value + 1;
-        carouselTranslateX.value = carouselTranslateX.value + slotWidth;
-        runOnJS(goNext)();
-        carouselTranslateX.value = reducedMotion
-          ? withTiming(0, fastTiming)
-          : withSpring(0, fastSpring);
-      } else if (shouldPrev) {
-        runOnJS(lightImpact)();
-        focusedIndexSV.value = focusedIndexSV.value - 1;
-        carouselTranslateX.value = carouselTranslateX.value - slotWidth;
-        runOnJS(goPrev)();
-        carouselTranslateX.value = reducedMotion
-          ? withTiming(0, fastTiming)
-          : withSpring(0, fastSpring);
-      } else {
-        carouselTranslateX.value = reducedMotion
-          ? withTiming(0, fastTiming)
-          : withSpring(0, fastSpring);
-      }
-    });
-
-  const verticalPan = Gesture.Pan()
-    .enabled(verticalEnabled)
-    .activeOffsetY([-20, 20])
-    // Same widened cross-axis window as horizontalPan (see above).
-    .failOffsetX([-40, 40])
-    .onUpdate((e) => {
-      translateY.value = e.translationY;
+      decideX.value = e.translationX;
     })
     .onEnd((e) => {
       const shouldDraft =
-        e.translationY < -verticalThreshold || e.velocityY < -500;
+        e.translationX > horizontalThreshold || e.velocityX > 500;
       const shouldPass =
-        e.translationY > verticalThreshold || e.velocityY > 500;
+        e.translationX < -horizontalThreshold || e.velocityX < -500;
 
       if (shouldDraft) {
         runOnJS(lightImpact)();
@@ -198,34 +149,24 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
           // Out of Drafts: block the Draft, snap the card back, surface the
           // upgrade CTA. Passing (below) stays free.
           if (onDraftBlocked) runOnJS(onDraftBlocked)();
-          translateY.value = withSpring(0, { damping: 15 });
+          decideX.value = withSpring(0, { damping: 15 });
         } else {
-          // Advance the index NOW — the new card becomes focused/interactive
-          // on the JS thread immediately, while the old card's translateY
+          // Advance the index NOW -- the new card becomes focused/interactive
+          // on the JS thread immediately, while the old card's decideX
           // continues animating off-screen on the UI thread.
           runOnJS(onSwipeRight)();
-          if (reducedMotion) {
-            translateY.value = withTiming(-screenHeight * 0.3, { duration: 180 });
-          } else {
-            translateY.value = withSpring(-screenHeight * 1.2, {
-              damping: 22,
-              stiffness: 200,
-            });
-          }
+          decideX.value = reducedMotion
+            ? withTiming(slotWidth * 0.6, { duration: 180 })
+            : withSpring(slotWidth * 1.8, { damping: 22, stiffness: 200 });
         }
       } else if (shouldPass) {
         runOnJS(lightImpact)();
         runOnJS(onSwipeLeft)();
-        if (reducedMotion) {
-          translateY.value = withTiming(screenHeight * 0.3, { duration: 180 });
-        } else {
-          translateY.value = withSpring(screenHeight * 1.2, {
-            damping: 22,
-            stiffness: 200,
-          });
-        }
+        decideX.value = reducedMotion
+          ? withTiming(-slotWidth * 0.6, { duration: 180 })
+          : withSpring(-slotWidth * 1.8, { damping: 22, stiffness: 200 });
       } else {
-        translateY.value = withSpring(0, { damping: 15 });
+        decideX.value = withSpring(0, { damping: 15 });
       }
     });
 
@@ -240,7 +181,7 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
       if (success && onTap) runOnJS(onTap)();
     });
 
-  const gesture = Gesture.Race(horizontalPan, verticalPan, tap);
+  const gesture = Gesture.Race(horizontalPan, tap);
 
   // Button-driven trigger (draft/pass). Same instant-advance pattern as the
   // gesture path: kick the index over right away so the next card is alive.
@@ -257,13 +198,13 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     if (isDraft) onSwipeRight();
     else onSwipeLeft();
     if (reducedMotion) {
-      translateY.value = withTiming(
-        isDraft ? -screenHeight * 0.3 : screenHeight * 0.3,
+      decideX.value = withTiming(
+        isDraft ? slotWidth * 0.6 : -slotWidth * 0.6,
         { duration: 180 },
       );
     } else {
-      translateY.value = withSpring(
-        isDraft ? -screenHeight * 1.2 : screenHeight * 1.2,
+      decideX.value = withSpring(
+        isDraft ? slotWidth * 1.8 : -slotWidth * 1.8,
         { damping: 22, stiffness: 200 },
       );
     }
@@ -286,13 +227,13 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     const slotDistance =
       (absoluteIndex - focusedIndexSV.value) * slotWidth +
       carouselTranslateX.value;
-    const flinging = !isFocused && Math.abs(translateY.value) > 8;
+    const flinging = !isFocused && Math.abs(decideX.value) > 8;
     const visualDistance = flinging ? 0 : slotDistance;
     const normalized = Math.min(1, Math.abs(visualDistance) / slotWidth);
     // Neighbours land at scale 0.9 / opacity 0.55; centre at 1 / 1.
     const baseScale = 1 - 0.1 * normalized;
     const baseOpacity = 1 - 0.45 * normalized;
-    const drag = Math.abs(translateY.value);
+    const drag = Math.abs(decideX.value);
     const dragScale = reducedMotion ? 1 : 1 - Math.min(drag / 1400, 0.04);
 
     // Single-threshold flip: the card crossing the half-slot mark takes the
@@ -303,8 +244,12 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
 
     return {
       transform: [
-        { translateX: flinging ? 0 : slotDistance },
-        { translateY: translateY.value },
+        // Slot position for the filmstrip, plus this card's own decision drag.
+        // A card mid-fling is no longer the focus, so its slot offset is
+        // suppressed and only the fling remains -- otherwise the rail would
+        // yank it sideways as it leaves.
+        { translateX: (flinging ? 0 : slotDistance) + decideX.value },
+        { rotate: `${(decideX.value / slotWidth) * 8}deg` },
         { scale: baseScale * dragScale },
       ],
       opacity: baseOpacity,
@@ -320,21 +265,22 @@ export function useCarouselGesture(args: UseCarouselGestureArgs) {
     const slotDistance =
       (absoluteIndex - focusedIndexSV.value) * slotWidth +
       carouselTranslateX.value;
-    const flinging = !isFocused && Math.abs(translateY.value) > 8;
+    const flinging = !isFocused && Math.abs(decideX.value) > 8;
     const visualDistance = flinging ? 0 : slotDistance;
     const normalized = Math.min(1, Math.abs(visualDistance) / slotWidth);
     return { opacity: normalized };
   });
 
+  // DRAFT stamps on a right drag, PASS on a left one.
   const draftOverlayStyle = useAnimatedStyle(() => ({
     opacity: isFocused
-      ? Math.min(-translateY.value / overlayDivisor, 1) * 0.9
+      ? Math.min(decideX.value / overlayDivisor, 1) * 0.9
       : 0,
   }));
 
   const passOverlayStyle = useAnimatedStyle(() => ({
     opacity: isFocused
-      ? Math.min(translateY.value / overlayDivisor, 1) * 0.9
+      ? Math.min(-decideX.value / overlayDivisor, 1) * 0.9
       : 0,
   }));
 

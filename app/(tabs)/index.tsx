@@ -1453,13 +1453,23 @@ export default function DiscoverScreen() {
             <>
               <View style={styles.hintRow}>
                 <View style={styles.hintSide}>
-                  <Animated.View style={draftBounceStyle}>
+                  <Animated.View style={passBounceStyle}>
                     <Ionicons
-                      name="chevron-up"
+                      name="chevron-back"
                       size={14}
-                      color={semantic.success}
+                      color={semantic.error}
                     />
                   </Animated.View>
+                  <Text
+                    style={[styles.hintLabel, { color: semantic.error }]}
+                  >
+                    Pass
+                  </Text>
+                </View>
+                <View style={styles.hintCenter}>
+                  <Text style={styles.hintBrowse}>swipe to decide</Text>
+                </View>
+                <View style={styles.hintSide}>
                   <Text
                     style={[
                       styles.hintLabel,
@@ -1468,31 +1478,11 @@ export default function DiscoverScreen() {
                   >
                     Draft
                   </Text>
-                </View>
-                <View style={styles.hintCenter}>
-                  <Ionicons
-                    name="chevron-back"
-                    size={11}
-                    color={theme.textSecondary}
-                  />
-                  <Text style={styles.hintBrowse}>swipe to browse</Text>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={11}
-                    color={theme.textSecondary}
-                  />
-                </View>
-                <View style={styles.hintSide}>
-                  <Text
-                    style={[styles.hintLabel, { color: semantic.error }]}
-                  >
-                    Pass
-                  </Text>
-                  <Animated.View style={passBounceStyle}>
+                  <Animated.View style={draftBounceStyle}>
                     <Ionicons
-                      name="chevron-down"
+                      name="chevron-forward"
                       size={14}
-                      color={semantic.error}
+                      color={semantic.success}
                     />
                   </Animated.View>
                 </View>
