@@ -70,3 +70,6 @@ landing/_build/shots/
 
 # Local DB connection strings for migration runs (never commit)
 .secrets/
+
+# EAS keystore credentials — never commit
+credentials.json
