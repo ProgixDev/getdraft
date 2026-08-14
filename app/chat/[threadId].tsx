@@ -298,13 +298,6 @@ export default function ChatScreen() {
     deliver(message.id, message.text);
   };
 
-  const handleAskForCall = () => {
-    // Pre-fill the composer so the user can edit/confirm before sending.
-    setDraft(
-      "Would you be available for a quick call this week to discuss next steps?",
-    );
-  };
-
   if (!fontsLoaded) return null;
 
   if (!matchId) {
@@ -365,13 +358,6 @@ export default function ChatScreen() {
           ) : null}
         </Pressable>
         <View style={styles.headerIconButton} />
-      </View>
-
-      <View style={styles.actionsBar}>
-        <Pressable style={styles.callButton} onPress={handleAskForCall}>
-          <Ionicons name="call-outline" size={16} color={theme.accentText} />
-          <Text style={styles.callButtonText}>Ask for a call</Text>
-        </Pressable>
       </View>
 
       {loading ? (
@@ -539,31 +525,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Poppins_500Medium",
     color: theme.textSecondary,
-  },
-  actionsBar: {
-    backgroundColor: theme.headerBg,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-    alignItems: "flex-start",
-    paddingLeft: 12,
-    paddingRight: 12,
-    paddingTop: 8,
-    paddingBottom: 10,
-  },
-  callButton: {
-    height: 36,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    backgroundColor: theme.accent,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  callButtonText: {
-    fontSize: 12,
-    fontFamily: "Poppins_600SemiBold",
-    color: theme.accentText,
   },
   centerWrap: {
     flex: 1,

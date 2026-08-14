@@ -43,7 +43,7 @@ const FAQ_ITEMS = [
     icon: "chatbubble-outline" as const,
     question: "How do I contact a recruiter?",
     answer:
-      'Once you match with a recruiter, a chat thread opens automatically. Go to the Draft Board tab, tap on a match, and start messaging. You can also use the "Ask for a call" button at the top of the chat.',
+      'Once you match with a recruiter, a chat thread opens automatically. Go to the Draft Board tab, tap on a match, and start messaging.',
   },
   {
     icon: "refresh-outline" as const,
