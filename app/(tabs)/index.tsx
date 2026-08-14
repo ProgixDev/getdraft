@@ -812,9 +812,10 @@ export default function DiscoverScreen() {
     const avatar = typeof rawAvatar === "string" ? rawAvatar : null;
     setLastSwipe({ index: cur, action: "draft", name });
 
+    let draftPromise: Promise<unknown> | null = null;
     if (targetId) {
       swipedIdsRef.current.add(targetId);
-      discoverService
+      draftPromise = discoverService
         .swipe(targetId, "draft", isSuper)
         .then((res) => {
           setSwipesRemaining(res.swipesRemaining);
@@ -907,7 +908,23 @@ export default function DiscoverScreen() {
     focusedIndexSV.value = next;
     carouselTranslateX.value = 0;
     setCurrentIndex(next);
-    setTimeout(() => setSwipeLock(false), 80);
+
+    // Hold the lock until the draft RESPONSE lands, not a fixed 80ms.
+    //
+    // The round trip takes a few hundred milliseconds, so an 80ms release let
+    // the next swipe start before we knew whether this one matched. The
+    // celebration then popped on top of whatever card came next -- swipe
+    // right on A, swipe left on B, and A's "It's a Draft!" appears over B.
+    // It reads as the overlay firing on a Pass, which is impossible: the
+    // overlay is only ever set in this handler.
+    //
+    // Pass keeps the 80ms release. It has no result worth waiting for, and
+    // passing should stay fast.
+    if (draftPromise) {
+      draftPromise.finally(() => setSwipeLock(false));
+    } else {
+      setTimeout(() => setSwipeLock(false), 80);
+    }
   }, [discoverItems, focusedIndexSV, carouselTranslateX]);
 
   const handleMatchDismiss = useCallback(() => {
