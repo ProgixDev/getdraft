@@ -163,7 +163,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
-      "versionCode": 38
+      "versionCode": 39
     },
     "web": {
       "output": "static",
