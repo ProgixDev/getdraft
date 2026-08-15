@@ -20,6 +20,61 @@ Console account: **Patrick's** (the listing belongs to whoever owns the account 
 
 ---
 
+## 0 · Pre-submission audit — 15 Aug 2026
+
+Run against production (`api.getdraft.net`), not a local build.
+
+### Verified working
+
+| Check | Result |
+|---|---|
+| Reviewer sign-in `+213558780131` | ✅ token issued, `activation: active` |
+| Discover / profile / Draft Board / chat / rankings / map | ✅ all 200 |
+| Subscription + swipe-pack endpoints | ✅ 200 |
+| Card images load | ✅ 200 (an earlier 403 was Pexels blocking the *test tool's* user-agent, not the app) |
+| Error responses | ✅ clean JSON, no stack traces |
+| Security headers | ✅ HSTS, X-Frame-Options, nosniff, Referrer-Policy |
+| Rate limiter vs. an impatient reviewer | ✅ 30 rapid reads, 0 blocked |
+| Dev bypasses / debug endpoints | ✅ none; `/dev`, `/debug`, `/test`, `/seed`, `/admin` all 404 |
+| Production API URL baked into the build | ✅ dev override is `__DEV__`-only |
+| `targetSdkVersion` | ✅ 36 (Expo SDK 54) — above Play's minimum |
+| `POST_NOTIFICATIONS` | ✅ merged from expo-notifications' own manifest |
+| Edge-to-edge | ✅ enabled, required at API 36 |
+| Privacy / Terms / Deletion URLs | ✅ all 200 |
+| Typecheck + tests | ✅ 0 errors both sides, 90/90 tests |
+
+### Fixed during the audit
+
+- **Web account-deletion page** — Play requires a deletion route reachable from a
+  browser, not only in-app. It did not exist. Now live at
+  `https://api.getdraft.net/api/account-deletion`.
+- **Mapbox branding** hidden on the Globe at the client's request. Their terms
+  require it visible on standard plans; keeping it hidden needs a plan that
+  permits it or the token can be revoked.
+
+### 🔴 The one thing to do immediately before submitting
+
+**Reset the reviewer account's swipe history.** The deck is currently **2 cards
+deep**. A reviewer swipes twice and hits "You've seen everyone!" — which reads as
+a broken app and is the most likely rejection for this product.
+
+There are 5 eligible athletes. Clearing the reviewer's 3 swipes restores all 5.
+
+Do it **last**, after all testing: every swipe taken while testing eats the deck
+again. It is safe — `swipe()` handles a pre-existing match via `P2002` and
+reuses it rather than erroring.
+
+### Known risks carried into review
+
+1. **Stripe rather than Play Billing** — deliberate. One-line switch if rejected
+   (`PURCHASES_ENABLED` in `constants/purchases.ts`).
+2. **Prelude has no credit** — the reviewer's sandbox number works, so review
+   passes, but *real* phone signups fail until it is topped up. Email works.
+3. **Stripe + Didit webhooks** still point at the old host.
+4. **Supabase free plan** — no backups, project sleeps when idle.
+
+---
+
 ## 1 · Build the AAB
 
 The store needs an **AAB**, not an APK. An APK is for sideloading and cannot be
@@ -258,6 +313,7 @@ Package        com.getdraft.app
 Version        1.0.0
 API            https://api.getdraft.net/api
 Privacy        https://api.getdraft.net/api/privacy
+Deletion       https://api.getdraft.net/api/account-deletion
 Terms          https://api.getdraft.net/api/terms
 Reviewer login +213558780131  /  123456   (recruiter, pre-onboarded)
 Build          npx eas build --platform android --profile production
