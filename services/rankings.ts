@@ -1,6 +1,8 @@
 import api from "./api";
 
-export type RankingDivision = "CA" | "US" | "OTHER";
+// WORLD is a lens, not a country: every athlete ranked by sport across all
+// countries. See migration 040.
+export type RankingDivision = "CA" | "US" | "OTHER" | "WORLD";
 
 /** One row of the backend `athlete_ranking_scores` view (migration 019). */
 export interface RankingRow {
@@ -23,18 +25,22 @@ export interface RankingRow {
   score: number;
   division_rank: number;
   cohort_size: number;
+  world_rank: number;
+  world_cohort_size: number;
 }
 
 export const DIVISION_LABEL: Record<RankingDivision, string> = {
   CA: "Canada",
   US: "USA",
   OTHER: "International",
+  WORLD: "World",
 };
 
 export const DIVISION_FLAG: Record<RankingDivision, string> = {
   CA: "🇨🇦",
   US: "🇺🇸",
   OTHER: "🌍",
+  WORLD: "🏆",
 };
 
 /**
@@ -114,6 +120,10 @@ function mock(
     score,
     division_rank: rankOffset + 1,
     cohort_size: cohort,
+    // Offline stand-in: a world board is every division's cohort stacked, so
+    // it is both deeper and a rung lower than the same athlete's home board.
+    world_rank: rankOffset + 1,
+    world_cohort_size: cohort * 3,
   };
 }
 

@@ -2,7 +2,9 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import { UserRole } from '../../common/types';
 
-export type RankingDivision = 'CA' | 'US' | 'OTHER';
+// WORLD is not a country bucket -- it is every athlete, ranked by sport
+// across all countries. See migration 040.
+export type RankingDivision = 'CA' | 'US' | 'OTHER' | 'WORLD';
 
 /** One row of the `athlete_ranking_scores` view (see migration 019). */
 export interface RankingRow {
@@ -24,6 +26,8 @@ export interface RankingRow {
   profile_completion: number;
   score: number;
   division_rank: number;
+  world_rank: number;
+  world_cohort_size: number;
   cohort_size: number;
 }
 
@@ -97,7 +101,11 @@ export class RankingsService {
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const supabase = this.supabaseService.getAdminClient();
 
-    let query = supabase.from(VIEW).select('*').eq('division', division);
+    // WORLD spans every country, so it is the absence of a division filter
+    // rather than a value to match.
+    const isWorld = division === 'WORLD';
+    let query = supabase.from(VIEW).select('*');
+    if (!isWorld) query = query.eq('division', division);
 
     // Respect "Profile Visible": opted-out athletes are excluded here (not
     // post-filtered) so `limit` still returns a full page.
@@ -107,9 +115,12 @@ export class RankingsService {
     }
 
     if (params.sport) {
+      // Order by whichever rank matches the board being shown: division_rank
+      // is per (country, sport) and would interleave nonsensically on a world
+      // board, where several athletes each hold division rank 1.
       query = query
         .eq('sport', params.sport)
-        .order('division_rank', { ascending: true });
+        .order(isWorld ? 'world_rank' : 'division_rank', { ascending: true });
     } else {
       query = query.order('score', { ascending: false });
     }
@@ -122,7 +133,8 @@ export class RankingsService {
   /** Distinct sports that have at least one ranked athlete in a division. */
   async getSports(division: RankingDivision): Promise<string[]> {
     const supabase = this.supabaseService.getAdminClient();
-    let sportQuery = supabase.from(VIEW).select('sport').eq('division', division);
+    let sportQuery = supabase.from(VIEW).select('sport');
+    if (division !== 'WORLD') sportQuery = sportQuery.eq('division', division);
     // Same privacy filter as getRankings, so a sport whose only athletes opted
     // out doesn't show up in the picker and then open an empty leaderboard.
     const hidden = await this.hiddenAthleteIds();
@@ -185,6 +197,10 @@ export class RankingsService {
       score: row.score,
       division_rank: row.division_rank,
       cohort_size: row.cohort_size,
+      // Same public standing, measured globally. Safe by the same reasoning
+      // as division_rank: it is a position, not personal data.
+      world_rank: row.world_rank,
+      world_cohort_size: row.world_cohort_size,
     };
   }
 

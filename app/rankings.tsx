@@ -38,7 +38,18 @@ import {
   RankingRow,
 } from "@/services/rankings";
 
-const DIVISIONS: RankingDivision[] = ["CA", "US"];
+const DIVISIONS: RankingDivision[] = ["CA", "US", "WORLD"];
+
+/**
+ * Which rank a row shows depends on the board being viewed. On World the
+ * division numbers are meaningless -- every country's leader holds division
+ * rank 1, so the list would render a column of #1s.
+ */
+function standing(row: RankingRow, division: RankingDivision) {
+  return division === "WORLD"
+    ? { rank: row.world_rank, cohort: row.world_cohort_size }
+    : { rank: row.division_rank, cohort: row.cohort_size };
+}
 const MEDAL: Record<number, string> = {
   1: "#FFD700",
   2: "#C0C0C0",
@@ -72,7 +83,10 @@ export default function RankingsScreen() {
     Poppins_800ExtraBold,
   });
 
-  const [division, setDivision] = useState<RankingDivision>("CA");
+  // World, not Canada: it is the only board guaranteed to have rows in it,
+  // so a recruiter never opens Rankings to an empty screen. An athlete is
+  // moved to their own board by the bootstrap below.
+  const [division, setDivision] = useState<RankingDivision>("WORLD");
   const [sport, setSport] = useState<string | undefined>(undefined);
   const [sports, setSports] = useState<string[]>([]);
   const [rows, setRows] = useState<RankingRow[]>([]);
@@ -82,15 +96,18 @@ export default function RankingsScreen() {
   const [bootstrapped, setBootstrapped] = useState(false);
 
   // First load: pull the athlete's own rank to seed the division + sport to
-  // their cohort. Recruiters/parents just default to Canada.
+  // their cohort. Recruiters/parents stay on the world board.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const mine = await rankingsService.getMyRank();
       if (cancelled) return;
       setMyRank(mine);
-      if (mine && (mine.division === "CA" || mine.division === "US")) {
-        setDivision(mine.division);
+      if (mine) {
+        // Athletes outside CA/US sit in the OTHER bucket, which has no board
+        // of its own -- send them to World rather than leaving them looking
+        // at Canada's leaderboard with no row of their own on it.
+        setDivision(mine.division === "OTHER" ? "WORLD" : mine.division);
         setSport(mine.sport);
       }
       setBootstrapped(true);
@@ -131,10 +148,15 @@ export default function RankingsScreen() {
 
   if (!fontsLoaded) return null;
 
-  const showMyRank =
-    user?.role === "athlete" &&
-    myRank &&
-    (myRank.division === "CA" || myRank.division === "US");
+  // Every athlete now has a standing somewhere -- an OTHER-division athlete
+  // on the world board -- so the chip no longer hides for anyone.
+  const showMyRank = user?.role === "athlete" && !!myRank;
+  // An OTHER-division athlete's real standing is the world one.
+  const myBoard: RankingDivision =
+    myRank && myRank.division === "OTHER" ? "WORLD" : (myRank?.division ?? "CA");
+  const mine = myRank
+    ? standing(myRank, myBoard)
+    : { rank: 0, cohort: 0 };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -199,17 +221,17 @@ export default function RankingsScreen() {
             {showMyRank && myRank && (
               <View style={styles.myRankCard}>
                 <View style={styles.myRankBadge}>
-                  <Text style={styles.myRankHash}>#{myRank.division_rank}</Text>
+                  <Text style={styles.myRankHash}>#{mine.rank}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.myRankTitle}>
-                    You&apos;re #{myRank.division_rank} of {myRank.cohort_size}
+                    You&apos;re #{mine.rank} of {mine.cohort}
                   </Text>
                   <Text style={styles.myRankMeta}>
-                    {DIVISION_FLAG[myRank.division]} {DIVISION_LABEL[myRank.division]} · {myRank.sport}
+                    {DIVISION_FLAG[myBoard]} {DIVISION_LABEL[myBoard]} · {myRank.sport}
                   </Text>
                 </View>
-                <Stars count={starsForRank(myRank.division_rank, myRank.cohort_size)} />
+                <Stars count={starsForRank(mine.rank, mine.cohort)} />
               </View>
             )}
 
@@ -236,7 +258,11 @@ export default function RankingsScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <RankRow row={item} highlight={item.user_id === user?.id} />
+          <RankRow
+            row={item}
+            highlight={item.user_id === user?.id}
+            division={division}
+          />
         )}
         ListEmptyComponent={
           loading ? (
@@ -283,8 +309,17 @@ function Chip({
   );
 }
 
-function RankRow({ row, highlight }: { row: RankingRow; highlight: boolean }) {
-  const medal = MEDAL[row.division_rank];
+function RankRow({
+  row,
+  highlight,
+  division,
+}: {
+  row: RankingRow;
+  highlight: boolean;
+  division: RankingDivision;
+}) {
+  const { rank, cohort } = standing(row, division);
+  const medal = MEDAL[rank];
   const initials =
     (row.name ?? "?")
       .split(" ")
@@ -296,7 +331,7 @@ function RankRow({ row, highlight }: { row: RankingRow; highlight: boolean }) {
     <View style={[styles.row, highlight && styles.rowHighlight]}>
       <View style={[styles.rankBadge, medal ? { borderColor: medal } : null]}>
         <Text style={[styles.rankNum, medal ? { color: medal } : null]}>
-          {row.division_rank}
+          {rank}
         </Text>
       </View>
 
@@ -324,7 +359,7 @@ function RankRow({ row, highlight }: { row: RankingRow; highlight: boolean }) {
         <Text style={styles.meta} numberOfLines={1}>
           {[row.position, row.level, row.sport].filter(Boolean).join(" · ")}
         </Text>
-        <Stars count={starsForRank(row.division_rank, row.cohort_size)} />
+        <Stars count={starsForRank(rank, cohort)} />
       </View>
 
       <View style={styles.scoreBox}>
