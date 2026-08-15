@@ -259,6 +259,23 @@ export default function MatchesScreen() {
     }, [isParent, view, loadReceived]),
   );
 
+  // An athlete who has drafted everyone back has an EMPTY "Received" tab --
+  // who-drafted-me lists only PENDING incoming Drafts, and a Draft you
+  // returned stops being pending the moment it becomes a match. Landing there
+  // shows "No drafts received yet" to someone with matches and unread
+  // messages waiting, which reads as "nobody drafted me" and hides the chat
+  // one tab over. Move to the tab that actually has something, once, so a
+  // deliberate tap back to Received still sticks.
+  const autoTabbed = useRef(false);
+  useEffect(() => {
+    if (autoTabbed.current || isParent) return;
+    if (view !== "received") return;
+    if (!receivedLoadedOnce.current || receivedLoading) return;
+    if (received.length > 0 || athleteMatches.length === 0) return;
+    autoTabbed.current = true;
+    setView("matches");
+  }, [isParent, view, received, receivedLoading, athleteMatches]);
+
   useFocusEffect(
     useCallback(() => {
       if (isParent) return;
@@ -520,6 +537,7 @@ export default function MatchesScreen() {
           onRefuse={handleRefuse}
           onChat={handleChatWith}
           onDiscover={() => router.replace("/(tabs)")}
+          matchCount={athleteMatches.length}
         />
       ) : view === "sent" && !isParent ? (
         <SentList
@@ -920,8 +938,12 @@ function ReceivedList({
   onRefuse,
   onChat,
   onDiscover,
+  matchCount,
 }: {
   rows: ReceivedRow[];
+  /** Matches already made. Distinguishes "nobody drafted you" from "everyone
+   *  who drafted you is already a match", which read identically otherwise. */
+  matchCount: number;
   loading: boolean;
   refreshing: boolean;
   error: boolean;
@@ -980,8 +1002,14 @@ function ReceivedList({
       >
         <View style={styles.content}>
           <Ionicons name="trophy-outline" size={64} color={theme.textMuted} />
-          <Text style={styles.emptyTitle}>No drafts received yet</Text>
-          <Text style={styles.emptySubtitle}>Keep Scouting</Text>
+          <Text style={styles.emptyTitle}>
+            {matchCount > 0 ? "No new drafts" : "No drafts received yet"}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {matchCount > 0
+              ? "Everyone who drafted you is in Matches."
+              : "Keep Scouting"}
+          </Text>
           <Pressable style={styles.discoverButton} onPress={onDiscover}>
             <Ionicons
               name="compass-outline"
