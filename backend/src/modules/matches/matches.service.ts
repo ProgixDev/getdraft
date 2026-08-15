@@ -64,7 +64,7 @@ export class MatchesService {
 
         const { data: lastMsg } = await supabase
           .from('messages')
-          .select('text')
+          .select('text, created_at')
           .eq('match_id', match.id)
           .order('created_at', { ascending: false })
           .limit(1)
@@ -80,6 +80,13 @@ export class MatchesService {
           matchedAt: match.matched_at,
           unreadCount: unreadCount || 0,
           lastMessage: lastMsg?.text || null,
+          // Needed by the unified inbox: it interleaves match threads with
+          // DMs, so it has to sort on when the last message landed, not on
+          // when the match was made. Falls back to matchedAt for a thread
+          // nobody has written in yet.
+          lastMessageAt: lastMsg?.created_at || match.matched_at,
+          avatarUrl: otherUser?.avatar_url || null,
+          otherUserId,
         };
       }),
     );

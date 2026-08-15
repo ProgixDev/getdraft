@@ -39,6 +39,28 @@ import { discoverService } from "@/services/discover";
 
 type DraftBoardView = "received" | "sent" | "matches" | "messages";
 
+/**
+ * One row of the unified Messages inbox.
+ *
+ * The app has two conversation systems: match threads (the `messages` table,
+ * reachable once two people draft each other) and open DMs (the
+ * `conversations` table, opened from a pending Received/Sent row). They were
+ * shown in two different tabs, so a user who replied inside a match thread
+ * and then opened the tab with the chat icon found it empty and concluded the
+ * message had been lost. They are one list now; only the route differs.
+ */
+type InboxEntry = {
+  kind: "match" | "dm";
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  role: string | null;
+  peerId: string | null;
+  lastMessage: string | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+};
+
 type IonName = React.ComponentProps<typeof Ionicons>["name"];
 
 interface PeerSummary {
@@ -179,6 +201,48 @@ export default function MatchesScreen() {
   );
 
   const sentPending = useMemo(() => sent.filter((s) => !s.matched), [sent]);
+
+  // Match threads + DMs, newest activity first. Both are already loaded for
+  // this screen, so merging is presentation-only -- no extra request.
+  const allConversations = useMemo<InboxEntry[]>(() => {
+    const fromMatches: InboxEntry[] = athleteMatches.map((m) => ({
+      kind: "match",
+      id: m.id,
+      name: m.recruiterName || "Unnamed",
+      avatarUrl: m.avatarUrl ?? null,
+      role: m.recruiterRole ?? null,
+      peerId: m.otherUserId ?? null,
+      lastMessage: m.lastMessage ?? null,
+      lastMessageAt: m.lastMessageAt ?? m.matchedAt ?? null,
+      unreadCount: m.unreadCount || 0,
+    }));
+    const fromDms: InboxEntry[] = inbox.map((c) => ({
+      kind: "dm",
+      id: c.id,
+      name: c.otherUser.name || "Unnamed",
+      avatarUrl: c.otherUser.avatarUrl ?? null,
+      role: c.otherUser.role ?? null,
+      peerId: c.otherUser.id ?? null,
+      lastMessage: c.lastMessage,
+      lastMessageAt: c.lastMessageAt,
+      unreadCount: c.unreadCount || 0,
+    }));
+    // A pair can legitimately hold both a DM (opened while the Draft was
+    // pending) and a match thread (created when it was returned). Keep the
+    // match -- that is where the conversation continues once you match.
+    const matchedPeers = new Set(
+      fromMatches.map((m) => m.peerId).filter(Boolean),
+    );
+    return [...fromMatches, ...fromDms.filter((d) => !matchedPeers.has(d.peerId))]
+      .sort((a, b) =>
+        (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? ""),
+      );
+  }, [athleteMatches, inbox]);
+
+  const conversationsUnread = useMemo(
+    () => allConversations.reduce((n, c) => n + c.unreadCount, 0),
+    [allConversations],
+  );
 
   const loadInbox = useCallback(
     async (mode: "initial" | "refresh" | "silent") => {
@@ -493,12 +557,13 @@ export default function MatchesScreen() {
               active={view === "matches"}
               onPress={() => setView("matches")}
             />
+            {/* Badge counts match threads as well as DMs: the tab holds both. */}
             <TabPill
               icon="chatbubbles"
               label="Messages"
               active={view === "messages"}
               onPress={() => setView("messages")}
-              badge={totalInboxUnread}
+              badge={conversationsUnread}
             />
           </>
         )}
@@ -506,22 +571,33 @@ export default function MatchesScreen() {
 
       {view === "messages" ? (
         <MessagesInbox
-          inbox={inbox}
-          loading={inboxLoading}
+          entries={allConversations}
+          loading={inboxLoading && athleteMatches.length === 0}
           refreshing={inboxRefreshing}
-          error={inboxError}
+          error={inboxError && athleteMatches.length === 0}
           insetsBottom={insets.bottom}
-          onRefresh={() => loadInbox("refresh")}
+          onRefresh={() => {
+            loadInbox("refresh");
+            loadPrimary();
+          }}
           onOpen={(c) =>
-            router.push({
-              pathname: "/dm/[conversationId]",
-              params: {
-                conversationId: c.id,
-                otherName: c.otherUser.name,
-                otherAvatarUrl: c.otherUser.avatarUrl ?? "",
-                otherRole: c.otherUser.role ?? "",
-              },
-            })
+            // A match thread and a DM are different routes: /chat expects a
+            // match id, /dm expects a conversation id. Sending one to the
+            // other renders an empty thread.
+            c.kind === "match"
+              ? router.push({
+                  pathname: "/chat/[threadId]",
+                  params: { threadId: c.id },
+                })
+              : router.push({
+                  pathname: "/dm/[conversationId]",
+                  params: {
+                    conversationId: c.id,
+                    otherName: c.name,
+                    otherAvatarUrl: c.avatarUrl ?? "",
+                    otherRole: c.role ?? "",
+                  },
+                })
           }
         />
       ) : view === "received" && !isParent ? (
@@ -1242,7 +1318,7 @@ function SentList({
 }
 
 function MessagesInbox({
-  inbox,
+  entries,
   loading,
   refreshing,
   error,
@@ -1250,13 +1326,13 @@ function MessagesInbox({
   onRefresh,
   onOpen,
 }: {
-  inbox: ConversationItem[];
+  entries: InboxEntry[];
   loading: boolean;
   refreshing: boolean;
   error: boolean;
   insetsBottom: number;
   onRefresh: () => void;
-  onOpen: (c: ConversationItem) => void;
+  onOpen: (c: InboxEntry) => void;
 }) {
   const router = useRouter();
   if (loading) {
@@ -1289,7 +1365,7 @@ function MessagesInbox({
       </ScrollView>
     );
   }
-  if (inbox.length === 0) {
+  if (entries.length === 0) {
     return (
       <ScrollView
         contentContainerStyle={styles.emptyScroll}
@@ -1305,7 +1381,8 @@ function MessagesInbox({
           <Ionicons name="mail-outline" size={64} color={theme.textMuted} />
           <Text style={styles.emptyTitle}>No messages yet</Text>
           <Text style={styles.emptySubtitle}>
-            Chats open once you match — draft someone and have them draft you back.
+            Draft someone and have them draft you back, or message a recruiter
+            who drafted you from your Received list.
           </Text>
         </View>
       </ScrollView>
@@ -1327,9 +1404,9 @@ function MessagesInbox({
       }
       showsVerticalScrollIndicator={false}
     >
-      {inbox.map((c) => (
+      {entries.map((c) => (
         <Pressable
-          key={c.id}
+          key={`${c.kind}:${c.id}`}
           onPress={() => onOpen(c)}
           style={({ pressed }) => [
             styles.inboxRow,
@@ -1342,17 +1419,17 @@ function MessagesInbox({
               doesn't also fire. */}
           <Pressable
             onPress={() =>
-              c.otherUser.id &&
+              c.peerId &&
               router.push({
                 pathname: "/user/[userId]",
-                params: { userId: c.otherUser.id },
+                params: { userId: c.peerId },
               })
             }
             hitSlop={6}
           >
-            {c.otherUser.avatarUrl ? (
+            {c.avatarUrl ? (
               <ExpoImage
-                source={{ uri: c.otherUser.avatarUrl }}
+                source={{ uri: c.avatarUrl }}
                 style={styles.inboxAvatar}
                 contentFit="cover"
               />
@@ -1365,7 +1442,7 @@ function MessagesInbox({
           <View style={styles.inboxText}>
             <View style={styles.inboxTopRow}>
               <Text style={styles.inboxName} numberOfLines={1}>
-                {c.otherUser.name || "Unnamed"}
+                {c.name}
               </Text>
               <Text style={styles.inboxTime}>
                 {formatMessageTime(c.lastMessageAt)}
@@ -1389,9 +1466,7 @@ function MessagesInbox({
                 </View>
               )}
             </View>
-            {c.otherUser.role ? (
-              <Text style={styles.inboxRole}>{c.otherUser.role}</Text>
-            ) : null}
+            {c.role ? <Text style={styles.inboxRole}>{c.role}</Text> : null}
           </View>
         </Pressable>
       ))}

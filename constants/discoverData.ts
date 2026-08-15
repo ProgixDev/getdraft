@@ -574,6 +574,11 @@ export interface AthleteMatch {
   matchedAt: string;
   unreadCount: number;
   lastMessage?: string;
+  /** When the last message landed. Optional because the mock rows below
+   *  predate it; the unified inbox falls back to matchedAt. */
+  lastMessageAt?: string;
+  avatarUrl?: string | null;
+  otherUserId?: string;
 }
 
 export const mockAthleteMatches: Record<string, AthleteMatch[]> = {
