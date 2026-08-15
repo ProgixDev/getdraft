@@ -38,6 +38,7 @@ import { PHONE_MAX_WIDTH } from '@/lib/responsive';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
+import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
 import { outreachService } from '@/services/outreach';
 import type { RootState } from '@/store';
 import {
@@ -143,6 +144,7 @@ export default function PublicProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blocking, setBlocking] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [outreachOpen, setOutreachOpen] = useState(false);
   const [outreachMessage, setOutreachMessage] = useState('');
   const [outreachSending, setOutreachSending] = useState(false);
@@ -219,11 +221,21 @@ export default function PublicProfileScreen() {
       'More',
       undefined,
       [
+        {
+          text: 'Report user',
+          onPress: () =>
+            userId &&
+            setReportTarget({
+              targetType: 'user',
+              reportedUserId: String(userId),
+              label: profile?.name ?? undefined,
+            }),
+        },
         { text: 'Block user', style: 'destructive', onPress: handleBlock },
         { text: 'Cancel', style: 'cancel' },
       ],
     );
-  }, [handleBlock]);
+  }, [handleBlock, userId, profile?.name]);
 
   const handleSendOutreach = useCallback(async () => {
     const parentId = profile?.parent_user_id;
@@ -515,6 +527,12 @@ export default function PublicProfileScreen() {
           )}
         </ScrollView>
       ) : null}
+
+      <ReportSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+      />
 
       <Modal
         visible={outreachOpen}

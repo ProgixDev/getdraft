@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   AppState,
   Pressable,
   ScrollView,
@@ -14,6 +15,7 @@ import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
+import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
 import { useSelector } from "react-redux";
 import {
   useFonts,
@@ -73,6 +75,7 @@ export default function ChatScreen() {
   const [loadError, setLoadError] = useState(false);
   const [otherIsTyping, setOtherIsTyping] = useState(false);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   // Local typing-emit debouncer: emit(true) when user types,
   // emit(false) after 2s of inactivity. Refs to avoid re-renders.
@@ -382,7 +385,33 @@ export default function ChatScreen() {
             ) : null}
           </View>
         </Pressable>
-        <View style={styles.headerIconButton} />
+        {/* This slot was an empty spacer holding the title centred. It is now
+            the overflow menu, so the layout is unchanged. */}
+        <Pressable
+          style={styles.headerIconButton}
+          disabled={!otherUserId}
+          onPress={() =>
+            Alert.alert('More', undefined, [
+              {
+                text: 'Report',
+                onPress: () =>
+                  otherUserId &&
+                  setReportTarget({
+                    targetType: 'user',
+                    reportedUserId: otherUserId,
+                    label: header?.recruiterName || undefined,
+                  }),
+              },
+              { text: 'Cancel', style: 'cancel' },
+            ])
+          }
+        >
+          <Ionicons
+            name="ellipsis-horizontal"
+            size={20}
+            color={otherUserId ? theme.text : 'transparent'}
+          />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -508,6 +537,12 @@ export default function ChatScreen() {
           </Pressable>
         </View>
       </KeyboardStickyView>
+
+      <ReportSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+      />
     </View>
   );
 }

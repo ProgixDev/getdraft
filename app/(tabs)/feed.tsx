@@ -24,6 +24,7 @@ import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useFocusEffect, useRouter } from "expo-router";
+import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useFonts,
@@ -84,6 +85,7 @@ export default function FeedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [commentsForPost, setCommentsForPost] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -137,6 +139,20 @@ export default function FeedScreen() {
   );
 
   const onRefresh = useCallback(() => load(kind, 1, "refresh"), [kind, load]);
+  // A post with no author id cannot be attributed, so there is nothing to
+  // report against; the button is simply inert rather than sending a report
+  // that moderation could not act on.
+  const handleReportPost = useCallback((p: PostItem) => {
+    const authorId = p.author?.id;
+    if (!authorId) return;
+    setReportTarget({
+      targetType: "post",
+      targetId: p.id,
+      reportedUserId: authorId,
+      label: p.author?.name ?? undefined,
+    });
+  }, []);
+
   const onEndReached = useCallback(() => {
     if (loadingMore || !hasMore || loading) return;
     load(kind, page + 1, "append");
@@ -305,6 +321,7 @@ export default function FeedScreen() {
         />
       ) : (
         <PostsList
+          onReport={handleReportPost}
           posts={posts}
           loading={loading}
           refreshing={refreshing}
@@ -324,6 +341,12 @@ export default function FeedScreen() {
         visible={commentsForPost !== null}
         onClose={() => setCommentsForPost(null)}
         onCountChange={handleSheetCountChange}
+      />
+
+      <ReportSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
       />
     </View>
   );
@@ -419,6 +442,7 @@ interface PostsListProps {
   onLikeToggle: (p: PostItem) => void;
   onSaveToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
+  onReport: (p: PostItem) => void;
   insetsBottom: number;
   errorMsg: string | null;
 }
@@ -433,6 +457,7 @@ function PostsList({
   onLikeToggle,
   onSaveToggle,
   onOpenComments,
+  onReport,
   insetsBottom,
   errorMsg,
 }: PostsListProps) {
@@ -476,6 +501,7 @@ function PostsList({
       }
       renderItem={({ item }) => (
         <PostCard
+          onReport={onReport}
           post={item}
           onLikeToggle={onLikeToggle}
           onSaveToggle={onSaveToggle}
@@ -491,11 +517,13 @@ function PostCard({
   onLikeToggle,
   onSaveToggle,
   onOpenComments,
+  onReport,
 }: {
   post: PostItem;
   onLikeToggle: (p: PostItem) => void;
   onSaveToggle: (p: PostItem) => void;
   onOpenComments: (id: string) => void;
+  onReport: (p: PostItem) => void;
 }) {
   const router = useRouter();
   const heart = useHeartBurst();
@@ -541,6 +569,23 @@ function PostCard({
             {post.author?.name || "Someone"}
           </Text>
           <Text style={styles.cardTime}>{timeAgo(post.createdAt)}</Text>
+        </Pressable>
+        {/* Reporting a post has to be reachable from the post itself, not
+            only from the author's profile -- Play's UGC policy is about the
+            content, and a reader should not have to work out who posted it
+            first. */}
+        <Pressable
+          onPress={() => onReport(post)}
+          hitSlop={8}
+          style={styles.cardMore}
+          accessibilityRole="button"
+          accessibilityLabel="Report this post"
+        >
+          <Ionicons
+            name="ellipsis-horizontal"
+            size={18}
+            color={theme.textMuted}
+          />
         </Pressable>
       </View>
 
@@ -1082,6 +1127,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     marginBottom: 10,
+  },
+  cardMore: {
+    marginLeft: "auto",
+    padding: 4,
   },
   cardAvatar: {
     width: 34,

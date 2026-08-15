@@ -32,6 +32,7 @@ import { ConversationsModule } from './modules/conversations/conversations.modul
 import { GuardianLinksModule } from './modules/guardian-links/guardian-links.module';
 import { KycModule } from './modules/kyc/kyc.module';
 import { RankingsModule } from './modules/rankings/rankings.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Controller()
 class HealthController {
@@ -181,6 +182,7 @@ class HealthController {
     GuardianLinksModule,
     KycModule,
     RankingsModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [
