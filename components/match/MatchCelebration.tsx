@@ -229,7 +229,8 @@ function Avatar({ uri, name }: { uri?: string | null; name?: string }) {
 }
 
 // On-brand 3D handshake (replaces the procedural WebGL hands). Transparent
-// PNG — the green glow is drawn behind it by styles.middleGlow.
+// PNG, on the plain background: the glow circles that used to sit behind it
+// were removed at the client's request, along with styles.middleGlow.
 const HANDSHAKE_IMG = require("../../assets/images/handshake.png");
 
 export function MatchCelebration({
