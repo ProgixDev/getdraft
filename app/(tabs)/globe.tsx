@@ -143,8 +143,12 @@ function buildGlobeHtml(
 *{margin:0;padding:0}
 html,body,#map{height:100%;width:100%}
 body{background:#0a0a0a;overflow:hidden}
-.mapboxgl-ctrl-logo{opacity:.35}
-.mapboxgl-ctrl-attrib{opacity:.3;font-size:9px}
+/* Mapbox wordmark and attribution hidden at the client's request. Note that
+   Mapbox's terms require both to stay visible on standard plans -- keeping
+   them off needs a plan that permits it, or the token can be revoked. The
+   attribution control was already disabled at init below. */
+.mapboxgl-ctrl-logo{display:none}
+.mapboxgl-ctrl-attrib{display:none}
 .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group{margin:0 10px 96px 0}
 </style>
 </head><body><div id="map"></div>

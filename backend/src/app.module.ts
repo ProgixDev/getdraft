@@ -3,6 +3,7 @@ import type { FastifyReply } from 'fastify';
 import { PRIVACY_HTML } from './privacy.page';
 import { TERMS_HTML } from './terms.page';
 import { LICENSES_HTML } from './licenses.page';
+import { ACCOUNT_DELETION_HTML } from './account-deletion.page';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppConfigModule } from './config/config.module';
@@ -118,6 +119,15 @@ class HealthController {
   @Get('privacy')
   privacy(@Res() res: FastifyReply) {
     res.type('text/html; charset=utf-8').send(PRIVACY_HTML);
+  }
+
+  // Google Play requires a deletion route reachable from a browser, not only
+  // from inside the app -- someone who has already uninstalled still has to be
+  // able to ask. This URL goes in the Console's "Data deletion" field.
+  @Public()
+  @Get('account-deletion')
+  accountDeletion(@Res() res: FastifyReply) {
+    res.type('text/html; charset=utf-8').send(ACCOUNT_DELETION_HTML);
   }
 
   @Public()
