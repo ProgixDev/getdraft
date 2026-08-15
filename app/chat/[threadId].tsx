@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import { useSelector } from "react-redux";
 import {
   useFonts,
@@ -40,6 +41,7 @@ type ChatHeader = {
   recruiterRole: string;
   organization: string;
   verified: boolean;
+  avatarUrl: string | null;
 };
 
 function formatTime(iso?: string): string {
@@ -111,6 +113,7 @@ export default function ChatScreen() {
             recruiterRole: h.recruiterRole ?? "",
             organization: h.organization ?? "",
             verified: !!h.verified,
+            avatarUrl: h.avatarUrl ?? null,
           });
         }
         const list = Array.isArray(msgs) ? msgs : (msgs?.messages ?? []);
@@ -343,19 +346,41 @@ export default function ChatScreen() {
           }}
           disabled={!otherUserId}
         >
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>{headerTitle}</Text>
-            {header?.verified && (
-              <Ionicons
-                name="checkmark-circle"
-                size={16}
-                color={semantic.success}
-              />
-            )}
+          {/* Avatar first, then name -- the arrangement every messaging app
+              uses, so you can see who you are talking to at a glance rather
+              than reading a name. Falls back to a person glyph so the header
+              keeps its shape while the image loads or when there is none. */}
+          {header?.avatarUrl ? (
+            <ExpoImage
+              source={{ uri: header.avatarUrl }}
+              style={styles.headerAvatar}
+              contentFit="cover"
+              transition={120}
+            />
+          ) : (
+            <View style={[styles.headerAvatar, styles.headerAvatarFallback]}>
+              <Ionicons name="person" size={16} color={theme.textMuted} />
+            </View>
+          )}
+          <View style={styles.headerText}>
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {headerTitle}
+              </Text>
+              {header?.verified && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={16}
+                  color={semantic.success}
+                />
+              )}
+            </View>
+            {headerSubtitle ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {headerSubtitle}
+              </Text>
+            ) : null}
           </View>
-          {headerSubtitle ? (
-            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
-          ) : null}
         </Pressable>
         <View style={styles.headerIconButton} />
       </View>
@@ -509,6 +534,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerCenter: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  headerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: theme.surface,
+  },
+  headerAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Takes the remaining width so a long name truncates instead of shoving
+  // the avatar off the row.
+  headerText: {
     flex: 1,
   },
   headerTitleRow: {

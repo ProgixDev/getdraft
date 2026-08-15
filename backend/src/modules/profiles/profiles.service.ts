@@ -28,6 +28,40 @@ export class ProfilesService {
     return data;
   }
 
+  /**
+   * Give a user an avatar the first time they add photos.
+   *
+   * users.avatar_url and the profile tables' photos column were never linked,
+   * so anyone who uploaded photos through onboarding kept a null avatar and
+   * rendered as a grey silhouette everywhere an avatar appears -- Draft
+   * Board, chat, rankings, who-drafted-you. It stayed hidden because every
+   * demo account had both set by the seed script; the first real user to
+   * upload photos was the first to hit it.
+   *
+   * Only ever fills a null, so an avatar the user picked deliberately is not
+   * overwritten by a later photo edit. Best-effort: a failure here must not
+   * fail the profile save.
+   */
+  private async ensureAvatarFromPhotos(
+    userId: string,
+    photos?: string[] | null,
+  ) {
+    const first = photos?.[0];
+    if (!first) return;
+    try {
+      const supabase = this.supabaseService.getAdminClient();
+      const { data } = await supabase
+        .from('users')
+        .select('avatar_url')
+        .eq('id', userId)
+        .single();
+      if (data?.avatar_url) return;
+      await supabase.from('users').update({ avatar_url: first }).eq('id', userId);
+    } catch {
+      // ignore -- the profile itself saved fine
+    }
+  }
+
   async upsertAthleteProfile(userId: string, dto: UpsertAthleteProfileDto) {
     const supabase = this.supabaseService.getAdminClient();
 
@@ -54,6 +88,7 @@ export class ProfilesService {
         .select()
         .single();
       if (error) throw new BadRequestException(error.message);
+      await this.ensureAvatarFromPhotos(userId, data?.photos);
       return data;
     }
 
@@ -78,6 +113,7 @@ export class ProfilesService {
       .select()
       .single();
     if (error) throw new BadRequestException(error.message);
+    await this.ensureAvatarFromPhotos(userId, data?.photos);
     return data;
   }
 
@@ -114,6 +150,7 @@ export class ProfilesService {
         .select()
         .single();
       if (error) throw new BadRequestException(error.message);
+      await this.ensureAvatarFromPhotos(userId, data?.photos);
       return data;
     }
 
@@ -123,6 +160,7 @@ export class ProfilesService {
       .select()
       .single();
     if (error) throw new BadRequestException(error.message);
+    await this.ensureAvatarFromPhotos(userId, data?.photos);
     return data;
   }
 

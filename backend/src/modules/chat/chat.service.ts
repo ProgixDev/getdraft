@@ -60,6 +60,12 @@ export class ChatService {
           recruiterRole: rp?.role_type || 'agent',
           organization: rp?.organization || '',
           verified: rp?.verified || false,
+          // The other person's face, for the chat header and the inbox row.
+          // avatar_url was already being selected and then dropped on the
+          // floor here, which is why every chat header rendered nameless
+          // grey chrome instead of who you are talking to.
+          avatarUrl: otherUser?.avatar_url || null,
+          otherUserId: otherUser?.id || null,
           unreadCount: unreadCount || 0,
           lastMessage: lastMsg?.text || null,
           lastMessageAt: lastMsg?.created_at || match.matched_at,
