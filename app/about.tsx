@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import * as Updates from "expo-updates";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useFonts,
@@ -43,11 +42,6 @@ const LEGAL_LINKS = [
     icon: "shield-checkmark-outline" as const,
     label: "Privacy Policy",
     url: `${LEGAL_BASE_URL}/privacy`,
-  },
-  {
-    icon: "code-slash-outline" as const,
-    label: "Licenses",
-    url: `${LEGAL_BASE_URL}/licenses`,
   },
 ];
 
@@ -93,14 +87,6 @@ export default function AboutScreen() {
           </View>
           <Text style={styles.brandName}>GetDraft</Text>
           <Text style={styles.version}>Version 1.0.0</Text>
-          {/* Build/update stamp. Without this there is no way to tell from a
-              device whether an over-the-air update actually landed — we spent
-              a round of "is it fixed?" unable to answer that. `embedded` means
-              running the bundle that shipped inside the APK; anything else is
-              the first 8 characters of the applied update id. */}
-          <Text style={styles.buildStamp}>
-            {`build ${Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded"}`}
-          </Text>
           <Text style={styles.tagline}>Where Talent Meets Opportunity</Text>
         </View>
 
@@ -224,13 +210,6 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_700Bold",
     color: theme.text,
     marginTop: 16,
-  },
-  buildStamp: {
-    fontSize: 11,
-    fontFamily: "Poppins_400Regular",
-    color: neutral.gray400,
-    marginTop: 2,
-    letterSpacing: 0.3,
   },
   version: {
     fontSize: 13,
