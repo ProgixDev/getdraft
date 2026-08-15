@@ -152,11 +152,12 @@ body{background:#0a0a0a;overflow:hidden}
    a.mapboxgl-ctrl-logo rule, which sets display:block at (0,1,1). A bare
    .mapboxgl-ctrl-logo is (0,1,0), loses the cascade, and leaves the logo
    visible -- exactly what shipped the first time. The whole bottom-left
-   corner goes too: logoPosition is bottom-left and nothing else sits there,
-   as the zoom control is bottom-right. */
+   corner goes too: logoPosition is bottom-left and nothing else sits there.
+   Bottom-right must stay visible -- it holds the globe-reset button. */
 .mapboxgl-ctrl-bottom-left{display:none!important}
 a.mapboxgl-ctrl-logo,.mapboxgl-ctrl-logo{display:none!important}
 .mapboxgl-ctrl-attrib,.mapboxgl-ctrl-attrib-inner{display:none!important}
+/* Positions the globe-reset button clear of the tab bar. */
 .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group{margin:0 10px 96px 0}
 </style>
 </head><body><div id="map"></div>
@@ -173,8 +174,8 @@ var map=new mapboxgl.Map({
   attributionControl:false,
   logoPosition:'bottom-left'
 });
-// Zoom in/out control (no compass) — bottom-right, above the tab bar.
-map.addControl(new mapboxgl.NavigationControl({showCompass:false,visualizePitch:false}),'bottom-right');
+// No NavigationControl: pinch and double-tap already zoom, so the +/- buttons
+// were redundant chrome over the globe. Removed at the client's request.
 // CSS alone has already failed once here (a specificity loss to
 // a.mapboxgl-ctrl-logo). Removing the nodes as well means a class rename in a
 // future mapbox-gl release cannot silently restore the wordmark.
