@@ -52,17 +52,29 @@ Run against production (`api.getdraft.net`), not a local build.
   require it visible on standard plans; keeping it hidden needs a plan that
   permits it or the token can be revoked.
 
-### 🔴 The one thing to do immediately before submitting
+### Deck depth — resolved
 
-**Reset the reviewer account's swipe history.** The deck is currently **2 cards
-deep**. A reviewer swipes twice and hits "You've seen everyone!" — which reads as
-a broken app and is the most likely rejection for this product.
+The reviewer's deck was **2 cards**, then 5 after clearing their swipe history —
+still shallow enough to exhaust in under a minute. 12 demo athletes were seeded
+(`backend/scripts/seed-demo-athletes-2.js`), which fixed three things at once:
 
-There are 5 eligible athletes. Clearing the reviewer's 3 swipes restores all 5.
+| | before | after |
+|---|---|---|
+| Discover deck | 5 | **17** |
+| Globe pins | 5 | **17**, five continents |
+| World rankings | everyone "#1 of 1" | real cohorts, e.g. Swimming #1 Marie (66) / #2 Sofia (26) / #3 Hannah (8) |
 
-Do it **last**, after all testing: every swipe taken while testing eats the deck
-again. It is safe — `swipe()` handles a pre-existing match via `P2002` and
-reuses it rather than erroring.
+Achraf remains card 1 (4 photos, the strongest card). The new accounts were
+backdated into July so the feed's `created_at desc` order keeps him first.
+
+**Still do this last, right before uploading:** re-clear the reviewer's swipe
+history, since testing and screenshots eat the deck. Safe — `swipe()` handles a
+pre-existing match via `P2002` and reuses it instead of erroring.
+
+```sql
+delete from swipes where swiper_id =
+  (select id from users where phone = '213558780131');
+```
 
 ### Known risks carried into review
 
