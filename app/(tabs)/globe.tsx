@@ -146,9 +146,17 @@ body{background:#0a0a0a;overflow:hidden}
 /* Mapbox wordmark and attribution hidden at the client's request. Note that
    Mapbox's terms require both to stay visible on standard plans -- keeping
    them off needs a plan that permits it, or the token can be revoked. The
-   attribution control was already disabled at init below. */
-.mapboxgl-ctrl-logo{display:none}
-.mapboxgl-ctrl-attrib{display:none}
+   attribution control was already disabled at init below.
+
+   The selector must be at least as specific as Mapbox's own
+   a.mapboxgl-ctrl-logo rule, which sets display:block at (0,1,1). A bare
+   .mapboxgl-ctrl-logo is (0,1,0), loses the cascade, and leaves the logo
+   visible -- exactly what shipped the first time. The whole bottom-left
+   corner goes too: logoPosition is bottom-left and nothing else sits there,
+   as the zoom control is bottom-right. */
+.mapboxgl-ctrl-bottom-left{display:none!important}
+a.mapboxgl-ctrl-logo,.mapboxgl-ctrl-logo{display:none!important}
+.mapboxgl-ctrl-attrib,.mapboxgl-ctrl-attrib-inner{display:none!important}
 .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-group{margin:0 10px 96px 0}
 </style>
 </head><body><div id="map"></div>
@@ -167,6 +175,15 @@ var map=new mapboxgl.Map({
 });
 // Zoom in/out control (no compass) — bottom-right, above the tab bar.
 map.addControl(new mapboxgl.NavigationControl({showCompass:false,visualizePitch:false}),'bottom-right');
+// CSS alone has already failed once here (a specificity loss to
+// a.mapboxgl-ctrl-logo). Removing the nodes as well means a class rename in a
+// future mapbox-gl release cannot silently restore the wordmark.
+function stripBranding(){
+  document.querySelectorAll('.mapboxgl-ctrl-logo,.mapboxgl-ctrl-attrib,.mapboxgl-ctrl-bottom-left')
+    .forEach(function(el){ if(el && el.parentNode) el.parentNode.removeChild(el); });
+}
+map.on('load', stripBranding);
+setTimeout(stripBranding, 1200);
 // "Back to globe". Mapbox only renders the globe projection when zoomed out;
 // pinch in and it becomes an ordinary flat street map, which is what the tab
 // looks like after any exploring. The only way back was repeated taps on the
