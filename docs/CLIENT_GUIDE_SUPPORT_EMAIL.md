@@ -78,22 +78,6 @@ Google finishes reviewing the app.
 
 ---
 
-## If you would rather not use an alias
-
-Two alternatives, both fine:
-
-**A group instead of an alias** — Admin console → **Directory** → **Groups** →
-*Create group* → name it `support`. Useful later if more than one person should
-receive support email.
-
-**A different address** — if you already have something like
-`contact@getdraft.net` or `info@getdraft.net` working, tell us which one and we
-will change it everywhere instead. The website pages update immediately, and the
-address shown inside the app updates over the air, so users get it without
-needing to install anything. It does not delay the Play Store review.
-
----
-
 ## Questions you might have
 
 **Will this create a new mailbox I have to check separately?**
