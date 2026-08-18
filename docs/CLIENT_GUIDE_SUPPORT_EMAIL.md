@@ -88,8 +88,9 @@ receive support email.
 
 **A different address** — if you already have something like
 `contact@getdraft.net` or `info@getdraft.net` working, tell us which one and we
-will change it everywhere instead. It is a small change on our side and does
-not require a new version of the app.
+will change it everywhere instead. The website pages update immediately, and the
+address shown inside the app updates over the air, so users get it without
+needing to install anything. It does not delay the Play Store review.
 
 ---
 
