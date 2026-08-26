@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { StripeProvider } from "@stripe/stripe-react-native";
-import { identifyForBilling, resetBilling } from "@/services/billing";
+import { initBilling, restorePurchases } from "@/services/billing";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
@@ -76,16 +76,16 @@ function RootLayoutContent() {
   // user is authenticated. Physical device required.
   usePushNotifications(isAuthenticated && !!user, appState === "app");
 
-  // Tell RevenueCat who this is, so a purchase is reported back against our
-  // own user id. That is what lets the webhook grant entitlement without any
-  // mapping table -- and on sign-out, what stops the next person on the
-  // device inheriting the previous account's purchases.
+
+  // Pick up anything paid for but never granted -- app killed mid-purchase,
+  // network dropped, server briefly down. Those transactions stay in the
+  // store's queue on purpose, because purchaseProduct never finishes an
+  // unvalidated one. Runs quietly; the user sees the plan simply be correct.
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      identifyForBilling(String(user.id));
-    } else {
-      resetBilling();
-    }
+    if (!isAuthenticated || !user?.id) return;
+    initBilling().then((ready) => {
+      if (ready) restorePurchases().catch(() => {});
+    });
   }, [isAuthenticated, user?.id]);
 
   // Prewarm the backend the moment the app launches. Render's free tier

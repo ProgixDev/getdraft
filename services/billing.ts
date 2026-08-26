@@ -1,22 +1,32 @@
 import { Platform } from "react-native";
-import Purchases, {
-  LOG_LEVEL,
-  type PurchasesPackage,
-} from "react-native-purchases";
+import {
+  initConnection,
+  endConnection,
+  fetchProducts,
+  requestPurchase,
+  finishTransaction,
+  getAvailablePurchases,
+  type ProductOrSubscription,
+  type Purchase,
+} from "react-native-iap";
+import api from "./api";
 
 /**
- * Store billing — StoreKit on iOS, Play Billing on Android, via RevenueCat.
+ * In-app purchases through StoreKit (iOS) and Play Billing (Android).
  *
- * Replaces the Stripe Payment Sheet on mobile. Apple requires StoreKit for
- * digital goods and rejects third-party payment sheets outright; Google's
- * Payments policy says the same about Play Billing. Stripe stays on web, where
- * neither rule applies.
+ * No third party sits in the payment path. Apple requires StoreKit for digital
+ * goods and rejects third-party payment sheets outright; Google's Payments
+ * policy says the same about Play Billing. Stripe stays on web, where neither
+ * rule applies.
  *
- * Entitlement is NOT granted from here. The app tells the store to charge, and
- * RevenueCat tells our backend server-to-server what was actually paid for. A
- * client claiming "I bought Pro" is a claim; a signed webhook from the party
- * that validated the receipt is evidence. After a purchase the app just
- * refreshes its subscription from our API.
+ * THE CLIENT NEVER GRANTS ITSELF ANYTHING. A purchase produces a receipt, the
+ * receipt goes to our backend, and the backend asks Apple or Google whether it
+ * is real before touching the user's plan. A device claiming "I bought Pro" is
+ * a claim, and on a jailbroken phone a forgeable one.
+ *
+ * A purchase is only finished (consumed / acknowledged) AFTER our server has
+ * validated it. Finishing first would mean a network failure at the wrong
+ * moment loses the purchase permanently, with the user charged.
  */
 
 /** Product ids, matching App Store Connect and Play Console exactly. */
@@ -28,65 +38,70 @@ export const STORE_PRODUCTS = {
   drafts100: "drafts_100",
 } as const;
 
-const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? "";
-const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? "";
+export const SUBSCRIPTION_IDS = [
+  STORE_PRODUCTS.starter,
+  STORE_PRODUCTS.pro,
+];
+export const CONSUMABLE_IDS = [
+  STORE_PRODUCTS.drafts10,
+  STORE_PRODUCTS.drafts50,
+  STORE_PRODUCTS.drafts100,
+];
 
 /**
- * True once a key exists for this platform. Everything below no-ops when it is
- * false, so a build without keys behaves exactly like the current one rather
- * than crashing at launch.
+ * Whether in-app purchasing is available on this build.
+ *
+ * Off on web (Stripe handles that) and gated behind a flag so a build can ship
+ * with purchasing disabled — which is what both stores are happiest reviewing
+ * while the products are still being set up.
  */
 export const BILLING_CONFIGURED =
-  Platform.OS === "ios" ? !!IOS_KEY : Platform.OS === "android" ? !!ANDROID_KEY : false;
+  Platform.OS !== "web" &&
+  process.env.EXPO_PUBLIC_IAP_ENABLED === "1";
 
-let configured = false;
+let connected = false;
 
-/** Safe to call more than once; only the first call configures the SDK. */
-export function initBilling() {
-  if (configured || !BILLING_CONFIGURED) return;
-  Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.ERROR);
-  Purchases.configure({
-    apiKey: Platform.OS === "ios" ? IOS_KEY : ANDROID_KEY,
-  });
-  configured = true;
-}
-
-/**
- * Tie purchases to our own user id.
- *
- * This is what makes the webhook usable: RevenueCat reports app_user_id back
- * to us, so the backend knows who paid without any mapping table. Call it
- * after sign-in, and on app start for an already-signed-in user.
- */
-export async function identifyForBilling(userId: string) {
-  if (!BILLING_CONFIGURED || !userId) return;
-  initBilling();
+/** Idempotent; safe to call from several screens. */
+export async function initBilling(): Promise<boolean> {
+  if (!BILLING_CONFIGURED) return false;
+  if (connected) return true;
   try {
-    await Purchases.logIn(userId);
+    await initConnection();
+    connected = true;
+    return true;
   } catch {
-    // Non-fatal: billing being unavailable must never block sign-in.
+    return false;
   }
 }
 
-/** Call on sign-out so the next user on this device starts clean. */
-export async function resetBilling() {
-  if (!BILLING_CONFIGURED) return;
+export async function closeBilling() {
+  if (!connected) return;
   try {
-    await Purchases.logOut();
+    await endConnection();
   } catch {
     // ignore
   }
+  connected = false;
 }
 
-/**
- * Fetch what the store will actually sell, so prices shown are the real
- * localised ones rather than hard-coded dollars.
- */
-export async function getOfferings(): Promise<PurchasesPackage[]> {
-  if (!BILLING_CONFIGURED) return [];
-  initBilling();
-  const offerings = await Purchases.getOfferings();
-  return offerings.current?.availablePackages ?? [];
+/** Store-localised subscription details — real prices, not hard-coded ones. */
+export async function fetchSubscriptionProducts(): Promise<ProductOrSubscription[]> {
+  if (!(await initBilling())) return [];
+  try {
+    return (await fetchProducts({ skus: SUBSCRIPTION_IDS, type: "subs" })) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Store-localised Draft pack details. */
+export async function fetchPacks(): Promise<ProductOrSubscription[]> {
+  if (!(await initBilling())) return [];
+  try {
+    return (await fetchProducts({ skus: CONSUMABLE_IDS, type: "in-app" })) ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export type PurchaseResult =
@@ -95,37 +110,81 @@ export type PurchaseResult =
   | { status: "error"; message: string };
 
 /**
- * Buy a product by its store id.
+ * Send a receipt to our backend for validation.
  *
- * Cancellation is a normal outcome, not an error — the caller shows nothing
- * and simply stops its spinner.
+ * Returns true only if the server confirmed the purchase with Apple/Google and
+ * granted the entitlement. The caller uses that to decide whether it is safe
+ * to finish the transaction.
+ */
+async function validateWithServer(purchase: Purchase): Promise<boolean> {
+  // purchaseToken is the unified receipt in v16: the StoreKit 2 JWS on iOS,
+  // the Play purchase token on Android. The server knows which to verify from
+  // the platform field.
+  const payload = {
+    platform: Platform.OS === "ios" ? ("ios" as const) : ("android" as const),
+    productId: purchase.productId,
+    transactionId: purchase.id ?? purchase.transactionId ?? "",
+    purchaseToken: purchase.purchaseToken ?? "",
+  };
+  const { data } = await api.post("/billing/validate", payload);
+  return !!(data?.data?.granted ?? data?.granted);
+}
+
+/**
+ * Buy a product and have the server verify it.
+ *
+ * The order matters: purchase, validate, then finish. Finishing before the
+ * server has confirmed would consume the transaction and leave no way to
+ * recover it if validation failed.
  */
 export async function purchaseProduct(
   productId: string,
 ): Promise<PurchaseResult> {
-  if (!BILLING_CONFIGURED) {
+  if (!(await initBilling())) {
     return { status: "error", message: "Purchases are not available yet." };
   }
-  initBilling();
+
+  const isSubscription = SUBSCRIPTION_IDS.includes(productId as any);
+
   try {
-    const packages = await getOfferings();
-    const match = packages.find(
-      (p) => p.product.identifier === productId,
-    );
-    if (match) {
-      await Purchases.purchasePackage(match);
-    } else {
-      // Not in the current offering — buy the product directly. Keeps Draft
-      // packs working without needing them in an offering.
-      const products = await Purchases.getProducts([productId]);
-      if (!products.length) {
-        return { status: "error", message: "This item is unavailable." };
-      }
-      await Purchases.purchaseStoreProduct(products[0]);
+    // v16 takes per-platform request props and an explicit type. Subscriptions
+    // and one-off products go through the same call.
+    const result: any = await requestPurchase({
+      request: {
+        apple: { sku: productId },
+        google: { skus: [productId] },
+      },
+      type: isSubscription ? "subs" : "in-app",
+    } as any);
+
+    const purchase: Purchase | undefined = Array.isArray(result)
+      ? result[0]
+      : result;
+    if (!purchase) {
+      return { status: "error", message: "No receipt was returned." };
     }
+
+    const granted = await validateWithServer(purchase);
+    if (!granted) {
+      // Deliberately not finished: leaving it pending means the store will
+      // hand it back on next launch, so a server outage does not cost the
+      // user what they paid for.
+      return {
+        status: "error",
+        message:
+          "Payment received, but we could not confirm it yet. It will be applied shortly.",
+      };
+    }
+
+    // Consumables are consumed so they can be bought again; subscriptions are
+    // acknowledged, which Google requires within 3 days or it auto-refunds.
+    await finishTransaction({ purchase, isConsumable: !isSubscription });
     return { status: "purchased" };
   } catch (err: any) {
-    if (err?.userCancelled) return { status: "cancelled" };
+    const code = err?.code ?? "";
+    if (code === "E_USER_CANCELLED" || code === "E_DEFERRED_PAYMENT") {
+      return { status: "cancelled" };
+    }
     return {
       status: "error",
       message: err?.message ?? "The purchase could not be completed.",
@@ -134,18 +193,37 @@ export async function purchaseProduct(
 }
 
 /**
- * Restore previous purchases.
+ * Validate anything the store still considers unfinished, and finish it.
  *
- * Apple requires a visible restore path for any app selling non-consumables or
- * subscriptions, and rejects apps without one.
+ * This is both the "Restore purchases" button Apple requires in any app
+ * selling subscriptions, and the recovery path for a purchase that was paid
+ * for but never validated -- the app was killed, the network dropped, the
+ * server was briefly down. Those transactions stay in the store's queue
+ * precisely so they can be picked up later, which only works because
+ * purchaseProduct deliberately does not finish an unvalidated purchase.
+ *
+ * Returns how many were successfully granted.
  */
-export async function restorePurchases(): Promise<boolean> {
-  if (!BILLING_CONFIGURED) return false;
-  initBilling();
+export async function restorePurchases(): Promise<number> {
+  if (!(await initBilling())) return 0;
   try {
-    const info = await Purchases.restorePurchases();
-    return Object.keys(info.entitlements.active).length > 0;
+    const purchases = await getAvailablePurchases();
+    let restored = 0;
+    for (const purchase of purchases) {
+      try {
+        if (!(await validateWithServer(purchase))) continue;
+        restored += 1;
+        const isSubscription = SUBSCRIPTION_IDS.includes(
+          purchase.productId as any,
+        );
+        await finishTransaction({ purchase, isConsumable: !isSubscription });
+      } catch {
+        // Keep going: one bad receipt must not abandon the rest, and anything
+        // left unfinished will simply be offered again next launch.
+      }
+    }
+    return restored;
   } catch {
-    return false;
+    return 0;
   }
 }

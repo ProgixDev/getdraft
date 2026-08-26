@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
-import { RevenueCatWebhookController } from './revenuecat-webhook.controller';
+import { StoreBillingController } from './store-billing.controller';
 import { StoreBillingService } from './store-billing.service';
+import { ReceiptVerifierService } from './receipt-verifier.service';
 
 @Module({
-  controllers: [RevenueCatWebhookController],
-  providers: [StoreBillingService],
+  controllers: [StoreBillingController],
+  providers: [StoreBillingService, ReceiptVerifierService],
   exports: [StoreBillingService],
 })
 export class StoreBillingModule {}
