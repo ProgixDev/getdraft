@@ -31,14 +31,16 @@ send the secret API key.
 
 | Product ID | Name | Price | What it unlocks |
 |---|---|---|---|
-| `starter_monthly` | Starter | **check Stripe** | Unlimited Drafts, 3 Super Drafts / month |
-| `pro_monthly` | Pro | **check Stripe** | Unlimited Drafts, 5 Super Drafts / month |
+| `starter_monthly` | Starter | **USD 7.00 / month** | Unlimited Drafts, 3 Super Drafts / month |
+| `pro_monthly` | Pro | **USD 15.00 / month** | Unlimited Drafts, 5 Super Drafts / month |
 
-> **Prices must match what Stripe already charges on web.** The live Stripe
-> price IDs are in Railway as `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` —
-> open them in the Stripe dashboard and copy the exact amount and currency.
-> Charging a different amount per platform for the same plan will confuse users
-> and complicate support.
+> These are the **live** prices Stripe already charges on web, read from the
+> production Stripe account. Use exactly these amounts so the same plan does
+> not cost a different sum depending on the platform someone bought it on.
+>
+> Both stores price by tier rather than by exact figure, so pick the tier that
+> equals USD 7.00 and USD 15.00 in the US storefront and let the store convert
+> the rest.
 
 Both go in one **subscription group** (call it `GetDraft Membership`) so users
 can upgrade and downgrade between them rather than holding two at once.
