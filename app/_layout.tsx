@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { StripeProvider } from "@stripe/stripe-react-native";
+import { identifyForBilling, resetBilling } from "@/services/billing";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
@@ -74,6 +75,18 @@ function RootLayoutContent() {
   // Register the Expo push token + handle notification taps once the
   // user is authenticated. Physical device required.
   usePushNotifications(isAuthenticated && !!user, appState === "app");
+
+  // Tell RevenueCat who this is, so a purchase is reported back against our
+  // own user id. That is what lets the webhook grant entitlement without any
+  // mapping table -- and on sign-out, what stops the next person on the
+  // device inheriting the previous account's purchases.
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      identifyForBilling(String(user.id));
+    } else {
+      resetBilling();
+    }
+  }, [isAuthenticated, user?.id]);
 
   // Prewarm the backend the moment the app launches. Render's free tier
   // sleeps after ~15 min; this fire-and-forget ping wakes it during splash /

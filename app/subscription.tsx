@@ -20,7 +20,8 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
-import { PURCHASES_ENABLED } from '@/constants/purchases';
+import { PURCHASES_ENABLED, USES_STORE_BILLING } from '@/constants/purchases';
+import { purchaseProduct, STORE_PRODUCTS } from '@/services/billing';
 import { plans } from '@/constants/plansData';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
@@ -127,6 +128,20 @@ export default function SubscriptionScreen() {
       if (pendingAction) return;
       setPendingAction(planId);
       try {
+        // On mobile the purchase goes through the store, not Stripe: Apple
+        // requires StoreKit and Google requires Play Billing for digital
+        // goods. Entitlement is granted by RevenueCat's webhook to our
+        // backend, so this only charges and then re-reads.
+        if (USES_STORE_BILLING) {
+          const productId =
+            planId === 'pro' ? STORE_PRODUCTS.pro : STORE_PRODUCTS.starter;
+          const result = await purchaseProduct(productId);
+          if (result.status === 'cancelled') return;
+          if (result.status === 'error') throw new Error(result.message);
+          await refresh();
+          return;
+        }
+
         const params = await subscriptionsService.createPaymentSheet(planId);
         if (!params?.paymentIntentClientSecret) {
           throw new Error('Stripe did not return a checkout session.');
