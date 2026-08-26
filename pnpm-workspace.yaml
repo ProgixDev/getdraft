@@ -1,4 +1,6 @@
 allowBuilds:
   unrs-resolver: set this to true or false
+minimumReleaseAgeExclude:
+  - react-native-iap@16.4.0
 patchedDependencies:
   '@stripe/stripe-react-native': patches/@stripe__stripe-react-native.patch
