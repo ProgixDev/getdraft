@@ -57,6 +57,7 @@ import { guardianLinksService } from "@/services/guardianLinks";
 import { EmailVerificationScreen } from "./EmailVerificationScreen";
 import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { PlanSelectionScreen } from "./PlanSelectionScreen";
+import { PURCHASES_ENABLED } from "@/constants/purchases";
 import { LocationSelectionScreen } from "./LocationSelectionScreen";
 import { ProfileSetupScreen } from "./ProfileSetupScreen";
 import { MediaUploadScreen } from "./MediaUploadScreen";
@@ -370,7 +371,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         // the auth flow on reload.
         const answeredQuestions =
           meRole === "parent" || !!me?.preferences?.onboarding?.answeredAt;
-        let resumeAt: SignupStep = "plan";
+        let resumeAt: SignupStep = PURCHASES_ENABLED ? "plan" : "tutorial";
         if (meRole === "parent") {
           if (!hasProfileBio) resumeAt = "profile";
           else if (!kycApproved) resumeAt = "kyc";
@@ -386,7 +387,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         else if (!kycApproved) resumeAt = "kyc";
         else if (!guardianDone) resumeAt = "guardian-link";
         else if (!answeredQuestions) resumeAt = "questions";
-        else resumeAt = "plan";
+        else resumeAt = PURCHASES_ENABLED ? "plan" : "tutorial";
         setMode("signup");
         setSignupStep(resumeAt);
       } catch {
@@ -661,6 +662,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   /** Tutorial → plan (the new last step). */
   const handleTutorialComplete = () => {
+    // Where purchases are disabled -- iOS -- the plan step must not appear
+    // at all. Tapping a paid plan there opens the Stripe Payment Sheet: a
+    // third-party purchase flow for digital goods, which is what App Store
+    // guideline 3.1.1 prohibits. PURCHASES_ENABLED previously gated only the
+    // subscription and buy-swipes screens, so signup walked straight past it
+    // -- and signup is the flow Apple asks reviewers to record. Finishing
+    // here lands the user on Basic, exactly as tapping X on that step does.
+    if (!PURCHASES_ENABLED) {
+      finishOnboarding();
+      return;
+    }
     setSignupStep("plan");
   };
 
