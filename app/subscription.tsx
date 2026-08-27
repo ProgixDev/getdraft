@@ -130,8 +130,9 @@ export default function SubscriptionScreen() {
       try {
         // On mobile the purchase goes through the store, not Stripe: Apple
         // requires StoreKit and Google requires Play Billing for digital
-        // goods. Entitlement is granted by RevenueCat's webhook to our
-        // backend, so this only charges and then re-reads.
+        // goods. The receipt is verified by our server against Apple or
+        // Google before anything is granted, so this only charges and
+        // then re-reads.
         if (USES_STORE_BILLING) {
           const productId =
             planId === 'pro' ? STORE_PRODUCTS.pro : STORE_PRODUCTS.starter;

@@ -3,8 +3,8 @@
  *
  *   web     Stripe. Neither store's payment rules apply there.
  *   mobile  the store's own billing -- StoreKit on iOS, Play Billing on
- *           Android -- via RevenueCat. Enabled only once the RevenueCat keys
- *           are present in the build.
+ *           Android, integrated directly. No third party sits in the
+ *           payment path.
  *
  * Stripe's Payment Sheet is no longer used on mobile at all. Apple requires
  * StoreKit for digital goods and rejects third-party payment sheets outright;
@@ -14,7 +14,7 @@
  * WHILE THE KEYS ARE MISSING both mobile platforms sell nothing. That is
  * deliberate and is the safe state: an app with no purchase flow passes both
  * reviews, whereas an app with the wrong purchase flow fails them. Adding the
- * two EXPO_PUBLIC_REVENUECAT_* keys turns purchasing on with no code change.
+ * EXPO_PUBLIC_IAP_ENABLED=1 turns purchasing on with no code change.
  *
  * Every screen that can start a purchase checks this:
  *   - app/subscription.tsx          plan upgrades, "Buy more Drafts"

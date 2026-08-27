@@ -24,8 +24,9 @@
 ALTER TABLE public.subscriptions
   ADD COLUMN IF NOT EXISTS store TEXT NOT NULL DEFAULT 'stripe'
     CHECK (store IN ('stripe', 'apple', 'google')),
-  -- RevenueCat's app_user_id / original transaction id. Null for Stripe rows,
-  -- which continue to use stripe_subscription_id.
+  -- The store's own transaction id: originalTransactionId on Apple, the
+  -- latest order id on Google. Null for Stripe rows, which continue to use
+  -- stripe_subscription_id.
   ADD COLUMN IF NOT EXISTS store_transaction_id TEXT,
   -- Product id as the store knows it (starter_monthly, pro_monthly). Kept so a
   -- support question can be answered without calling the store's API.

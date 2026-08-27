@@ -28,10 +28,10 @@ type Store = 'apple' | 'google';
  * so every consumer of it -- swipe limits, Super Draft caps, the rankings view
  * -- keeps reading one place and needed no changes.
  *
- * Trust model: this is driven by RevenueCat's server-to-server webhook, not by
- * the app. A client saying "I bought Pro" is a claim; a signed webhook from the
- * party that validated the receipt is evidence. The app only ever refreshes
- * its view afterwards.
+ * Trust model: nothing here is called on a client's say-so. Entitlement is
+ * only granted after ReceiptVerifierService has confirmed the receipt with
+ * Apple or Google. A device claiming "I bought Pro" is a claim, and on a
+ * jailbroken phone a forgeable one; the store is the only authority.
  */
 @Injectable()
 export class StoreBillingService {
