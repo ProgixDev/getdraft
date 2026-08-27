@@ -1,31 +1,17 @@
 # In-app products to create — spec
 
-For whoever sets up RevenueCat, App Store Connect and Play Console.
+For whoever sets up App Store Connect and Play Console.
+
+Purchases go through **StoreKit** on iOS and **Play Billing** on Android,
+directly. There is no third-party billing service. Stripe stays for web only.
 
 **The product IDs below must match exactly on both stores.** One code path
-serves iOS and Android, and it looks products up by ID. A typo on one store
-means that product silently fails on that platform only.
+serves iOS and Android and looks products up by ID, so a typo on one store
+means that product silently fails on that platform alone.
 
 ---
 
-## 1. RevenueCat
-
-Create a free account at revenuecat.com, then:
-
-1. **Create a project** called `GetDraft`
-2. Add both apps to it:
-   - iOS — bundle ID `com.getdraft.app`
-   - Android — package `com.getdraft.app`
-3. Connect App Store Connect and Play Console (RevenueCat walks you through it)
-4. **Send me the two public SDK keys** — one for iOS, one for Android.
-   They look like `appl_xxxx` and `goog_xxxx`.
-
-The public SDK keys are safe to share; they ship inside the app. Do **not**
-send the secret API key.
-
----
-
-## 2. Products
+## Products
 
 ### Subscriptions — auto-renewable, monthly
 
@@ -35,19 +21,16 @@ send the secret API key.
 | `pro_monthly` | Pro | **USD 15.00 / month** | Unlimited Drafts, 5 Super Drafts / month |
 
 > These are the **live** prices Stripe already charges on web, read from the
-> production Stripe account. Use exactly these amounts so the same plan does
-> not cost a different sum depending on the platform someone bought it on.
+> production Stripe account. Use exactly these so the same plan does not cost a
+> different sum depending on where it was bought.
 >
-> Both stores price by tier rather than by exact figure, so pick the tier that
-> equals USD 7.00 and USD 15.00 in the US storefront and let the store convert
-> the rest.
+> Both stores price by tier rather than exact figure — pick the tier equal to
+> USD 7.00 and USD 15.00 in the US storefront and let the store convert the rest.
 
-Both go in one **subscription group** (call it `GetDraft Membership`) so users
-can upgrade and downgrade between them rather than holding two at once.
+Both belong to **one subscription group** (call it `GetDraft Membership`) so a
+user can move between them instead of holding both.
 
 ### Consumables — Draft packs
-
-These prices come from the backend and are authoritative:
 
 | Product ID | Name | Price | Grants |
 |---|---|---|---|
@@ -55,63 +38,94 @@ These prices come from the backend and are authoritative:
 | `drafts_50` | 50 Drafts | **$4.00** | 50 extra Drafts |
 | `drafts_100` | 100 Drafts | **$7.00** | 100 extra Drafts |
 
-Type: **Consumable** on both stores — they are used up and can be bought again.
-Not subscriptions.
+Type: **Consumable** on both stores — used up, and buyable again.
+
+> Worth raising with the client before these go live: `drafts_100` costs the
+> same $7.00 as a Starter subscription, which gives *unlimited* Drafts plus 3
+> Super Drafts every month. Nobody rationally buys the pack at that price, and
+> side by side it makes the pack look broken.
 
 ### The free tier is not a product
 
-`basic` is the free plan: 20 Drafts and 1 Super Draft per month. Do **not**
-create a store product for it. It is the default state of every account.
+`basic` — 20 Drafts and 1 Super Draft per month — is the default state of every
+account. Do **not** create a store product for it.
 
 ---
 
-## 3. RevenueCat entitlements
+## iOS — App Store Connect
 
-In RevenueCat → Entitlements, create:
+1. Create the five products above
+2. Put both subscriptions in one subscription group
+3. Give every product a **display name, description and review screenshot** —
+   Apple will not make a product available without them
+4. **Sign the Paid Applications Agreement**, and complete tax and banking
+5. Create a **sandbox tester**: Users and Access → Sandbox Testers
 
-| Entitlement | Attach these products |
-|---|---|
-| `starter` | `starter_monthly` |
-| `pro` | `pro_monthly` |
+> ⚠️ **Step 4 is the one that catches everyone.** Until that agreement is
+> *Active*, StoreKit returns **zero products**. The app shows an empty purchase
+> screen with no error, and it looks exactly like a bug in the code. Check it
+> says Active, not Pending.
 
-Draft packs need no entitlement — they are one-off grants, handled by the
-webhook rather than by entitlement state.
-
-Then create an **Offering** named `default` containing both subscriptions, so
-the app can fetch what to display rather than hard-coding it.
-
----
-
-## 4. Things that are easy to get wrong
-
-**Same IDs on both stores.** `starter_monthly` on iOS must be `starter_monthly`
-on Android. Not `starter.monthly`, not `starter_monthly_android`.
-
-**App Store Connect needs more than the product.** Each subscription also
-requires a localised display name, description, a review screenshot, and the
-subscription group set up. Apple rejects incomplete product metadata.
-
-**Play Console subscriptions need a base plan.** Creating the subscription is
-not enough — add a base plan with the monthly renewal period and activate it,
-or it stays invisible to the app.
-
-**Tax and banking must be complete on both stores** before any product can go
-live. If the client has not finished those forms, products stay in draft and
-purchases fail with confusing errors.
-
-**Test with sandbox accounts, not real cards.** App Store Connect → Users and
-Access → Sandbox Testers. Play Console → Setup → License testing.
+**No keys or secrets are needed from Apple.** The server verifies StoreKit 2
+receipts by checking the signature against Apple's certificate chain, so there
+is no shared secret to create, send or leak.
 
 ---
 
-## 5. What happens after
+## Android — Play Console
 
-Once the products exist and I have the two RevenueCat SDK keys, the app side is:
+1. **Monetise → Subscriptions**: create `starter_monthly` and `pro_monthly`
+2. Add a **base plan** to each, monthly renewal, then **activate** it —
+   creating the subscription alone leaves it invisible to the app
+3. **Monetise → In-app products**: create the three `drafts_*` consumables
+4. Complete the **merchant account**, tax and banking
+5. **Setup → License testing**: add a test account so purchases can be made
+   without real money
 
-- replace the Stripe payment sheet with RevenueCat's purchase call
-- a backend webhook granting the plan, reusing the entitlement code that
-  already exists behind `/subscriptions/confirm`
-- Stripe stays in place for web
+### One credential is needed
 
-Purchases then work on **both** iOS and Android through the stores' own
-billing, which is what both Apple and Google require.
+Unlike Apple, Google's purchase tokens are opaque — the server has to ask
+Google whether one is real. That needs a service account:
+
+```
+Play Console → Setup → API access → create a service account
+Grant it:  View financial data, orders, and cancellation survey responses
+Download:  the JSON key
+```
+
+Send that JSON, and it goes into the backend as `GOOGLE_SERVICE_ACCOUNT_JSON`.
+
+> Until it is set, Android purchase validation **fails closed** — the server
+> refuses to grant rather than trusting the app. That is deliberate: without
+> Google's confirmation, a purchase claim from a device is only a claim.
+
+---
+
+## Easy things to get wrong
+
+**Same IDs on both stores.** `starter_monthly` on iOS must be exactly
+`starter_monthly` on Android. Not `starter.monthly`, not `starter_monthly_v2`.
+
+**Play needs the base plan activated**, not just the subscription created.
+
+**Both stores need tax and banking finished** before any product leaves draft.
+
+**Test with sandbox / licence-test accounts**, never a real card.
+
+---
+
+## What happens once these exist
+
+The app and server code is already written and merged:
+
+```
+services/billing.ts          buys through StoreKit / Play Billing
+POST /api/billing/validate   verifies the receipt with Apple or Google,
+                             then grants the plan or the Drafts
+```
+
+To switch it on: set `EXPO_PUBLIC_IAP_ENABLED=1`, add
+`GOOGLE_SERVICE_ACCOUNT_JSON` for Android, and rebuild both apps.
+
+Until then both mobile platforms sell nothing, which is the safe state — an app
+with no purchase flow passes review, an app with the wrong one does not.
