@@ -57,6 +57,8 @@ import { guardianLinksService } from "@/services/guardianLinks";
 import { EmailVerificationScreen } from "./EmailVerificationScreen";
 import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { PlanSelectionScreen } from "./PlanSelectionScreen";
+import { PURCHASES_ENABLED, USES_STORE_BILLING } from "@/constants/purchases";
+import { purchaseProduct, STORE_PRODUCTS } from "@/services/billing";
 import { LocationSelectionScreen } from "./LocationSelectionScreen";
 import { ProfileSetupScreen } from "./ProfileSetupScreen";
 import { MediaUploadScreen } from "./MediaUploadScreen";
@@ -370,7 +372,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         // the auth flow on reload.
         const answeredQuestions =
           meRole === "parent" || !!me?.preferences?.onboarding?.answeredAt;
-        let resumeAt: SignupStep = "plan";
+        let resumeAt: SignupStep = PURCHASES_ENABLED ? "plan" : "tutorial";
         if (meRole === "parent") {
           if (!hasProfileBio) resumeAt = "profile";
           else if (!kycApproved) resumeAt = "kyc";
@@ -386,7 +388,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         else if (!kycApproved) resumeAt = "kyc";
         else if (!guardianDone) resumeAt = "guardian-link";
         else if (!answeredQuestions) resumeAt = "questions";
-        else resumeAt = "plan";
+        else resumeAt = PURCHASES_ENABLED ? "plan" : "tutorial";
         setMode("signup");
         setSignupStep(resumeAt);
       } catch {
@@ -548,6 +550,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
     try {
+      // Store billing on mobile. This path called Stripe directly with no
+      // platform check, so a new iOS user could reach a third-party payment
+      // sheet during signup -- App Store guideline 3.1.1, and precisely the
+      // flow Apple asks reviewers to record.
+      if (USES_STORE_BILLING) {
+        const productId =
+          planId === "pro" ? STORE_PRODUCTS.pro : STORE_PRODUCTS.starter;
+        const result = await purchaseProduct(productId);
+        // Re-throw on cancel so PlanSelectionScreen clears its per-card
+        // spinner, matching what the Stripe path does on dismissal.
+        if (result.status === "cancelled") throw new Error("cancelled");
+        if (result.status === "error") throw new Error(result.message);
+        await finishOnboarding();
+        return;
+      }
+
       const params = await subscriptionsService.createPaymentSheet(planId);
       if (!params?.paymentIntentClientSecret) {
         throw new Error("Stripe did not return a payment session.");
@@ -661,6 +679,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   /** Tutorial → plan (the new last step). */
   const handleTutorialComplete = () => {
+    // Where purchases are disabled -- iOS -- the plan step must not appear
+    // at all. Tapping a paid plan there opens the Stripe Payment Sheet: a
+    // third-party purchase flow for digital goods, which is what App Store
+    // guideline 3.1.1 prohibits. PURCHASES_ENABLED previously gated only the
+    // subscription and buy-swipes screens, so signup walked straight past it
+    // -- and signup is the flow Apple asks reviewers to record. Finishing
+    // here lands the user on Basic, exactly as tapping X on that step does.
+    if (!PURCHASES_ENABLED) {
+      finishOnboarding();
+      return;
+    }
     setSignupStep("plan");
   };
 

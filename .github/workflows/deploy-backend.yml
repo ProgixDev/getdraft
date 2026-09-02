@@ -1,0 +1,83 @@
+# Deploys the backend to Railway from GitHub's runners.
+#
+# Why this exists: `railway up` uploads the backend from whoever runs it, and
+# that upload has repeatedly failed from the office connection -- a 1 MB test
+# upload to a neutral host failed too, so it is upstream bandwidth, not
+# Railway. Downloads work; uploads do not.
+#
+# The obvious fix -- connecting the Railway service directly to this repo --
+# is not available, because the Railway account belongs to the client and this
+# repository belongs to the agency. Connecting it would mean granting the
+# client access to the agency's code.
+#
+# So GitHub does the upload instead. The runner already has the code, has a
+# fast connection, and needs only a deploy token. The client never touches
+# the repo, and nothing has to leave a developer's machine.
+#
+# SETUP (once):
+#   1. Railway dashboard -> project -> Settings -> Tokens -> create a
+#      *project* token (not an account token: scope it to this project only).
+#   2. GitHub -> this repo -> Settings -> Secrets and variables -> Actions
+#      -> New repository secret:
+#           name:  RAILWAY_TOKEN
+#           value: the token from step 1
+#
+# After that, any push touching backend/ deploys. It can also be run by hand
+# from the Actions tab.
+
+name: Deploy backend
+
+on:
+  push:
+    branches: [master]
+    # Only when the backend actually changed. An app-only commit rebuilding
+    # the API wastes minutes and briefly restarts a service nobody asked to
+    # restart.
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch: # deploy by hand, e.g. to re-run a failed deploy
+
+concurrency:
+  # Two deploys racing would leave whichever finished last running, which is
+  # not necessarily the newest commit.
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: Deploy
+        working-directory: backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN is not set — add it under repo Settings > Secrets."
+            exit 1
+          fi
+          # --detach: the runner's job is to hand the code over, not to sit
+          # watching a build it cannot influence.
+          railway up --service getdraft-api --detach
+
+      - name: Wait for the API to answer
+        run: |
+          # A deploy that "succeeded" but left the service unhealthy is worse
+          # than one that failed loudly, so confirm it actually serves.
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://api.getdraft.net/api/health || true)
+            if [ "$code" = "200" ]; then
+              echo "API healthy after $((i * 10))s"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "API did not return 200 within 5 minutes — check the Railway logs."
+          exit 1

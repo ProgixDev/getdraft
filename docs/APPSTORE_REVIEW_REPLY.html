@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GetDraft — Replying to Apple App Review</title>
+<style>
+  :root{--blue:#0984E3;--blue-d:#0A4D8F;--ink:#121A24;--muted:#5D6672;--line:#E3E7EA;--bg:#F8FAFB}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+       color:var(--ink);line-height:1.6;font-size:14.5px;background:#fff}
+  .hero{background:linear-gradient(135deg,#121212,#0D2C4D 65%,#0A4D8F 140%);color:#fff;padding:36px 40px 28px}
+  .hero h1{font-size:25px;line-height:1.2;margin-bottom:6px}
+  .hero p{opacity:.85;font-size:14px}
+  main{padding:26px 40px 50px;max-width:790px}
+  h2{font-size:17px;margin:26px 0 9px;padding-bottom:6px;border-bottom:2px solid var(--line);page-break-after:avoid}
+  p{margin-bottom:10px}
+  ul{margin:0 0 12px 20px}
+  li{margin-bottom:6px}
+  .callout{background:#EAF4FD;border-left:4px solid var(--blue);border-radius:0 8px 8px 0;
+           padding:13px 17px;margin:14px 0;page-break-inside:avoid}
+  .callout strong{color:var(--blue-d)}
+  .warn{background:#FFF6E5;border-left-color:#E5A84B}
+  .warn strong{color:#9A6B12}
+  .paste{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+         margin:10px 0 16px;white-space:pre-wrap;font-family:Consolas,Monaco,monospace;
+         font-size:12.5px;line-height:1.55;page-break-inside:avoid}
+  .tag{display:inline-block;background:var(--blue);color:#fff;font-size:10.5px;font-weight:700;
+       letter-spacing:.6px;padding:2px 8px;border-radius:20px;vertical-align:middle;margin-left:8px}
+  .steps{counter-reset:s;list-style:none;margin-left:0}
+  .steps li{counter-increment:s;position:relative;padding-left:32px;margin-bottom:9px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:22px;height:22px;
+    background:var(--blue);color:#fff;border-radius:50%;font-size:11.5px;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+  footer{margin-top:30px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+  @page{margin:13mm}
+  @media print{.hero,.callout,.paste{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Replying to Apple App Review</h1>
+  <p>GetDraft &middot; Guideline 2.1 &mdash; Information Needed</p>
+</div>
+
+<main>
+
+<div class="callout">
+  <strong>This is not a rejection.</strong> Guideline 2.1 &ldquo;Information Needed&rdquo; is a
+  standard request on a first submission. Apple has paused the review and is waiting for answers.
+  Once you reply with everything below, the review continues.
+</div>
+
+<p>Apple asked seven questions. The answers to questions 2&ndash;7 are written out below &mdash;
+copy each grey box into <strong>App Store Connect &rarr; App Review Information &rarr; Notes</strong>.
+Question 1 is a video you need to record.</p>
+
+<h2>1. Screen recording <span class="tag">YOU MUST RECORD THIS</span></h2>
+
+<p>Record on a <strong>real iPhone</strong>, not the simulator, running the latest iOS.
+Start recording <em>before</em> opening the app. Film in this order:</p>
+
+<ol class="steps">
+  <li>Launch the app from the home screen</li>
+  <li>Create a new account with an email address</li>
+  <li>Sign out, then sign back in using the demo account</li>
+  <li>Show the permission prompts: location during setup, then camera and photo library when adding a photo</li>
+  <li>The main screen: swipe right to Draft someone, swipe left to Pass, tap a card to open the full profile</li>
+  <li>Draft an athlete who has already drafted you, so the match screen appears &mdash; then open the chat and send a message</li>
+  <li>Open the Feed, then show <strong>reporting</strong> (the &hellip; menu on a profile and on a post) and <strong>blocking</strong> (the &hellip; menu on a profile)</li>
+  <li>Delete the account: More &rarr; Settings &rarr; Delete Account, showing both confirmations</li>
+</ol>
+
+<div class="callout warn">
+  <strong>There are no purchases to film.</strong> Paid subscriptions are switched off in the
+  iPhone version of the app. There is no paywall, no subscription screen and no payment step
+  anywhere in it. Say this in your reply, otherwise a reviewer will keep looking for a purchase
+  flow and assume it is being hidden.
+</div>
+
+<h2>2. Devices and iOS versions tested</h2>
+
+<div class="callout warn">
+  <strong>Only you can answer this one.</strong> Write the real iPhone models and iOS versions you
+  tested on. Apple reviews on physical hardware and may ask follow-up questions, so do not guess.
+  If the app has only been run in the simulator, test it on a real iPhone before replying.
+</div>
+
+<div class="paste">iPhone [model], iOS [version]
+iPhone [model], iOS [version]</div>
+
+<h2>3. What the app does and who it is for</h2>
+
+<div class="paste">GetDraft is a sports recruiting platform that connects athletes with
+coaches, recruiters and agents.
+
+THE PROBLEM
+
+Talented athletes go unrecruited because they have no direct line to the
+coaches looking for them, and recruiters cannot efficiently find prospects
+outside their existing networks. Recruiting today depends on personal
+connections, expensive showcase events, and geography.
+
+HOW IT WORKS
+
+Athletes build a profile with their sport, position, level, class year,
+photos and highlight video. Coaches, recruiters and agents browse athlete
+profiles filtered by sport, position, level and location.
+
+Either side can express interest by "Drafting" the other (swipe right) or
+passing (swipe left). When both sides Draft each other it becomes a match,
+and only then does messaging open. Nobody can be contacted without having
+first expressed interest in the person contacting them.
+
+The app also includes a world ranking board for each sport, based on
+profile strength and interest received, and a map showing where athletes
+and recruiters are located.
+
+WHO IT IS FOR
+
+- Athletes aged 13 and over, from high school to professional level
+- Coaches, recruiters and agents at schools, colleges, clubs and agencies
+
+Athletes under 18 must link a parent or guardian, who is notified of
+recruiter interest and whose approval activates the account.</div>
+
+<h2>4. How to set up and access the app</h2>
+
+<div class="paste">DEMO ACCOUNT (recruiter)
+
+Phone:  +213558780131
+Code:   123456
+
+Sign in with the phone number above. The verification code is always
+123456. This is a test number, so no SMS is sent and no code is needed
+from your side.
+
+The account is already fully set up, so signing in goes straight into the
+app. It is a recruiter account, so the main screen shows athlete profiles.
+
+Please use this account rather than creating a new one. New sign-ups go
+through identity verification that requires a real passport or ID
+document, so a newly created account cannot get past that step.
+
+WHERE TO FIND EACH FEATURE
+
+Discover        opens when the app starts. Swipe right to Draft, left to
+                Pass, tap a card for the full profile.
+Draft Board     second tab. Received, Sent, Matches and Messages.
+Globe           third tab. World map of athletes and recruiters.
+Rankings        More tab, then Rankings. Opens on the World board.
+Report          the ... menu on a profile, on any post, or in a chat.
+Block           the ... menu on a profile.
+Delete account  More, then Settings, then Delete Account.
+
+No sample files are needed.</div>
+
+<h2>5. External services the app uses</h2>
+
+<div class="paste">Supabase   database, sign-in and file storage for profiles, photos,
+           video and messages
+Prelude    text-message codes for signing in by phone
+Resend     automatic emails such as verification and password reset
+Didit      identity verification for adult users
+Mapbox     maps and location lookup
+Expo       push notifications and app updates
+Railway    hosting for the app's server
+
+Payments: the iPhone version of the app does not sell anything. No
+payment processing takes place in this app.
+
+The app does not use any AI services, advertising networks or analytics
+tracking.</div>
+
+<h2>6. Regional differences</h2>
+
+<div class="paste">The app works exactly the same in every region. There are no
+region-specific features, content or restrictions.
+
+Content is not filtered by country: users can browse athletes and
+recruiters worldwide, and the ranking board covers every country.
+
+The app is available in English only.</div>
+
+<h2>7. Regulated industry or protected material</h2>
+
+<div class="paste">GetDraft does not operate in a regulated industry and contains no
+protected third-party material. There are no team logos, league marks,
+broadcast footage or licensed sports data in the app. All photos and
+video are uploaded by the users themselves.
+
+Identity verification is provided by Didit, an identity verification
+company we hold a commercial account with. We do not handle or store
+identity documents ourselves. Didit processes them and returns only the
+result of the check.
+
+Regarding younger users: the app is rated 13+, and athletes under 18 must
+link a parent or guardian, who is notified of recruiter interest and whose
+approval is required before the account becomes active. Messaging only
+becomes possible after both people have expressed interest in each other,
+so no adult can start a conversation with a minor uninvited.</div>
+
+<h2>Before you reply, check these</h2>
+
+<ul>
+  <li><strong>Test on a real iPhone.</strong> Apple states in its message that apps are reviewed on physical devices. This is the most common cause of a second round of questions.</li>
+  <li><strong>App Store screenshots must show the app in use</strong> &mdash; not the login screen, splash screen or title art. Apple mentions this explicitly.</li>
+  <li><strong>Check the permission messages.</strong> Each one must clearly say why the app needs access, and give an example of how the information is used.</li>
+  <li><strong>Paste answers 2&ndash;7 into the Notes field</strong>, not only into the reply message, so they are saved for future submissions too.</li>
+</ul>
+
+<footer>GetDraft &middot; Prepared by Achraf Benamrane</footer>
+
+</main>
+</body>
+</html>

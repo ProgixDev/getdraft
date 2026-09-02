@@ -33,6 +33,7 @@ import { GuardianLinksModule } from './modules/guardian-links/guardian-links.mod
 import { KycModule } from './modules/kyc/kyc.module';
 import { RankingsModule } from './modules/rankings/rankings.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { StoreBillingModule } from './modules/store-billing/store-billing.module';
 
 @Controller()
 class HealthController {
@@ -183,6 +184,7 @@ class HealthController {
     KycModule,
     RankingsModule,
     ReportsModule,
+    StoreBillingModule,
   ],
   controllers: [HealthController],
   providers: [

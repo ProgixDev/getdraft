@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GetDraft — Setting up support@getdraft.net</title>
+<style>
+  :root{--blue:#0984E3;--blue-d:#0A4D8F;--ink:#121A24;--muted:#5D6672;--line:#E3E7EA;--bg:#F8FAFB}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+       color:var(--ink);line-height:1.6;font-size:15px;background:#fff}
+  .hero{background:linear-gradient(135deg,#121212,#0D2C4D 65%,#0A4D8F 140%);
+        color:#fff;padding:38px 40px 30px}
+  .hero h1{font-size:26px;line-height:1.2;margin-bottom:6px}
+  .hero p{opacity:.85;font-size:14px}
+  main{padding:30px 40px 50px;max-width:780px}
+  h2{font-size:18px;margin:28px 0 10px;padding-bottom:7px;border-bottom:2px solid var(--line);
+     page-break-after:avoid}
+  h3{font-size:15px;margin:18px 0 6px;page-break-after:avoid}
+  p{margin-bottom:11px}
+  ol,ul{margin:0 0 14px 20px}
+  li{margin-bottom:7px}
+  code{background:var(--bg);border:1px solid var(--line);border-radius:4px;
+       padding:1px 5px;font-size:13px;font-family:Consolas,Monaco,monospace}
+  .callout{background:#EAF4FD;border-left:4px solid var(--blue);border-radius:0 8px 8px 0;
+           padding:14px 18px;margin:16px 0;page-break-inside:avoid}
+  .callout strong{color:var(--blue-d)}
+  .warn{background:#FFF6E5;border-left-color:#E5A84B}
+  .warn strong{color:#9A6B12}
+  table{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:14px;
+        page-break-inside:avoid}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--bg);color:var(--muted);font-weight:600}
+  .steps{counter-reset:s;list-style:none;margin-left:0}
+  .steps li{counter-increment:s;position:relative;padding-left:34px;margin-bottom:11px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:23px;height:23px;
+    background:var(--blue);color:#fff;border-radius:50%;font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+  .qa{margin-bottom:14px;page-break-inside:avoid}
+  .qa .q{font-weight:600}
+  .qa .a{color:var(--muted)}
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
+         color:var(--muted);font-size:13px}
+  @page{margin:14mm}
+  @media print{.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .callout,table,th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Setting up support@getdraft.net</h1>
+  <p>GetDraft &middot; about 2 minutes &middot; no cost</p>
+</div>
+
+<main>
+
+<div class="callout">
+  <strong>You do not need to buy anything.</strong><br>
+  <code>support@getdraft.net</code> can be added as an <strong>alias</strong> on the Google
+  Workspace account you already have. An alias is a second address that delivers into your
+  existing inbox. Google includes up to 30 aliases per account at no charge.
+  You would only pay if you created a <em>new user</em>, which is not needed here.
+</div>
+
+<h2>Why it is needed</h2>
+
+<p>This address is published in four places:</p>
+
+<table>
+  <tr><th style="width:42%">Where</th><th>Why it matters</th></tr>
+  <tr><td>Google Play store listing</td><td>The support contact users see</td></tr>
+  <tr><td>Privacy Policy</td><td>Legally required contact point</td></tr>
+  <tr><td>Terms of Service</td><td>Same</td></tr>
+  <tr><td><strong>Account deletion page</strong></td>
+      <td><strong>Required by Google Play</strong></td></tr>
+</table>
+
+<p>The last one matters most. Google requires any app where people create an account to publish
+a page explaining how to delete it. Ours tells users to email <code>support@getdraft.net</code>
+if they have already uninstalled the app.</p>
+
+<div class="callout warn">
+  <strong>Right now that address does not exist.</strong> Emails sent to it bounce back with
+  &ldquo;Address not found&rdquo;. Google checks this page while reviewing the app.
+</div>
+
+<h2>How to add it</h2>
+
+<ol class="steps">
+  <li>Go to <strong>admin.google.com</strong> and sign in with your GetDraft Workspace account</li>
+  <li>In the left menu: <strong>Directory</strong> &rarr; <strong>Users</strong></li>
+  <li>Click <strong>your own user account</strong> in the list</li>
+  <li>Open <strong>User information</strong> &rarr; <strong>Alternate email addresses (email aliases)</strong><br>
+      <span style="color:var(--muted);font-size:13px">On some versions this is simply called <em>Email aliases</em></span></li>
+  <li>Click <strong>Add an alternate email</strong></li>
+  <li>Type <code>support</code> &mdash; the <code>@getdraft.net</code> part is filled in automatically</li>
+  <li>Click <strong>Save</strong></li>
+</ol>
+
+<p>That is all. Anything sent to <code>support@getdraft.net</code> now arrives in your normal
+inbox, alongside your usual mail. Activation is usually a few minutes, though Google allows
+up to 24 hours.</p>
+
+<h2>How to check it worked</h2>
+
+<p>Send an email to <code>support@getdraft.net</code> from any other address &mdash; your phone,
+a personal Gmail, anything.</p>
+
+<ul>
+  <li><strong>It arrives in your inbox</strong> &rarr; done, nothing else needed</li>
+  <li><strong>You get a bounce</strong> saying &ldquo;Address not found&rdquo; &rarr; not active yet.
+      Wait an hour and try once more.</li>
+</ul>
+
+<p>Please tell us either way, so we know the deletion page works before Google finishes its
+review.</p>
+
+<h2>Questions you might have</h2>
+
+<div class="qa"><div class="q">Will this create a new mailbox I have to check separately?</div>
+<div class="a">No. An alias delivers into your existing inbox. Nothing new to sign into.</div></div>
+
+<div class="qa"><div class="q">Can I reply from it?</div>
+<div class="a">Yes. In Gmail: Settings &rarr; Accounts &rarr; <em>Send mail as</em> &rarr; add
+<code>support@getdraft.net</code>. You can then choose it as the sender.</div></div>
+
+<div class="qa"><div class="q">Does it cost extra per month?</div>
+<div class="a">No. Aliases are included in every Google Workspace plan.</div></div>
+
+<div class="qa"><div class="q">What happens if I do nothing?</div>
+<div class="a">The app still works, but anyone emailing support gets a bounce, and the
+account-deletion route Google requires is only half working.</div></div>
+
+<footer>
+  GetDraft &middot; Prepared by Achraf Benamrane
+</footer>
+
+</main>
+</body>
+</html>

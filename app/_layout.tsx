@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { StripeProvider } from "@stripe/stripe-react-native";
+import { initBilling, restorePurchases } from "@/services/billing";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
@@ -74,6 +75,18 @@ function RootLayoutContent() {
   // Register the Expo push token + handle notification taps once the
   // user is authenticated. Physical device required.
   usePushNotifications(isAuthenticated && !!user, appState === "app");
+
+
+  // Pick up anything paid for but never granted -- app killed mid-purchase,
+  // network dropped, server briefly down. Those transactions stay in the
+  // store's queue on purpose, because purchaseProduct never finishes an
+  // unvalidated one. Runs quietly; the user sees the plan simply be correct.
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+    initBilling().then((ready) => {
+      if (ready) restorePurchases().catch(() => {});
+    });
+  }, [isAuthenticated, user?.id]);
 
   // Prewarm the backend the moment the app launches. Render's free tier
   // sleeps after ~15 min; this fire-and-forget ping wakes it during splash /

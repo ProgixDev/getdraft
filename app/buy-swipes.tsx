@@ -22,7 +22,8 @@ import {
 import { brand, semantic, theme } from '@/config/colors';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
-import { PURCHASES_ENABLED } from '@/constants/purchases';
+import { PURCHASES_ENABLED, USES_STORE_BILLING } from '@/constants/purchases';
+import { purchaseProduct } from '@/services/billing';
 
 interface SwipePack {
   id: string;
@@ -121,6 +122,19 @@ export default function BuySwipesScreen() {
       if (pendingPackId) return;
       setPendingPackId(pack.id);
       try {
+        // Store billing on mobile. Pack ids from the API (small/medium/large)
+        // map onto the store product ids by the number of Drafts, so the two
+        // catalogues cannot drift apart on a rename.
+        if (USES_STORE_BILLING) {
+          const productId = `drafts_${pack.swipes}`;
+          const result = await purchaseProduct(productId);
+          if (result.status === 'cancelled') return;
+          if (result.status === 'error') throw new Error(result.message);
+          await refreshBonus();
+          router.back();
+          return;
+        }
+
         const params = await subscriptionsService.buySwipePackSheet(pack.id);
         if (!params?.paymentIntentClientSecret) {
           throw new Error('Stripe did not return a payment session.');
