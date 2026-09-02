@@ -1,4 +1,4 @@
 allowBuilds:
-  unrs-resolver: set this to true or false
+  unrs-resolver: false
 patchedDependencies:
   '@stripe/stripe-react-native': patches/@stripe__stripe-react-native.patch
