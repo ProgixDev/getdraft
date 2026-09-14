@@ -27,10 +27,15 @@ jobs:
     steps:
       - name: Ping the health function
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::Set SUPABASE_URL and SUPABASE_ANON_KEY as repository Variables or Secrets"
+            exit 1
+          fi
 
           # The health Edge Function queries Postgres, so a 200 proves the
           # DATABASE is awake -- not merely that the API gateway answered.
