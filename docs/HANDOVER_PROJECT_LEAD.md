@@ -118,36 +118,40 @@ no seat for the agency. Two consequences:
   runners instead. It needs one secret, `RAILWAY_TOKEN`, which nobody has
   created yet because it requires a paid Railway project.
 
-### #11 has a trap in the development profile
+### #11 — the Mapbox token is NOT in the repo, and that has bitten twice
 
-`EXPO_PUBLIC_MAPBOX_TOKEN` is not in the repo. `.env` is gitignored, and EAS
-uses `.gitignore` to decide what to upload, so cloud builds read it from the
-EAS-hosted environment instead:
+`EXPO_PUBLIC_MAPBOX_TOKEN` lives in the EAS-hosted environment of project
+`@getdraft2/getdraft` (all three environments: production, preview,
+development — set 2026-09-20 from the client's own Mapbox account). `.env` is
+gitignored, and EAS uses `.gitignore` to decide what to upload, so a cloud
+build gets the token **only** from that EAS project.
 
-```
-production   set
-preview      set
-development  EMPTY   <-- this one
-```
+**A build made from any other EAS project, or a local build, ships with no
+token.** The app then shows *"Map unavailable"* on the Globe tab, permanently,
+and every country / region / school search returns nothing. No crash, no
+error. This is exactly what happened to the iOS 1.0 in the App Store: it was
+built outside `getdraft2` — `eas build:list --platform ios` there shows
+nothing — so every iPhone user sees a dead map until it is rebuilt.
 
-All three should hold the same token, and the first two do. **A
-`--profile development` build has no Mapbox token**, which means the Globe tab
-and every country / region / school search silently return nothing — no error,
-just an empty map. That is the first build an iOS developer typically makes,
-so it will look like a bug in the Globe.
-
-Fix it once:
+Before building anywhere other than `getdraft2`, confirm:
 
 ```bash
-npx eas env:create development \
+npx eas env:list production      # must show EXPO_PUBLIC_MAPBOX_TOKEN
+```
+
+or add it to that project first:
+
+```bash
+npx eas env:create production \
   --name EXPO_PUBLIC_MAPBOX_TOKEN --value pk.… --visibility plaintext
 ```
 
-The token is public by design — it ships inside the bundle, so anyone who
-unzips the APK can read it. What protects it is a **URL / bundle-id
-restriction set in the Mapbox dashboard**, which is worth confirming is
-actually in place, because an unrestricted public token is billable by anyone
-who finds it.
+The token is public by design — it ships inside the bundle. **Do not add a
+URL restriction to it in the Mapbox dashboard.** The Globe renders Mapbox
+inside a WebView from inline HTML, which sends no website origin, so a
+URL-restricted token rejects every tile request and the map dies the same way.
+Use the account's default public token as-is; if abuse ever becomes a
+problem, rotate it rather than restrict it.
 
 ---
 
