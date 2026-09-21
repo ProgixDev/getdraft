@@ -40,6 +40,7 @@ import { theme, semantic, brand } from "@/config/colors";
 import { useDispatch, useSelector } from "react-redux";
 import type { RootState } from "@/store";
 import { setDiscoverMode } from "@/store/slices/discoverPreferencesSlice";
+import { useMapboxTokenStatus } from "@/lib/mapbox-token";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
@@ -58,7 +59,6 @@ const TALENT_CARD_W = 232;
 // Same public token the location search uses. Inlined at build time by
 // Metro; present in every EAS build. Without it the map can't load, so we
 // fall back to a friendly placeholder (see render) instead of a blank tab.
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 
 // ── Continent list (labels + icons only) ──
 // Counts come EXCLUSIVELY from the live stats API — no invented figures.
@@ -427,6 +427,11 @@ export default function GlobeTab() {
   const [CONTINENTS, setContinents] =
     useState<ContinentRow[]>(DEFAULT_CONTINENTS);
   const [points, setPoints] = useState<MapPoint[]>([]);
+  // Build-time token when the build has one; otherwise fetched from the
+  // server and this re-renders when it lands, so a build made outside the
+  // EAS project that holds the token still gets a map instead of the
+  // permanent "Map unavailable" the iOS 1.0 shipped with.
+  const { token: MAPBOX_TOKEN, pending: tokenPending } = useMapboxTokenStatus();
   // The map follows Discover's Recruiting | Community switch, from the same
   // slice, so a coach who flipped to Community on the deck sees coaches here
   // too instead of a silently different pool.
@@ -620,7 +625,7 @@ export default function GlobeTab() {
         })),
         MAPBOX_TOKEN ?? "",
       ),
-    [points],
+    [points, MAPBOX_TOKEN],
   );
 
   // Tap-bridge handler: the HTML posts { type:'point', id } when a point
@@ -735,13 +740,13 @@ export default function GlobeTab() {
             // placeholder instead of taking the app down.
             onRenderProcessGone={() => setWebviewDead(true)}
           />
-        ) : !MAPBOX_TOKEN || webviewDead ? (
+        ) : (!MAPBOX_TOKEN && !tokenPending) || webviewDead ? (
           // A spinner used to cover BOTH of these, so a missing token or a
-          // dead WebView looked identical to loading — and span forever. In
-          // every build shipped so far EXPO_PUBLIC_MAPBOX_TOKEN was absent
-          // (it lived only in gitignored .env), which meant this tab was a
-          // permanent loading state and nobody could tell it had failed.
-          // Distinguish "still loading" from "cannot load".
+          // dead WebView looked identical to loading — and span forever.
+          // The token now also comes from the server (lib/mapbox-token), so
+          // "no token" here means the build has none AND the server returned
+          // none; that is a real failure, not a loading state. Distinguish
+          // "still loading" from "cannot load".
           <View style={styles.globePlaceholder}>
             <Ionicons
               name="earth-outline"

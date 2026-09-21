@@ -32,13 +32,13 @@ import {
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
 import { getContentWidth } from "@/lib/responsive";
+import { getMapboxToken, loadMapboxToken } from "@/lib/mapbox-token";
 
 const { height } = Dimensions.get("window");
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
 const width = getContentWidth();
 const GLOBE_HEIGHT = height * 0.4;
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 
 interface Location {
   name: string;
@@ -185,9 +185,12 @@ export const LocationSelectionScreen: React.FC<
       return;
     }
 
+    // Build-time token, else fetched from the server once. Only when the
+    // server has none either do we fall back to the bundled city list.
+    const MAPBOX_TOKEN = getMapboxToken() ?? (await loadMapboxToken());
     if (!MAPBOX_TOKEN) {
       console.warn(
-        "[LocationSelectionScreen] EXPO_PUBLIC_MAPBOX_TOKEN missing; using popularCities filter.",
+        "[LocationSelectionScreen] no Mapbox token (build or server); using popularCities filter.",
       );
       setSearchResults(
         popularCities.filter((c) =>

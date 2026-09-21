@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { getMapboxToken, loadMapboxToken, useMapboxToken } from "@/lib/mapbox-token";
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
 const DEBOUNCE_MS = 350;
 const MIN_LEN = 2;
 
@@ -21,11 +21,12 @@ export interface RegionOption {
  * Countries are the opposite case and stay local in `constants/countryData`.
  */
 export async function searchRegions(query: string): Promise<RegionOption[]> {
-  if (!MAPBOX_TOKEN) return [];
+  const token = getMapboxToken() ?? (await loadMapboxToken());
+  if (!token) return [];
 
   const params = new URLSearchParams({
     q: query,
-    access_token: MAPBOX_TOKEN,
+    access_token: token,
     // Mapbox's `region` is the first-level division in every country.
     types: "region",
     autocomplete: "true",
@@ -77,10 +78,12 @@ export function useRegionSearch(query: string) {
   // Guards against a slow earlier request overwriting a newer one's results.
   const seqRef = useRef(0);
 
+  const token = useMapboxToken();
+
   useEffect(() => {
     const q = query.trim();
 
-    if (!MAPBOX_TOKEN || q.length < MIN_LEN) {
+    if (!token || q.length < MIN_LEN) {
       setResults([]);
       setSearching(false);
       return;
@@ -101,7 +104,7 @@ export function useRegionSearch(query: string) {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, token]);
 
-  return { results, searching, enabled: Boolean(MAPBOX_TOKEN) };
+  return { results, searching, enabled: Boolean(token) };
 }

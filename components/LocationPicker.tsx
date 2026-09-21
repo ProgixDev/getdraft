@@ -21,8 +21,7 @@ import * as Location from "expo-location";
 import { brand, theme } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { COUNTRY_OPTIONS, type CountryOption } from "@/constants/countryData";
-
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+import { getMapboxToken, useMapboxToken } from "@/lib/mapbox-token";
 
 const SEARCH_DEBOUNCE_MS = 350;
 const SEARCH_MIN_LEN = 2;
@@ -50,7 +49,7 @@ interface Suggestion {
 function buildForwardV6(q: string, country?: string) {
   const params = new URLSearchParams({
     q,
-    access_token: MAPBOX_TOKEN ?? "",
+    access_token: getMapboxToken() ?? "",
     types: "region,place,locality,district",
     autocomplete: "true",
     limit: "6",
@@ -62,7 +61,7 @@ function buildForwardV6(q: string, country?: string) {
 
 function buildForwardV5(q: string, country?: string) {
   const params = new URLSearchParams({
-    access_token: MAPBOX_TOKEN ?? "",
+    access_token: getMapboxToken() ?? "",
     types: "region,place,locality",
     autocomplete: "true",
     limit: "6",
@@ -77,7 +76,7 @@ function buildReverseV6(lng: number, lat: number) {
   const params = new URLSearchParams({
     longitude: String(lng),
     latitude: String(lat),
-    access_token: MAPBOX_TOKEN ?? "",
+    access_token: getMapboxToken() ?? "",
     types: "place,region,country",
     language: "en",
   });
@@ -85,7 +84,7 @@ function buildReverseV6(lng: number, lat: number) {
 }
 
 function buildStaticPreview(lng: number, lat: number) {
-  return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+1faa59(${lng},${lat})/${lng},${lat},11,0/600x300@2x?access_token=${MAPBOX_TOKEN ?? ""}`;
+  return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+1faa59(${lng},${lat})/${lng},${lat},11,0/600x300@2x?access_token=${getMapboxToken() ?? ""}`;
 }
 
 function featureV6ToSuggestion(f: any, idx: number): Suggestion | null {
@@ -161,7 +160,9 @@ export function LocationPicker({
   const searchSeq = useRef(0);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const tokenMissing = !MAPBOX_TOKEN;
+  // Reactive: a build without the inlined token gets it from the server a
+  // moment later, and the picker un-greys itself when it lands.
+  const tokenMissing = !useMapboxToken();
 
   const hasCoords =
     typeof latitude === "number" &&

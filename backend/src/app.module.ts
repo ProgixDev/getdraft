@@ -115,6 +115,29 @@ class HealthController {
     }
   }
 
+  /**
+   * Public, non-secret client configuration.
+   *
+   * Exists because of the map. The Mapbox token is an EXPO_PUBLIC_* value
+   * inlined at BUILD time from the EAS environment of ONE project. A build
+   * made anywhere else -- another EAS account, a local build -- ships with no
+   * token, and the Globe shows "Map unavailable" forever. That is how the
+   * iOS 1.0 in the App Store went out, and how the early APKs did before it.
+   *
+   * With this endpoint the app treats the build-time token as a fast path
+   * and falls back to asking the server, so the map works in every build no
+   * matter who made it or where. Nothing here is secret: a Mapbox public
+   * token already ships inside every binary and is readable by anyone who
+   * unzips it. Never put a private key in this response.
+   */
+  @Public()
+  @Get('config')
+  config() {
+    return {
+      mapboxToken: process.env.MAPBOX_PUBLIC_TOKEN ?? null,
+    };
+  }
+
   // Public privacy policy page (Google Play requires a public URL).
   // Served via the raw reply so the global JSON envelope doesn't wrap it.
   @Public()

@@ -40,6 +40,7 @@ import {
 import { usersService } from "@/services/users";
 import { chatService } from "@/services/chat";
 import { API_ORIGIN, setOnSessionExpired } from "@/services/api";
+import { loadMapboxToken } from "@/lib/mapbox-token";
 
 // @stripe/stripe-react-native 0.50.3: StripeProvider's effect calls
 // NativeStripeSdk.initialise() directly and never runs initStripe(), which
@@ -94,6 +95,10 @@ function RootLayoutContent() {
   // of timing out on a 45-55s cold start.
   useEffect(() => {
     fetch(`${API_ORIGIN}/api/health`).catch(() => {});
+    // Same trip: if this build has no inlined Mapbox token, fetch it now so
+    // it is already cached by the time anyone opens the Globe or a location
+    // picker. No-op when the build has one.
+    loadMapboxToken();
   }, []);
 
   // Bridge api.ts's 401-after-refresh-failure into Redux so the existing
