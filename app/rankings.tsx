@@ -262,6 +262,17 @@ export default function RankingsScreen() {
             row={item}
             highlight={item.user_id === user?.id}
             division={division}
+            // A coach on the board wants the athlete, not the number. Own
+            // row goes to the editable profile tab; anyone else opens the
+            // public profile the Discover card opens.
+            onPress={() =>
+              item.user_id === user?.id
+                ? router.push("/(tabs)/profile")
+                : router.push({
+                    pathname: "/user/[userId]",
+                    params: { userId: item.user_id },
+                  })
+            }
           />
         )}
         ListEmptyComponent={
@@ -313,10 +324,12 @@ function RankRow({
   row,
   highlight,
   division,
+  onPress,
 }: {
   row: RankingRow;
   highlight: boolean;
   division: RankingDivision;
+  onPress: () => void;
 }) {
   const { rank, cohort } = standing(row, division);
   const medal = MEDAL[rank];
@@ -328,7 +341,16 @@ function RankRow({
       .join("")
       .toUpperCase() || "?";
   return (
-    <View style={[styles.row, highlight && styles.rowHighlight]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        highlight && styles.rowHighlight,
+        pressed && styles.pressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${row.name ?? "Athlete"}, rank ${rank} of ${cohort}. Open profile.`}
+    >
       <View style={[styles.rankBadge, medal ? { borderColor: medal } : null]}>
         <Text style={[styles.rankNum, medal ? { color: medal } : null]}>
           {rank}
@@ -366,7 +388,8 @@ function RankRow({
         <Text style={styles.scoreValue}>{Math.round(row.score)}</Text>
         <Text style={styles.scoreLabel}>SCORE</Text>
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+    </Pressable>
   );
 }
 
