@@ -101,11 +101,21 @@ export const authService = {
     return result;
   },
 
+  /**
+   * `intent` lets the server refuse before sending the SMS: a sign-in with
+   * an unregistered number, or a sign-up with a registered one, is rejected
+   * with a clear message and no Prelude credit spent.
+   */
   async requestPhoneOtp(
     phone: string,
     channel: "sms" | "whatsapp",
+    intent?: "login" | "signup",
   ): Promise<void> {
-    await api.post("/auth/phone/request-otp", { phone, channel });
+    await api.post("/auth/phone/request-otp", {
+      phone,
+      channel,
+      ...(intent ? { intent } : {}),
+    });
   },
 
   /**

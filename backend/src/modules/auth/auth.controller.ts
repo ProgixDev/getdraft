@@ -135,7 +135,7 @@ export class AuthController {
   @Throttle({ default: { ttl: 60_000, limit: 3 } })
   @ApiOperation({ summary: 'Send a phone OTP via SMS or WhatsApp (Prelude)' })
   requestPhoneOtp(@Body() dto: RequestPhoneOtpDto) {
-    return this.authService.requestPhoneOtp(dto.phone, dto.channel);
+    return this.authService.requestPhoneOtp(dto.phone, dto.channel, dto.intent);
   }
 
   @Public()

@@ -101,6 +101,9 @@ interface AuthScreenProps {
    * want and update the row before continuing onboarding.
    */
   oauthMode?: { initialName?: string; initialEmail?: string };
+  /** Open on the sign-up side instead of "Welcome Back". Set by the landing
+   *  screen when the user chose "Create an account". */
+  initialMode?: "login" | "signup";
 }
 
 type AuthMode = "login" | "signup" | "forgot";
@@ -165,6 +168,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   phoneVerificationToken,
   initialPhone,
   oauthMode,
+  initialMode,
 }) => {
   const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
@@ -184,7 +188,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   // into the role + name + password step. OAuth arrivals jump to the
   // oauth-role step (role + name, no password).
   const [mode, setMode] = useState<AuthMode>(
-    isPhoneSignup || isOauthSignup ? "signup" : "login",
+    isPhoneSignup || isOauthSignup ? "signup" : (initialMode ?? "login"),
   );
   const [signupStep, setSignupStep] = useState<SignupStep>(
     isPhoneSignup ? "phone-role" : isOauthSignup ? "oauth-role" : "role",

@@ -618,13 +618,40 @@ export class AuthService {
 
   // ----- Phone OTP (Prelude: SMS or WhatsApp) -----
 
-  async requestPhoneOtp(phone: string, channel: VerifyChannel): Promise<{ message: string }> {
+  async requestPhoneOtp(
+    phone: string,
+    channel: VerifyChannel,
+    intent?: 'login' | 'signup',
+  ): Promise<{ message: string }> {
     const normalized = phone.trim();
 
+    // With an intent, decide BEFORE the SMS goes out. Every send costs a
+    // Prelude credit, and until now a returning user who mistyped their
+    // number paid for a code, then got walked into creating a second
+    // account. Same product decision as email login (client, 14 Aug): say
+    // "no account" rather than pretend. The enumeration trade-off is
+    // accepted, and this endpoint is rate limited to 3/min per IP.
+    //
+    // No intent = a client from before this existed: unchanged behaviour,
+    // every number gets a code and verifyPhoneOtp decides afterwards.
+    if (intent) {
+      const existing = await this.findAuthUserByPhone(normalized);
+      if (intent === 'login' && !existing) {
+        throw new BadRequestException(
+          'No account found with this phone number. Please sign up first.',
+        );
+      }
+      if (intent === 'signup' && existing) {
+        throw new BadRequestException(
+          'An account already exists with this phone number. Please sign in instead.',
+        );
+      }
+    }
+
     // Existing-user phones receive the OTP too — verifyPhoneOtp signs
-    // them straight in (login mode). The response message is identical
-    // either way, so the endpoint still doesn't leak which numbers are
-    // registered.
+    // them straight in (login mode). Without an intent the response
+    // message is identical either way, so the endpoint doesn't leak which
+    // numbers are registered.
     //
     // There is deliberately NO test-phone bypass here any more. It used to
     // skip the provider and accept the fixed code 000000 for allowlisted

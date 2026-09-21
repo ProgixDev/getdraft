@@ -34,6 +34,10 @@ type Channel = 'sms' | 'whatsapp';
 interface PhoneInputScreenProps {
   /** Pre-fill if returning to this step. E.164 string like `+15551234567`. */
   initialPhone?: string;
+  /** Sign-in or sign-up. Sent with the code request so the server can stop
+   *  an unregistered number (or a registered one on sign-up) BEFORE the SMS
+   *  is sent -- every send costs a credit. */
+  intent?: 'login' | 'signup';
   /** Called once the OTP has been dispatched. */
   onCodeSent: (phone: string, channel: Channel) => void;
   onBack?: () => void;
@@ -66,6 +70,7 @@ function splitInitial(phone: string): { country: PhoneCountry; local: string } {
 
 export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
   initialPhone = '+1',
+  intent,
   onCodeSent,
   onBack,
 }) => {
@@ -96,7 +101,7 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
 
     setPending(channel);
     try {
-      await authService.requestPhoneOtp(normalized, channel);
+      await authService.requestPhoneOtp(normalized, channel, intent);
       onCodeSent(normalized, channel);
     } catch (err: any) {
       const message =

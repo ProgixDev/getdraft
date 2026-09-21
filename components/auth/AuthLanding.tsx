@@ -68,6 +68,12 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
   });
 
   const [state, setState] = useState<LandingState>('landing');
+  // Sign in vs create account. The landing used to offer one "Continue
+  // with Phone Number" that meant both, so an unregistered number was
+  // walked into creating an account -- and paid for an SMS first. The
+  // intent travels with the code request so the server can refuse before
+  // sending, and decides what the code screen does with the answer.
+  const [intent, setIntent] = useState<'login' | 'signup'>('login');
   const [phone, setPhone] = useState<string>('');
   const [channel, setChannel] = useState<'sms' | 'whatsapp'>('sms');
   const [phoneVerificationToken, setPhoneVerificationToken] = useState<string>('');
@@ -99,37 +105,27 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
     setState('phone-verify');
   }, []);
 
-  // The code checked out but nothing is registered under this number. Stop
-  // here and say so. "Continue with Phone Number" carries no sign-in /
-  // sign-up intent, so before this a returning user who mistyped their
-  // number -- or typed a number that was never theirs -- was silently walked
-  // into creating a second account. They choose: fix the number, or make an
-  // account with this one on purpose.
+  // The code checked out but nothing is registered under this number.
+  // On sign-up that is the expected case: continue to onboarding. On
+  // sign-in it is a hard stop -- the server already refuses to send a code
+  // to an unregistered number when the intent is login, so this only fires
+  // for a client that raced a deletion; either way the person came here to
+  // sign in, and the only correct answer is "that number has no account".
   const handlePhoneVerified = useCallback(
     (token: string) => {
+      if (intent === 'signup') {
+        setPhoneVerificationToken(token);
+        setState('phone-onboarding');
+        return;
+      }
       Alert.alert(
         'No account with this number',
-        `${phone} isn't registered on GetDraft yet.
-
-If you already have an account, go back and use the number you signed up with. Otherwise you can create a new account with this number.`,
-        [
-          {
-            text: 'Change number',
-            style: 'cancel',
-            onPress: () => setState('phone-input'),
-          },
-          {
-            text: 'Create account',
-            onPress: () => {
-              setPhoneVerificationToken(token);
-              setState('phone-onboarding');
-            },
-          },
-        ],
+        `${phone} isn't registered on GetDraft. Go back and use the number you signed up with, or create an account from the welcome screen.`,
+        [{ text: 'Change number', onPress: () => setState('phone-input') }],
         { cancelable: false },
       );
     },
-    [phone],
+    [intent, phone],
   );
 
   // Existing account verified by phone OTP — same shape as the OAuth
@@ -184,7 +180,13 @@ If you already have an account, go back and use the number you signed up with. O
 
   // Email path delegates entirely to existing AuthScreen.
   if (state === 'email') {
-    return <AuthScreen onLogin={onLogin} onBack={() => setState('landing')} />;
+    return (
+      <AuthScreen
+        onLogin={onLogin}
+        onBack={() => setState('landing')}
+        initialMode={intent}
+      />
+    );
   }
 
   // Phone-input → phone-verify → phone-onboarding (AuthScreen w/ phone token).
@@ -192,6 +194,7 @@ If you already have an account, go back and use the number you signed up with. O
     return (
       <PhoneInputScreen
         initialPhone={phone || '+1'}
+        intent={intent}
         onCodeSent={handleCodeSent}
         onBack={() => setState('landing')}
       />
@@ -239,8 +242,14 @@ If you already have an account, go back and use the number you signed up with. O
       >
         <Animated.View entering={FadeIn.duration(500)} style={styles.headerWrap}>
           <Image source={images.logoWhite} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.title}>Welcome to GetDraft</Text>
-          <Text style={styles.subtitle}>Pick how you want to continue.</Text>
+          <Text style={styles.title}>
+            {intent === 'login' ? 'Welcome back' : 'Create your account'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {intent === 'login'
+              ? 'Sign in to your GetDraft account.'
+              : 'Pick how you want to sign up.'}
+          </Text>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(600).delay(120)} style={styles.actions}>
@@ -250,7 +259,9 @@ If you already have an account, go back and use the number you signed up with. O
             onPress={() => setState('phone-input')}
           >
             <Ionicons name="call" size={20} color={brand.white} />
-            <Text style={styles.primaryButtonText}>Continue with Phone Number</Text>
+            <Text style={styles.primaryButtonText}>
+              {intent === 'login' ? 'Sign in with Phone Number' : 'Sign up with Phone Number'}
+            </Text>
           </Pressable>
 
           <View style={styles.dividerRow}>
@@ -309,6 +320,21 @@ If you already have an account, go back and use the number you signed up with. O
           >
             <Ionicons name="mail-outline" size={20} color={brand.white} />
             <Text style={styles.emailButtonText}>Email</Text>
+          </Pressable>
+        </Animated.View>
+
+        <Animated.View entering={FadeIn.duration(500).delay(300)} style={styles.switchRow}>
+          <Text style={styles.switchText}>
+            {intent === 'login' ? 'New to GetDraft?' : 'Already have an account?'}
+          </Text>
+          <Pressable
+            onPress={() => setIntent(intent === 'login' ? 'signup' : 'login')}
+            accessibilityRole="button"
+            hitSlop={8}
+          >
+            <Text style={styles.switchLink}>
+              {intent === 'login' ? 'Create an account' : 'Sign in'}
+            </Text>
           </Pressable>
         </Animated.View>
 
@@ -453,6 +479,24 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.85 },
   buttonDisabled: { opacity: 0.6 },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 22,
+  },
+  switchText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  switchLink: {
+    fontSize: 14,
+    fontFamily: 'Poppins_700Bold',
+    color: brand.white,
+    textDecorationLine: 'underline',
+  },
   legal: {
     marginTop: 28,
     textAlign: 'center',
