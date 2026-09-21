@@ -19,7 +19,8 @@ import {
 } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { setDiscoverMode } from "@/store/slices/discoverPreferencesSlice";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
@@ -136,7 +137,12 @@ function DiscoverCardImpl({
 }) {
   const reducedMotion = useReducedMotion();
   const sportAccent = getSportTheme(recruiter.sport).accent;
-  const roleLabel = recruiter.role === "agent" ? "Agent" : "Coach";
+  const roleLabel =
+    recruiter.role === "agent"
+      ? "Agent"
+      : recruiter.role === "parent"
+        ? "Parent"
+        : "Coach";
   const accessibilityLabel = `${recruiter.name}, ${roleLabel}, ${recruiter.sport}, ${recruiter.location}`;
 
   const {
@@ -223,7 +229,13 @@ function DiscoverCardImpl({
           ) : (
             <View style={styles.placeholderImage}>
               <Ionicons
-                name={recruiter.role === "agent" ? "briefcase" : "school"}
+                name={
+                  recruiter.role === "agent"
+                    ? "briefcase"
+                    : recruiter.role === "parent"
+                      ? "people"
+                      : "school"
+                }
                 size={72}
                 color={theme.textMuted}
               />
@@ -280,7 +292,7 @@ function DiscoverCardImpl({
             <View style={styles.overlayNameRow}>
               <Text style={styles.overlayName} numberOfLines={1}>
                 {recruiter.name},{" "}
-                {recruiter.role === "agent" ? "Agent" : "Coach"}
+                {roleLabel}
               </Text>
               {recruiter.verified && (
                 <Ionicons
@@ -446,6 +458,7 @@ export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
   const preferences = useSelector(
     (state: RootState) => state.discoverPreferences,
@@ -472,7 +485,7 @@ export default function DiscoverScreen() {
     name: string;
     matchId: string | null;
     avatar: string | null;
-    cardType?: "athlete" | "recruiter";
+    cardType?: "athlete" | "recruiter" | "parent";
   }>({
     visible: false,
     name: "",
@@ -562,6 +575,7 @@ export default function DiscoverScreen() {
     setFeedError(false);
     discoverService
       .getFeed({
+        mode: preferences.mode,
         sport: preferences.sport !== "all" ? preferences.sport : undefined,
         distanceKm: preferences.distanceKm ?? undefined,
         includeInternational: preferences.includeInternational,
@@ -620,6 +634,7 @@ export default function DiscoverScreen() {
     isFetchingMoreRef.current = true;
     discoverService
       .getFeed({
+        mode: preferences.mode,
         sport: preferences.sport !== "all" ? preferences.sport : undefined,
         distanceKm: preferences.distanceKm ?? undefined,
         includeInternational: preferences.includeInternational,
@@ -672,7 +687,23 @@ export default function DiscoverScreen() {
   // Parents redirect to /matches before render, so this screen only shows for
   // athletes / recruiters. Coaches/agents scout; players don't scout, they get
   // drafted — so the header reads differently per role (client request).
-  const discoverTitle = isRecruiter ? "Let's Start Scouting" : "Let's Get Drafted";
+  const isPeerMode = preferences.mode === "peer";
+  const discoverTitle = isPeerMode
+    ? "Your Community"
+    : isRecruiter
+      ? "Let's Start Scouting"
+      : "Let's Get Drafted";
+  // What the Community pool is called for this viewer, for copy.
+  const peerNoun =
+    user?.role === "athlete"
+      ? "athletes"
+      : user?.role === "coach"
+        ? "coaches"
+        : user?.role === "recruiter"
+          ? "agents"
+          : user?.role === "parent"
+            ? "parents"
+            : "people";
 
   // Real backend feed only — no static/mock fallback. Server already filters by
   // role/sport/country/etc.; here we just apply the local search query.
@@ -764,7 +795,9 @@ export default function DiscoverScreen() {
     const targetId = current?.id;
     if (targetId) {
       swipedIdsRef.current.add(targetId);
-      discoverService.swipe(targetId, "pass").catch(() => {});
+      discoverService
+        .swipe(targetId, "pass", false, preferences.mode)
+        .catch(() => {});
     }
     setLastSwipe({ index: cur, action: "pass", name });
     setSnackbar({
@@ -783,7 +816,7 @@ export default function DiscoverScreen() {
     // Short button-mash debounce — bridges the gap between the trigger effect
     // resetting pendingAction and the React commit advancing currentIndex.
     setTimeout(() => setSwipeLock(false), 80);
-  }, [discoverItems, focusedIndexSV, carouselTranslateX]);
+  }, [discoverItems, focusedIndexSV, carouselTranslateX, preferences.mode]);
 
   const handleSwipeRight = useCallback(() => {
     setSwipeLock(true);
@@ -804,6 +837,7 @@ export default function DiscoverScreen() {
     const cardType = (current as any)?.cardType as
       | "athlete"
       | "recruiter"
+      | "parent"
       | undefined;
     const rawAvatar =
       cardType === "athlete"
@@ -816,7 +850,7 @@ export default function DiscoverScreen() {
     if (targetId) {
       swipedIdsRef.current.add(targetId);
       draftPromise = discoverService
-        .swipe(targetId, "draft", isSuper)
+        .swipe(targetId, "draft", isSuper, preferences.mode)
         .then((res) => {
           setSwipesRemaining(res.swipesRemaining);
           if (typeof res.superDraftsRemaining === "number")
@@ -1243,6 +1277,55 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
+      {/* Recruiting | Community. Two separate pools, never one wider deck:
+          a coach scouting athletes must not find other coaches in the same
+          stack, and peer Drafts stay out of the rankings (migration 044).
+          Admins have no deck at all, so no toggle. */}
+      {!isAdmin && (
+        <View style={styles.modeRow}>
+          <View
+            style={styles.modeSwitch}
+            accessibilityRole="tablist"
+          >
+            {(
+              [
+                { id: "recruit", label: isRecruiter ? "Scouting" : "Recruiting", icon: "flag" },
+                { id: "peer", label: "Community", icon: "people" },
+              ] as const
+            ).map((opt) => {
+              const active = preferences.mode === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => {
+                    if (!active) dispatch(setDiscoverMode(opt.id));
+                  }}
+                  style={[styles.modeTab, active && styles.modeTabActive]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={
+                    opt.id === "peer"
+                      ? `Community: connect with other ${peerNoun}`
+                      : opt.label
+                  }
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={13}
+                    color={active ? brand.primary : "rgba(255,255,255,0.7)"}
+                  />
+                  <Text
+                    style={[styles.modeTabText, active && styles.modeTabTextActive]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       <View style={styles.searchRow}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color={theme.textMuted} />
@@ -1389,9 +1472,13 @@ export default function DiscoverScreen() {
                 size={64}
                 color={sportTheme.accent}
               />
-              <Text style={styles.emptyTitle}>You've seen everyone!</Text>
+              <Text style={styles.emptyTitle}>
+                {isPeerMode ? `No ${peerNoun} here yet` : "You've seen everyone!"}
+              </Text>
               <Text style={styles.emptySubtitle}>
-                Check back later for new people, or widen your search.
+                {isPeerMode
+                  ? `Community grows as more ${peerNoun} join. Check back soon, or widen your search.`
+                  : "Check back later for new people, or widen your search."}
               </Text>
               <Pressable
                 style={styles.emptyAdjustButton}
@@ -1598,6 +1685,7 @@ export default function DiscoverScreen() {
         otherName={matchOverlay.name}
         otherAvatar={matchOverlay.avatar}
         otherCardType={matchOverlay.cardType}
+        kind={preferences.mode}
         myName={user?.name}
         myRole={user?.role}
         onMessage={handleSendMessage}
@@ -1698,6 +1786,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     backgroundColor: "transparent",
+  },
+  modeRow: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+  modeSwitch: {
+    flexDirection: "row",
+    alignSelf: "flex-start",
+    padding: 3,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    gap: 2,
+  },
+  modeTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  modeTabActive: {
+    backgroundColor: brand.white,
+  },
+  modeTabText: {
+    fontSize: 12,
+    fontFamily: "Poppins_600SemiBold",
+    color: "rgba(255,255,255,0.8)",
+    letterSpacing: 0.2,
+  },
+  modeTabTextActive: {
+    color: brand.primary,
   },
   searchBar: {
     flex: 1,

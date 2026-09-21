@@ -1,6 +1,6 @@
 import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SwipeDirection } from '../../../common/types';
+import { DiscoverMode, SwipeDirection } from '../../../common/types';
 
 export class SwipeDto {
   @ApiProperty({ example: 'uuid-of-target-user' })
@@ -18,4 +18,17 @@ export class SwipeDto {
   @IsOptional()
   @IsBoolean()
   isSuper?: boolean;
+
+  /**
+   * Which pool this swipe came from. The server re-derives the allowed pairs
+   * from it: recruit permits athlete ↔ coach/agent only, peer permits the
+   * same role only. Sent explicitly rather than inferred from the two roles so
+   * a client that never learned about peer mode (absent = recruit) cannot
+   * create a same-role match by accident, and a parent in peer mode acts as
+   * themselves instead of on behalf of their athlete.
+   */
+  @ApiPropertyOptional({ enum: DiscoverMode, example: 'recruit' })
+  @IsOptional()
+  @IsEnum(DiscoverMode)
+  mode?: DiscoverMode;
 }

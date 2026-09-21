@@ -9,7 +9,8 @@ import { images, videos as videoAssets } from "@/config/assets";
 export interface RecruiterCard {
   id: string;
   name: string;
-  role: "agent" | "coach";
+  /** parent = a Community (peer-mode) card; parents reuse this card shape. */
+  role: "agent" | "coach" | "parent";
   organization: string;
   location: string;
   country: string;
@@ -567,7 +568,9 @@ export const mockAthletes: AthleteProfile[] = [
 export interface AthleteMatch {
   id: string;
   recruiterName: string;
-  recruiterRole: "agent" | "coach";
+  /** Historically agent|coach; with Community matches the other side can be
+   *  any role, so the server now sends their actual role label. */
+  recruiterRole: "agent" | "coach" | "athlete" | "parent" | "recruiter";
   organization: string;
   location: string;
   verified: boolean;
@@ -579,6 +582,10 @@ export interface AthleteMatch {
   lastMessageAt?: string;
   avatarUrl?: string | null;
   otherUserId?: string;
+  /** recruit = athlete ↔ coach/agent; peer = a Community connection.
+   *  Optional: mock rows and older backends don't send it (= recruit). */
+  kind?: "recruit" | "peer";
+  otherRole?: string | null;
 }
 
 export const mockAthleteMatches: Record<string, AthleteMatch[]> = {

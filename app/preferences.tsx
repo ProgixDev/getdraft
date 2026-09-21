@@ -202,6 +202,13 @@ export default function PreferencesScreen() {
   });
 
   const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
+  // Which role the deck is currently showing decides which filters make
+  // sense. In recruit mode that is the opposite role; in Community (peer)
+  // mode it is the viewer's own role, so an athlete filters athletes and a
+  // coach filters coaches. Parents in Community have no role-specific filters.
+  const peer = preferences.mode === "peer";
+  const targetsAthletes = peer ? user?.role === "athlete" : isRecruiter;
+  const targetsRecruiters = peer ? isRecruiter : !isRecruiter;
 
   const sportOptions = useMemo<PickerOption[]>(
     () => [
@@ -479,7 +486,7 @@ export default function PreferencesScreen() {
             onPress={() => setActiveModal("sport")}
           />
 
-          {isRecruiter ? (
+          {targetsAthletes ? (
             <>
               <SelectorRow
                 icon="body-outline"
@@ -504,14 +511,18 @@ export default function PreferencesScreen() {
                 onPress={() => setActiveModal("level")}
               />
             </>
-          ) : (
+          ) : targetsRecruiters ? (
             <>
-              <SelectorRow
-                icon="briefcase-outline"
-                label="Recruiter Type"
-                value={selectedRecruiterTypeLabel}
-                onPress={() => setActiveModal("recruiterType")}
-              />
+              {/* In Community a coach only ever sees coaches (and an agent
+                  only agents), so the type picker has nothing to choose. */}
+              {!peer && (
+                <SelectorRow
+                  icon="briefcase-outline"
+                  label="Recruiter Type"
+                  value={selectedRecruiterTypeLabel}
+                  onPress={() => setActiveModal("recruiterType")}
+                />
+              )}
               <View style={styles.switchRow}>
                 <View style={styles.switchCopy}>
                   <Text style={styles.switchTitle}>
@@ -531,7 +542,7 @@ export default function PreferencesScreen() {
                 />
               </View>
             </>
-          )}
+          ) : null}
         </View>
       </ScrollView>
 

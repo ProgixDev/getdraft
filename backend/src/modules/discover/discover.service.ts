@@ -16,10 +16,20 @@ import {
   CurrentUserPayload,
   UserRole,
   SwipeDirection,
+  DiscoverMode,
   PlanId,
   PLAN_SWIPE_LIMITS,
   SUPER_DRAFT_LIMITS,
 } from '../../common/types';
+
+/**
+ * Athlete ↔ athlete peer matching means minors can message minors, which is
+ * the one part of Community that store reviewers and the client may want off
+ * without waiting for a rebuild. Default ON, because the client asked for
+ * players explicitly; set PEER_ATHLETES_ENABLED=false on the server to turn
+ * only that pair off -- coaches, agents and parents keep their community.
+ */
+const PEER_ATHLETES_ENABLED = process.env.PEER_ATHLETES_ENABLED !== 'false';
 import { NotificationsService } from '../notifications/notifications.service';
 
 // ── Globe placement ────────────────────────────────────────────────
@@ -432,16 +442,25 @@ export class DiscoverService {
   async getFeed(user: CurrentUserPayload, query: DiscoverQueryDto) {
     const offset = ((query.page || 1) - 1) * (query.limit || 20);
     const limit = query.limit || 20;
+    const mode = query.mode ?? DiscoverMode.RECRUIT;
 
     // Parents browse on behalf of their linked athlete (guardian proxy): the
     // feed excludes what the ATHLETE already acted on and reflects the
     // athlete's Draft allowance. Non-parents act as themselves.
-    const actorId = await this.resolveActorId(user, false);
+    //
+    // Peer mode is the exception: a parent looking for other parents is
+    // acting as a parent, not as their child, so no proxy and their own
+    // allowance.
+    const actorId =
+      mode === DiscoverMode.PEER
+        ? user.id
+        : await this.resolveActorId(user, false);
     const swipesRemaining = await this.getSwipesRemaining(actorId);
     const superDraftsRemaining = await this.getSuperDraftsRemaining(actorId);
 
     // Role-targeted feed (client matrix): athletes — and parents on their
     // athlete's behalf — see coaches/agents; coaches and agents see athletes.
+    // In peer mode everyone sees their own role.
     return this.getEveryoneFeed(
       actorId,
       user.role,
@@ -450,6 +469,7 @@ export class DiscoverService {
       limit,
       swipesRemaining,
       superDraftsRemaining,
+      mode,
     );
   }
 
@@ -517,6 +537,80 @@ export class DiscoverService {
     };
   }
 
+  /**
+   * Community card for a parent. Parents have no profile table, so this is
+   * shaped like the recruiter card (name, avatar, one line of context) and
+   * the app renders it with the same component. The context line is the
+   * linked athlete's sport -- "Parent of a Soccer athlete" -- because that is
+   * what one parent wants to know about another before asking for advice.
+   */
+  private parentCardFromUser(u: any, athleteSport: string | null) {
+    const hideLocation = u.preferences?.showDistance === false;
+    return {
+      cardType: 'parent' as const,
+      id: u.id,
+      name: u.name,
+      role: 'parent' as const,
+      organization: athleteSport
+        ? `Parent of a ${athleteSport} athlete`
+        : 'Parent',
+      location: hideLocation ? null : u.location,
+      country: hideLocation ? null : u.country,
+      distanceKm: 0,
+      sport: athleteSport,
+      verified: u.kyc_status === 'approved',
+      tags: [] as string[],
+      bio: null as string | null,
+      photos: [] as string[],
+      videos: [] as string[],
+      imageUrl: u.avatar_url ?? null,
+    };
+  }
+
+  /**
+   * The WHERE branch for peer mode: the viewer's own role, with that role's
+   * own filters applied. Returns null when the role has no community --
+   * admins, or athletes while PEER_ATHLETES_ENABLED is off -- so the caller
+   * returns an empty page instead of falling through to the recruit matrix.
+   */
+  private peerBranch(
+    viewerRole: UserRole,
+    athleteProfileFilter: Record<string, unknown>,
+    recruiterProfileFilter: Record<string, unknown>,
+  ): Prisma.public_usersWhereInput | null {
+    switch (viewerRole) {
+      case UserRole.ATHLETE: {
+        if (!PEER_ATHLETES_ENABLED) return null;
+        // Same COPPA gate as the recruit feed: a minor is only discoverable
+        // once a guardian has approved them, and that holds for other minors
+        // too -- more so, if anything.
+        const branch: Prisma.public_usersWhereInput = {
+          role: 'athlete',
+          activation_status: 'active',
+        };
+        if (Object.keys(athleteProfileFilter).length) {
+          branch.athlete_profiles = { is: athleteProfileFilter };
+        }
+        return branch;
+      }
+      case UserRole.COACH:
+      case UserRole.RECRUITER: {
+        const branch: Prisma.public_usersWhereInput = { role: viewerRole };
+        // recruiterType is meaningless here (the pool IS one type); the
+        // remaining recruiter filters (sport, verified) still apply.
+        const { role_type: _ignored, ...rest } = recruiterProfileFilter as any;
+        if (Object.keys(rest).length) {
+          branch.recruiter_profiles = { is: rest };
+        }
+        return branch;
+      }
+      case UserRole.PARENT:
+        return { role: 'parent' };
+      default:
+        return null;
+    }
+  }
+
   private async getEveryoneFeed(
     userId: string,
     viewerRole: UserRole,
@@ -525,6 +619,7 @@ export class DiscoverService {
     limit: number,
     swipesRemaining: number,
     superDraftsRemaining: number,
+    mode: DiscoverMode = DiscoverMode.RECRUIT,
   ) {
     const excluded = await this.excludedUserIds(userId);
 
@@ -603,16 +698,38 @@ export class DiscoverService {
       recruiterBranch.recruiter_profiles = { is: recruiterProfileFilter };
     }
 
-    // Role matrix (client): athletes — and parents acting for their athlete —
-    // see coaches/agents; coaches and agents see athletes only. Anything else
-    // (e.g. admin tooling) falls back to the full set.
-    const seesRecruiters =
-      viewerRole === UserRole.ATHLETE || viewerRole === UserRole.PARENT;
-    const seesAthletes =
-      viewerRole === UserRole.COACH || viewerRole === UserRole.RECRUITER;
-    if (seesRecruiters && !seesAthletes) where.OR = [recruiterBranch];
-    else if (seesAthletes && !seesRecruiters) where.OR = [athleteBranch];
-    else where.OR = [athleteBranch, recruiterBranch];
+    if (mode === DiscoverMode.PEER) {
+      // Community: exactly your own role, nobody else. Coaches and agents are
+      // kept apart on purpose -- the client asked for "coaches among each
+      // other, agents among each other", and the two have different concerns.
+      const peerBranch = this.peerBranch(
+        viewerRole,
+        athleteProfileFilter,
+        recruiterProfileFilter,
+      );
+      if (!peerBranch) {
+        // Role has no community (admin), or athlete↔athlete is switched off.
+        return {
+          cards: [],
+          hasMore: false,
+          swipesRemaining,
+          superDraftsRemaining,
+          nextCursor: null,
+        };
+      }
+      where.OR = [peerBranch];
+    } else {
+      // Role matrix (client): athletes — and parents acting for their
+      // athlete — see coaches/agents; coaches and agents see athletes only.
+      // Anything else (e.g. admin tooling) falls back to the full set.
+      const seesRecruiters =
+        viewerRole === UserRole.ATHLETE || viewerRole === UserRole.PARENT;
+      const seesAthletes =
+        viewerRole === UserRole.COACH || viewerRole === UserRole.RECRUITER;
+      if (seesRecruiters && !seesAthletes) where.OR = [recruiterBranch];
+      else if (seesAthletes && !seesRecruiters) where.OR = [athleteBranch];
+      else where.OR = [athleteBranch, recruiterBranch];
+    }
 
     const users = await this.prisma.public_users.findMany({
       where,
@@ -668,6 +785,33 @@ export class DiscoverService {
       take: limit,
     });
 
+    // Parents have no profile table of their own. Their card says what a
+    // fellow parent actually wants to know -- which sport their kid plays --
+    // so look up the approved guardian link's athlete for the parents on this
+    // page. One query for the page, not one per card.
+    const parentSport = new Map<string, string | null>();
+    const parentIds = users.filter((u) => u.role === 'parent').map((u) => u.id);
+    if (parentIds.length) {
+      const links = await this.prisma.guardian_links.findMany({
+        where: { guardian_user_id: { in: parentIds }, status: 'approved' },
+        select: {
+          guardian_user_id: true,
+          users_guardian_links_athlete_user_idTousers: {
+            select: { athlete_profiles: { select: { sport: true } } },
+          },
+        },
+      });
+      for (const l of links as any[]) {
+        if (!parentSport.has(l.guardian_user_id)) {
+          parentSport.set(
+            l.guardian_user_id,
+            l.users_guardian_links_athlete_user_idTousers?.athlete_profiles
+              ?.sport ?? null,
+          );
+        }
+      }
+    }
+
     const cards = users
       // Settings → Privacy → "Profile Visible": explicit false means the
       // user opted out of discovery. Filtered here (not in SQL) because a
@@ -680,6 +824,9 @@ export class DiscoverService {
         }
         if ((u.role === 'coach' || u.role === 'recruiter') && u.recruiter_profiles) {
           return this.recruiterCardFromUser(u);
+        }
+        if (u.role === 'parent') {
+          return this.parentCardFromUser(u, parentSport.get(u.id) ?? null);
         }
         return null;
       })
@@ -715,20 +862,31 @@ export class DiscoverService {
     }
 
     const excluded = await this.excludedUserIds(user.id);
+    const mode = query.mode ?? DiscoverMode.RECRUIT;
 
     // The map mirrors the Discover feed's role matrix: an athlete sees
     // coaches/agents, a coach/agent sees athletes. Without this the map showed
     // athletes to EVERYONE, so an athlete tapping a pin hit the swipe() role
     // guard and got a 403 on a profile they were never allowed to draft.
+    // Peer mode mirrors the same way: your own role, same gates as the feed.
     const targetsRecruiters = user.role === UserRole.ATHLETE;
+
+    let roleWhere: Prisma.public_usersWhereInput;
+    if (mode === DiscoverMode.PEER) {
+      const branch = this.peerBranch(user.role, {}, {});
+      if (!branch) return [];
+      roleWhere = branch;
+    } else if (targetsRecruiters) {
+      roleWhere = { role: { in: ['coach', 'recruiter'] } };
+    } else {
+      // Same COPPA gate as the feed — unapproved minors stay off the map.
+      roleWhere = { role: 'athlete', activation_status: 'active' };
+    }
 
     const where: Prisma.public_usersWhereInput = {
       is_banned: false,
       id: { notIn: [...excluded, user.id] },
-      ...(targetsRecruiters
-        ? { role: { in: ['coach', 'recruiter'] } }
-        : // Same COPPA gate as the feed — unapproved minors stay off the map.
-          { role: 'athlete', activation_status: 'active' }),
+      ...roleWhere,
     };
     if (query.country && !query.includeInternational) where.country = query.country;
     // Same free-text city match the feed uses (see getEveryoneFeed).
@@ -878,12 +1036,36 @@ export class DiscoverService {
   }
 
   /**
-   * The client's role-matching matrix, in one place. Athletes match with
-   * coaches/agents; coaches and agents match with athletes only. (Parent
-   * matching is handled on its own path and is intentionally not covered
-   * here yet.) Symmetric: canMatch(a,b) === canMatch(b,a).
+   * The client's role-matching matrix, in one place. Symmetric:
+   * canMatch(a,b,m) === canMatch(b,a,m).
+   *
+   *   recruit  athletes ↔ coaches/agents, nothing else
+   *   peer     the same role only -- athlete↔athlete (unless switched off),
+   *            coach↔coach, agent↔agent, parent↔parent
+   *
+   * The two are checked per mode rather than OR'ed together: a swipe sent
+   * from the recruit deck must never create a peer match and vice versa, so a
+   * hand-crafted request cannot smuggle a same-role pair through a client
+   * that predates peer mode (those send no mode, which means recruit).
    */
-  private canMatch(roleA: UserRole, roleB: UserRole): boolean {
+  private canMatch(
+    roleA: UserRole,
+    roleB: UserRole,
+    mode: DiscoverMode = DiscoverMode.RECRUIT,
+  ): boolean {
+    if (mode === DiscoverMode.PEER) {
+      if (roleA !== roleB) return false;
+      switch (roleA) {
+        case UserRole.ATHLETE:
+          return PEER_ATHLETES_ENABLED;
+        case UserRole.COACH:
+        case UserRole.RECRUITER:
+        case UserRole.PARENT:
+          return true;
+        default:
+          return false;
+      }
+    }
     const isRecruiter = (r: UserRole) =>
       r === UserRole.COACH || r === UserRole.RECRUITER;
     return (
@@ -921,11 +1103,16 @@ export class DiscoverService {
   }
 
   async swipe(user: CurrentUserPayload, dto: SwipeDto) {
+    const mode = dto.mode ?? DiscoverMode.RECRUIT;
+
     // Parents draft on behalf of their linked minor: everything below runs as
     // that athlete (`actor`), so a parent's Draft on a coach produces a real
     // athlete↔coach match. Non-parents act as themselves.
+    //
+    // In peer mode a parent connecting with another parent IS the actor: no
+    // proxy, their own allowance, and the match is between the two parents.
     const actor: CurrentUserPayload =
-      user.role === UserRole.PARENT
+      user.role === UserRole.PARENT && mode !== DiscoverMode.PEER
         ? {
             ...user,
             id: await this.resolveActorId(user, true),
@@ -963,8 +1150,9 @@ export class DiscoverService {
 
     // Role-pair guard (client matrix). Belt-and-braces on top of the feed
     // filter: a deep-linked / hand-crafted targetUserId must not be able to
-    // create an illegal match (athlete↔athlete, coach↔agent, etc.).
-    if (!this.canMatch(actor.role, target.role as UserRole)) {
+    // create an illegal match (coach↔agent, athlete↔athlete from the recruit
+    // deck, cross-role from the peer deck, etc.).
+    if (!this.canMatch(actor.role, target.role as UserRole, mode)) {
       throw new ForbiddenException('You cannot match with this user');
     }
 
@@ -1052,10 +1240,15 @@ export class DiscoverService {
     let matchId: string | null = null;
 
     if (dto.direction === SwipeDirection.DRAFT) {
-      await this.prisma.$executeRawUnsafe(
-        'select public.increment_likes_received($1::uuid)',
-        dto.targetUserId,
-      );
+      // likes_received is shown on the athlete's profile as a talent signal.
+      // A peer Draft is a friend request, not a scout's interest -- keep it
+      // out, the same way migration 044 keeps peer activity out of the score.
+      if (mode !== DiscoverMode.PEER) {
+        await this.prisma.$executeRawUnsafe(
+          'select public.increment_likes_received($1::uuid)',
+          dto.targetUserId,
+        );
+      }
 
       const mutualSwipe = await this.prisma.swipes.findFirst({
         where: {
@@ -1074,7 +1267,9 @@ export class DiscoverService {
 
         try {
           const match = await this.prisma.matches.create({
-            data: { user_1_id: user1, user_2_id: user2 },
+            // kind travels with the match so the Draft Board can label a
+            // community connection and the ranking view can ignore it.
+            data: { user_1_id: user1, user_2_id: user2, kind: mode },
             select: { id: true },
           });
           matched = true;

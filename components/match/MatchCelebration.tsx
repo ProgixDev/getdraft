@@ -50,8 +50,13 @@ export interface MatchCelebrationProps {
   /** The user we matched with. */
   otherName: string;
   otherAvatar?: string | null;
-  /** Whether the matched profile is an athlete or a recruiter (coach/agent). */
-  otherCardType?: "athlete" | "recruiter";
+  /** Whether the matched profile is an athlete, a recruiter (coach/agent)
+   *  or -- in Community -- a parent. */
+  otherCardType?: "athlete" | "recruiter" | "parent";
+  /** recruit = athlete ↔ coach/agent; peer = a Community connection between
+   *  two people of the same role. Changes the copy: a peer match is two
+   *  equals who can now talk, not a scout and a prospect. */
+  kind?: "recruit" | "peer";
   /** The current user, for the left-hand avatar + role-aware copy. */
   myName?: string;
   myAvatar?: string | null;
@@ -80,10 +85,34 @@ type UnlockRow = { icon: keyof typeof Ionicons.glyphMap; title: string; sub: str
 // Role-aware "what this match unlocks". Chat + full-profile are universal; the
 // third line reflects who the two parties are.
 function unlockRows(
-  otherCardType: "athlete" | "recruiter" | undefined,
+  otherCardType: "athlete" | "recruiter" | "parent" | undefined,
   myRole: UserRole | undefined,
   other: string,
+  kind: "recruit" | "peer" = "recruit",
 ): UnlockRow[] {
+  // Community: two people of the same role, both in the chat, no proxy.
+  // Deliberately checked before the parent branch below -- a parent who
+  // connected with another parent IS in that thread.
+  if (kind === "peer") {
+    return [
+      {
+        icon: "chatbubble-ellipses",
+        title: "Message each other",
+        sub: "Swap advice, tips and experience",
+      },
+      {
+        icon: "person-circle",
+        title: "See each other's full profile",
+        sub: "Who they are and where they're at",
+      },
+      {
+        icon: "people",
+        title: "You're connected",
+        sub: `${other} is now part of your community`,
+      },
+    ];
+  }
+
   // Guardian proxy: a parent Drafts on behalf of their athlete, so the match is
   // athlete<->recruiter and the parent is NOT in that chat thread. Promising
   // "message each other" (or calling them a player) would be wrong on both
@@ -234,6 +263,7 @@ function Avatar({ uri, name }: { uri?: string | null; name?: string }) {
 const HANDSHAKE_IMG = require("../../assets/images/handshake.png");
 
 export function MatchCelebration({
+  kind = "recruit",
   visible,
   matchId,
   otherName,
@@ -400,8 +430,8 @@ export function MatchCelebration({
   }));
 
   const rows = useMemo(
-    () => unlockRows(otherCardType, myRole, firstName(otherName)),
-    [otherCardType, myRole, otherName],
+    () => unlockRows(otherCardType, myRole, firstName(otherName), kind),
+    [otherCardType, myRole, otherName, kind],
   );
 
   // Was 34% (up to 360pt), which alone pushed the CTA off a tall phone.

@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import {
   UserRole,
   SwipeDirection,
+  DiscoverMode,
   CurrentUserPayload,
 } from '../../common/types';
 
@@ -127,6 +128,22 @@ describe('DiscoverService', () => {
       const result = await service.getFeed(parentUser, {});
       expect(result.cards).toHaveLength(1);
       expect(result.cards[0].name).toBe('Coach Mike');
+    });
+
+    it('peer mode: a coach gets a coach-only pool, and a parent browses as themselves', async () => {
+      await service.getFeed(
+        { id: 'coach-1', email: 'c@test.com', role: UserRole.COACH },
+        { mode: DiscoverMode.PEER } as any,
+      );
+      const where = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+      expect(where.OR).toEqual([{ role: 'coach' }]);
+
+      prisma.public_users.findMany.mockClear();
+      prisma.guardian_links.findFirst.mockClear();
+      await service.getFeed(parentUser, { mode: DiscoverMode.PEER } as any);
+      const where2 = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+      expect(where2.OR).toEqual([{ role: 'parent' }]);
+      expect(prisma.guardian_links.findFirst).not.toHaveBeenCalled();
     });
 
     it('returns the feed with the monthly Draft allowance remaining', async () => {
@@ -268,6 +285,96 @@ describe('DiscoverService', () => {
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    // ---- Community (peer mode), migration 044 ---------------------------
+
+    it('peer mode: an athlete can draft another athlete, and the match is kind=peer', async () => {
+      prisma.public_users.findUnique.mockResolvedValueOnce({
+        is_banned: false,
+        role: 'athlete',
+      });
+      prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+      const result = await service.swipe(athleteUser, {
+        targetUserId: 'ath-2',
+        direction: SwipeDirection.DRAFT,
+        mode: DiscoverMode.PEER,
+      });
+      expect(result.matched).toBe(true);
+      expect(prisma.matches.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ kind: 'peer' }),
+        }),
+      );
+      // A peer Draft is a friend request, not a scout's interest: it must not
+      // bump the athlete's likes_received talent counter.
+      expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+        'select public.increment_likes_received($1::uuid)',
+        'ath-2',
+      );
+    });
+
+    it('peer mode: rejects a cross-role pair (athlete cannot peer-draft a coach)', async () => {
+      // default findUnique target is a coach
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.DRAFT,
+          mode: DiscoverMode.PEER,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('recruit mode (or no mode) still rejects a same-role pair', async () => {
+      prisma.public_users.findUnique.mockResolvedValue({
+        is_banned: false,
+        role: 'recruiter',
+      });
+      await expect(
+        service.swipe(recruiterUser, {
+          targetUserId: 'rec-2',
+          direction: SwipeDirection.DRAFT,
+          mode: DiscoverMode.RECRUIT,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.swipe(recruiterUser, {
+          targetUserId: 'rec-2',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('peer mode: a parent acts as themselves, not as their athlete', async () => {
+      prisma.public_users.findUnique.mockResolvedValueOnce({
+        is_banned: false,
+        role: 'parent',
+      });
+      await service.swipe(parentUser, {
+        targetUserId: 'parent-2',
+        direction: SwipeDirection.DRAFT,
+        mode: DiscoverMode.PEER,
+      });
+      expect(prisma.swipes.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ swiper_id: 'parent-1' }),
+        }),
+      );
+      // No guardian-link lookup: the proxy is a recruit-mode concept.
+      expect(prisma.guardian_links.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('recruit mode: a normal Draft still counts toward likes_received', async () => {
+      await service.swipe(athleteUser, {
+        targetUserId: 'rec-1',
+        direction: SwipeDirection.DRAFT,
+      });
+      expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        'select public.increment_likes_received($1::uuid)',
+        'rec-1',
+      );
     });
 
     it('throws ConflictException on duplicate swipe', async () => {

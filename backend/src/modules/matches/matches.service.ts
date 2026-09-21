@@ -37,8 +37,12 @@ export class MatchesService {
           .single();
         if (otherUser?.is_banned === true) return null;
 
-        // Get recruiter profile if applicable
-        let recruiterRole = 'agent';
+        // Get recruiter profile if applicable. `recruiterRole` predates peer
+        // matching and is really "the other person's role label": with
+        // community matches the other side can be an athlete or a parent,
+        // so fall back to their actual role rather than mislabelling every
+        // non-recruiter as an agent.
+        let recruiterRole: string = otherUser?.role ?? 'agent';
         let organization = '';
         let verified = false;
         if (otherUser?.role === 'recruiter' || otherUser?.role === 'coach') {
@@ -87,6 +91,10 @@ export class MatchesService {
           lastMessageAt: lastMsg?.created_at || match.matched_at,
           avatarUrl: otherUser?.avatar_url || null,
           otherUserId,
+          // recruit | peer -- lets the Draft Board label community
+          // connections apart from recruiting matches (migration 044).
+          kind: (match.kind as 'recruit' | 'peer' | undefined) ?? 'recruit',
+          otherRole: otherUser?.role ?? null,
         };
       }),
     );

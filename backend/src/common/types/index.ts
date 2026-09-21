@@ -11,6 +11,21 @@ export enum SwipeDirection {
   PASS = 'pass',
 }
 
+/**
+ * Which pool Discover shows and which pairs a swipe may create.
+ *
+ * RECRUIT is the original product: athletes ↔ coaches/agents. PEER is the
+ * community layer the client asked for -- the same role matching itself
+ * (athlete↔athlete, coach↔coach, agent↔agent, parent↔parent) so people can
+ * swap advice. Kept as separate pools rather than one wider deck: a coach
+ * scouting athletes must never have other coaches mixed into the same stack,
+ * and peer activity must stay out of the Draft Score (migration 044).
+ */
+export enum DiscoverMode {
+  RECRUIT = 'recruit',
+  PEER = 'peer',
+}
+
 export enum PlanId {
   BASIC = 'basic',
   STARTER = 'starter',

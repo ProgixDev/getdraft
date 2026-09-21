@@ -840,13 +840,29 @@ export default function MatchesScreen() {
                       <Text style={styles.sentAt}>{formatTimeAgo(match.matchedAt)}</Text>
                     </View>
 
+                    {/* Community connections are labelled so a coach can
+                        tell "another coach to swap notes with" from "an
+                        athlete I am recruiting" at a glance. */}
+                    {match.kind === "peer" ? (
+                      <View style={styles.peerBadge}>
+                        <Ionicons name="people" size={11} color={brand.primary} />
+                        <Text style={styles.peerBadgeText}>Community</Text>
+                      </View>
+                    ) : null}
+
                     {/* Role row only when the other party actually has a
                         recruiter profile — otherwise it would display a
                         misleading default "Agent · " for athlete matches. */}
                     {match.organization ? (
                       <Text style={styles.matchRoleRow}>
-                        {match.recruiterRole === "agent" ? "Agent" : "Coach"} ·{" "}
-                        {match.organization}
+                        {match.recruiterRole === "agent"
+                          ? "Agent"
+                          : match.recruiterRole === "parent"
+                            ? "Parent"
+                            : match.recruiterRole === "athlete"
+                              ? "Athlete"
+                              : "Coach"}{" "}
+                        · {match.organization}
                       </Text>
                     ) : null}
 
@@ -1944,6 +1960,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Poppins_500Medium",
     color: theme.textSecondary,
+  },
+  peerBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: "rgba(13,44,77,0.10)",
+    marginBottom: 4,
+  },
+  peerBadgeText: {
+    fontSize: 11,
+    fontFamily: "Poppins_600SemiBold",
+    color: brand.primary,
+    letterSpacing: 0.2,
   },
   matchLocationRow: {
     flexDirection: "row",

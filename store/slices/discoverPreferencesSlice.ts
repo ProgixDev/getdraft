@@ -1,6 +1,17 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+/**
+ * Which pool Discover (and the Globe) shows.
+ *   recruit  athletes ↔ coaches/agents -- the original product
+ *   peer     your own role -- the Community layer, for advice and tips
+ * Lives in preferences rather than screen state so the feed effect, the
+ * carousel reset and the Globe all follow it without extra wiring, and so it
+ * resets to recruit on every launch (preferences are not persisted).
+ */
+export type DiscoverMode = "recruit" | "peer";
+
 export interface DiscoverPreferences {
+  mode: DiscoverMode;
   distanceKm: number | null;
   includeInternational: boolean;
   country: string;
@@ -15,6 +26,7 @@ export interface DiscoverPreferences {
 }
 
 export const defaultDiscoverPreferences: DiscoverPreferences = {
+  mode: "recruit",
   distanceKm: 160,
   // Default: show EVERYONE (no country filter). Filtering is opt-in — the user
   // turns "Include international" off and/or picks a country in Preferences.
@@ -42,10 +54,16 @@ const discoverPreferencesSlice = createSlice({
     resetDiscoverPreferences: () => ({
       ...defaultDiscoverPreferences,
     }),
+    setDiscoverMode: (state, action: PayloadAction<DiscoverMode>) => {
+      state.mode = action.payload;
+    },
   },
 });
 
-export const { setDiscoverPreferences, resetDiscoverPreferences } =
-  discoverPreferencesSlice.actions;
+export const {
+  setDiscoverPreferences,
+  resetDiscoverPreferences,
+  setDiscoverMode,
+} = discoverPreferencesSlice.actions;
 
 export default discoverPreferencesSlice.reducer;

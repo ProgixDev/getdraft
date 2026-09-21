@@ -3,10 +3,12 @@ import {
   IsString,
   IsBoolean,
   IsNumber,
+  IsEnum,
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { DiscoverMode } from '../../../common/types';
 
 // Query params arrive as strings. `@Type(() => Boolean)` is WRONG for them:
 // Boolean('false') === true, so "?includeInternational=false" became true and
@@ -15,6 +17,16 @@ const toBool = ({ value }: { value: unknown }) =>
   value === true || value === 'true';
 
 export class DiscoverQueryDto {
+  /**
+   * recruit (default) = the original matrix, athletes ↔ coaches/agents.
+   * peer = community: your own role. Optional so every client built before
+   * this existed keeps getting exactly the feed it always got.
+   */
+  @ApiPropertyOptional({ enum: DiscoverMode, example: 'recruit' })
+  @IsOptional()
+  @IsEnum(DiscoverMode)
+  mode?: DiscoverMode;
+
   @ApiPropertyOptional({ example: 160 })
   @IsOptional()
   @Type(() => Number)

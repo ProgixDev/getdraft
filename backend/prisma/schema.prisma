@@ -548,6 +548,8 @@ model matches {
   user_2_id                      String       @db.Uuid
   matched_at                     DateTime?    @default(now()) @db.Timestamptz(6)
   is_active                      Boolean?     @default(true)
+  /// recruit = athlete ↔ coach/agent; peer = same role (community). Migration 044.
+  kind                           String       @default("recruit")
   users_matches_user_1_idTousers public_users @relation("matches_user_1_idTousers", fields: [user_1_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users_matches_user_2_idTousers public_users @relation("matches_user_2_idTousers", fields: [user_2_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   messages                       messages[]

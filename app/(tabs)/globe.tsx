@@ -36,7 +36,10 @@ import {
 } from "@expo-google-fonts/poppins";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import { theme, semantic } from "@/config/colors";
+import { theme, semantic, brand } from "@/config/colors";
+import { useDispatch, useSelector } from "react-redux";
+import type { RootState } from "@/store";
+import { setDiscoverMode } from "@/store/slices/discoverPreferencesSlice";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
@@ -424,6 +427,17 @@ export default function GlobeTab() {
   const [CONTINENTS, setContinents] =
     useState<ContinentRow[]>(DEFAULT_CONTINENTS);
   const [points, setPoints] = useState<MapPoint[]>([]);
+  // The map follows Discover's Recruiting | Community switch, from the same
+  // slice, so a coach who flipped to Community on the deck sees coaches here
+  // too instead of a silently different pool.
+  const dispatch = useDispatch();
+  const mode = useSelector(
+    (state: RootState) => state.discoverPreferences.mode,
+  );
+  const viewerRole = useSelector(
+    (state: RootState) => state.auth.user?.role,
+  );
+  const isPeerMode = mode === "peer";
   // Mini card sits over the globe on point tap; tapping the mini opens
   // the big-card modal with Draft / Pass.
   const [selected, setSelected] = useState<MapPoint | null>(null);
@@ -571,16 +585,17 @@ export default function GlobeTab() {
     useCallback(() => {
       let cancelled = false;
       discoverService
-        .getMapPoints(
-          filter ? { country: filter.country, region: filter.region } : undefined,
-        )
+        .getMapPoints({
+          ...(filter ? { country: filter.country, region: filter.region } : {}),
+          mode,
+        })
         .then((rows) => {
           if (!cancelled) setPoints(rows);
         });
       return () => {
         cancelled = true;
       };
-    }, [filter]),
+    }, [filter, mode]),
   );
 
   // Lazy load: only render WebView when tab is focused
@@ -750,8 +765,59 @@ export default function GlobeTab() {
 
       {/* Header */}
       <View style={[styles.header, { top: insets.top + 12 }]}>
-        <Text style={styles.headerTitle}>Global Network</Text>
-        <Text style={styles.headerSubtitle}>Talent distribution worldwide</Text>
+        <Text style={styles.headerTitle}>
+          {isPeerMode ? "Community Map" : "Global Network"}
+        </Text>
+        <Text style={styles.headerSubtitle}>
+          {isPeerMode
+            ? `Other ${
+                viewerRole === "athlete"
+                  ? "athletes"
+                  : viewerRole === "coach"
+                    ? "coaches"
+                    : viewerRole === "recruiter"
+                      ? "agents"
+                      : "people"
+              } around the world`
+            : "Talent distribution worldwide"}
+        </Text>
+        {/* Same switch as Discover, same slice, so the two never disagree. */}
+        <View style={styles.modeSwitch} accessibilityRole="tablist">
+          {(
+            [
+              { id: "recruit", label: "Talent", icon: "flag" },
+              { id: "peer", label: "Community", icon: "people" },
+            ] as const
+          ).map((opt) => {
+            const active = mode === opt.id;
+            return (
+              <Pressable
+                key={opt.id}
+                onPress={() => {
+                  if (!active) {
+                    setSelected(null);
+                    dispatch(setDiscoverMode(opt.id));
+                  }
+                }}
+                style={[styles.modeTab, active && styles.modeTabActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={opt.label}
+              >
+                <Ionicons
+                  name={opt.icon}
+                  size={12}
+                  color={active ? brand.primary : "rgba(255,255,255,0.7)"}
+                />
+                <Text
+                  style={[styles.modeTabText, active && styles.modeTabTextActive]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       {/* Filters & Hotspots — visible pill button opening the bottom sheet.
@@ -1244,6 +1310,37 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 24,
     right: 24,
+  },
+  modeSwitch: {
+    flexDirection: "row",
+    alignSelf: "flex-start",
+    marginTop: 10,
+    padding: 3,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    gap: 2,
+  },
+  modeTab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  modeTabActive: {
+    backgroundColor: "#FFFFFF",
+  },
+  modeTabText: {
+    fontSize: 11,
+    fontFamily: "Poppins_600SemiBold",
+    color: "rgba(255,255,255,0.8)",
+    letterSpacing: 0.2,
+  },
+  modeTabTextActive: {
+    color: brand.primary,
   },
   headerTitle: {
     fontSize: 28,

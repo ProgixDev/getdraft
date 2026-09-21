@@ -1,6 +1,11 @@
 import api from "./api";
 
+/** recruit = athletes ↔ coaches/agents; peer = your own role (Community). */
+export type DiscoverMode = "recruit" | "peer";
+
 export interface DiscoverQuery {
+  /** Omitted = recruit, which is what every build before Community sent. */
+  mode?: DiscoverMode;
   distanceKm?: number;
   includeInternational?: boolean;
   country?: string;
@@ -81,6 +86,7 @@ export const discoverService = {
     targetUserId: string,
     direction: "draft" | "pass",
     isSuper = false,
+    mode: DiscoverMode = "recruit",
   ): Promise<SwipeResponse> {
     const { data } = await api.post("/discover/swipe", {
       targetUserId,
@@ -88,6 +94,10 @@ export const discoverService = {
       // Only send the flag for a Super Draft so a normal swipe payload is
       // unchanged. A Super Draft is always a draft under the hood.
       ...(isSuper ? { isSuper: true } : {}),
+      // Same idea for mode: only a Community swipe says so. The server
+      // treats an absent mode as recruit and re-checks the role pair per
+      // mode, so a card can never be drafted into the wrong kind of match.
+      ...(mode === "peer" ? { mode } : {}),
     });
     return data.data;
   },
@@ -119,11 +129,13 @@ export const discoverService = {
   async getMapPoints(query?: {
     country?: string;
     region?: string;
+    mode?: DiscoverMode;
   }): Promise<MapPoint[]> {
     try {
       const params: Record<string, string> = {};
       if (query?.country) params.country = query.country;
       if (query?.region) params.region = query.region;
+      if (query?.mode === "peer") params.mode = "peer";
       // The backend gates `country` behind !includeInternational, so a filter
       // picked here has to turn that off or it is silently ignored.
       if (query?.country || query?.region) params.includeInternational = "false";
