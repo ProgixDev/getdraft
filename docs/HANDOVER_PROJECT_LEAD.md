@@ -203,11 +203,9 @@ Roughly in the order they block something.
    `ANDROID_PACKAGE_NAME` on Railway. Android purchase validation fails
    *closed* without it: the server refuses to grant rather than trust a
    claim from a device.
-6. **`support@getdraft.net` is dead** — it bounces `550 5.1.1`. It is
-   published on both store listings, the privacy policy, the terms and the
-   account-deletion page, so every support email currently vanishes. Patrick
-   has to add the alias in Google Workspace; the walkthrough is
-   `docs/CLIENT_GUIDE_SUPPORT_EMAIL.pdf`.
+6. ~~`support@getdraft.net` is dead~~ **Resolved 2026-09-22**: the mail
+   server accepts it (250) and test mail is delivered. It is configured as a
+   catch-all — any address @getdraft.net lands in the same mailbox.
 7. **Rotate the Supabase keys** (§1).
 8. **Stripe and Didit webhooks still point at the old Railway hostname**,
    `getdraft-api-production.up.railway.app`. It still resolves, so nothing is
