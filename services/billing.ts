@@ -33,6 +33,7 @@ import api from "./api";
 export const STORE_PRODUCTS = {
   starter: "starter_monthly",
   pro: "pro_monthly",
+  elite: "elite_monthly",
   drafts10: "drafts_10",
   drafts50: "drafts_50",
   drafts100: "drafts_100",
@@ -41,7 +42,22 @@ export const STORE_PRODUCTS = {
 export const SUBSCRIPTION_IDS = [
   STORE_PRODUCTS.starter,
   STORE_PRODUCTS.pro,
+  STORE_PRODUCTS.elite,
 ];
+
+/** Store product for a plan id; undefined for the free tier. */
+export function storeProductForPlan(planId: string): string | undefined {
+  switch (planId) {
+    case "starter":
+      return STORE_PRODUCTS.starter;
+    case "pro":
+      return STORE_PRODUCTS.pro;
+    case "elite":
+      return STORE_PRODUCTS.elite;
+    default:
+      return undefined;
+  }
+}
 export const CONSUMABLE_IDS = [
   STORE_PRODUCTS.drafts10,
   STORE_PRODUCTS.drafts50,

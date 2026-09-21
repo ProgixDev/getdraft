@@ -41,6 +41,7 @@ export class SubscriptionsService {
     this.priceMap = {
       [PlanId.STARTER]: this.configService.get('STRIPE_PRICE_STARTER') || '',
       [PlanId.PRO]: this.configService.get('STRIPE_PRICE_PRO') || '',
+      [PlanId.ELITE]: this.configService.get('STRIPE_PRICE_ELITE') || '',
     };
   }
 

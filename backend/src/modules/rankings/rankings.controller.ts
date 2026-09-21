@@ -16,6 +16,7 @@ export class RankingsController {
   @Get()
   @ApiOperation({ summary: 'Athlete leaderboard by division (CA/US) and sport' })
   getRankings(
+    @CurrentUser('id') viewerId: string,
     @Query('division') division?: RankingDivision,
     @Query('sport') sport?: string,
     @Query('limit') limit?: string,
@@ -24,6 +25,7 @@ export class RankingsController {
       division,
       sport,
       limit: limit ? Number(limit) : undefined,
+      viewerId,
     });
   }
 

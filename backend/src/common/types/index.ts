@@ -26,12 +26,38 @@ export enum DiscoverMode {
   PEER = 'peer',
 }
 
+/**
+ * The four tiers the client priced on 2026-09-11:
+ *   basic   Free
+ *   starter USD 3.99 / month
+ *   pro     USD 7.99 / month
+ *   elite   USD 12.99 / month
+ * Ids are stable and never renamed -- they are foreign keys in Stripe
+ * metadata and store product ids. Display names live in the app catalogue.
+ */
 export enum PlanId {
   BASIC = 'basic',
   STARTER = 'starter',
   PRO = 'pro',
+  ELITE = 'elite',
   /** @deprecated kept for DB-compat; new signups never use Premium. */
   PREMIUM = 'premium',
+}
+
+/**
+ * Order of the tiers, for "at least Pro" checks and for sorting boosted
+ * profiles ahead in Discover. Higher = more.
+ */
+export const PLAN_RANK: Record<PlanId, number> = {
+  [PlanId.BASIC]: 0,
+  [PlanId.STARTER]: 1,
+  [PlanId.PRO]: 2,
+  [PlanId.PREMIUM]: 2, // legacy alias for Pro
+  [PlanId.ELITE]: 3,
+};
+
+export function planRank(planId: string | null | undefined): number {
+  return PLAN_RANK[planId as PlanId] ?? 0;
 }
 
 export enum OutreachStatus {
@@ -59,11 +85,13 @@ export enum PushPlatform {
 
 // Monthly DRAFT allowance per plan. Passes are always free; only Drafts
 // (right-swipes) count against this. -1 = unlimited. The free tier is
-// intentionally limited so users upgrade; paid tiers get unlimited Drafts.
+// intentionally limited so users upgrade; Starter is the cheap step up,
+// Pro and Elite are unlimited.
 export const PLAN_SWIPE_LIMITS: Record<PlanId, number> = {
   [PlanId.BASIC]: 20, // free: 20 Drafts / month
-  [PlanId.STARTER]: -1, // unlimited Drafts
+  [PlanId.STARTER]: 60,
   [PlanId.PRO]: -1, // unlimited Drafts
+  [PlanId.ELITE]: -1, // unlimited Drafts
   [PlanId.PREMIUM]: -1, // legacy alias for Pro
 };
 
@@ -76,10 +104,39 @@ export const PLAN_SWIPE_LIMITS: Record<PlanId, number> = {
 // (is_super = true), so no extra counter column or reset job is needed.
 export const SUPER_DRAFT_LIMITS: Record<PlanId, number> = {
   [PlanId.BASIC]: 1, // free: 1 Super Draft / month
-  [PlanId.STARTER]: 3,
+  [PlanId.STARTER]: 2,
   [PlanId.PRO]: 5,
+  [PlanId.ELITE]: 10,
   [PlanId.PREMIUM]: 5, // legacy alias for Pro
 };
+
+/**
+ * What else a tier unlocks, beyond the two counters above. Each of these is
+ * enforced server-side (the app only mirrors them for the UI):
+ *
+ *   advancedFilters  position / level / verified-only filters on Discover.
+ *                    Free users' requests have them stripped.
+ *   fullRankings     the whole leaderboard. Free sees the top 10 of a board.
+ *   visibilityBoost  0 = normal, 1 = boosted, 2 = top: paid profiles sort
+ *                    ahead within each Discover page (see getEveryoneFeed).
+ */
+export const PLAN_FEATURES: Record<
+  PlanId,
+  { advancedFilters: boolean; fullRankings: boolean; visibilityBoost: 0 | 1 | 2 }
+> = {
+  [PlanId.BASIC]: { advancedFilters: false, fullRankings: false, visibilityBoost: 0 },
+  [PlanId.STARTER]: { advancedFilters: true, fullRankings: true, visibilityBoost: 0 },
+  [PlanId.PRO]: { advancedFilters: true, fullRankings: true, visibilityBoost: 1 },
+  [PlanId.ELITE]: { advancedFilters: true, fullRankings: true, visibilityBoost: 2 },
+  [PlanId.PREMIUM]: { advancedFilters: true, fullRankings: true, visibilityBoost: 1 },
+};
+
+/** Rows a free user may see on any one rankings board. */
+export const FREE_RANKINGS_ROWS = 10;
+
+export function planFeatures(planId: string | null | undefined) {
+  return PLAN_FEATURES[planId as PlanId] ?? PLAN_FEATURES[PlanId.BASIC];
+}
 
 export class JwtPayload {
   sub: string;

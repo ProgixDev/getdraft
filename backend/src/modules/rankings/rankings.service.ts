@@ -1,6 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
-import { UserRole } from '../../common/types';
+import {
+  FREE_RANKINGS_ROWS,
+  planFeatures,
+  UserRole,
+} from '../../common/types';
 
 // WORLD is not a country bucket -- it is every athlete, ranked by sport
 // across all countries. See migration 040.
@@ -96,10 +100,27 @@ export class RankingsService {
     division?: RankingDivision;
     sport?: string;
     limit?: number;
+    /** Who is asking. Free viewers see the top of a board only. */
+    viewerId?: string;
   }): Promise<RankingRow[]> {
     const division = params.division ?? 'CA';
-    const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+    let limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const supabase = this.supabaseService.getAdminClient();
+
+    // The full board is a paid feature; free viewers get the top rows. The
+    // response stays a plain array so builds that predate the tiers keep
+    // rendering -- they simply get a shorter list. The viewer's own rank
+    // comes from getMyRank and is never gated.
+    if (params.viewerId) {
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('plan_id')
+        .eq('user_id', params.viewerId)
+        .maybeSingle();
+      if (!planFeatures(sub?.plan_id).fullRankings) {
+        limit = Math.min(limit, FREE_RANKINGS_ROWS);
+      }
+    }
 
     // WORLD spans every country, so it is the absence of a division filter
     // rather than a value to match.

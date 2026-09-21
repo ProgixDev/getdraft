@@ -21,7 +21,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
 import { PURCHASES_ENABLED, USES_STORE_BILLING } from '@/constants/purchases';
-import { purchaseProduct, STORE_PRODUCTS } from '@/services/billing';
+import { purchaseProduct, storeProductForPlan } from '@/services/billing';
 import { plans } from '@/constants/plansData';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
@@ -134,8 +134,8 @@ export default function SubscriptionScreen() {
         // Google before anything is granted, so this only charges and
         // then re-reads.
         if (USES_STORE_BILLING) {
-          const productId =
-            planId === 'pro' ? STORE_PRODUCTS.pro : STORE_PRODUCTS.starter;
+          const productId = storeProductForPlan(planId);
+          if (!productId) throw new Error('Unknown plan');
           const result = await purchaseProduct(productId);
           if (result.status === 'cancelled') return;
           if (result.status === 'error') throw new Error(result.message);

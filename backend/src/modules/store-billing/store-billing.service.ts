@@ -6,6 +6,7 @@ import { PlanId, PLAN_SWIPE_LIMITS } from '../../common/types';
 export const STORE_PLAN_PRODUCTS: Record<string, PlanId> = {
   starter_monthly: PlanId.STARTER,
   pro_monthly: PlanId.PRO,
+  elite_monthly: PlanId.ELITE,
 };
 
 /** Consumable Draft packs, and how many Drafts each grants. */

@@ -15,20 +15,29 @@ means that product silently fails on that platform alone.
 
 ### Subscriptions — auto-renewable, monthly
 
+Four tiers, priced by the client on 2026-09-11.
+
 | Product ID | Name | Price | What it unlocks |
 |---|---|---|---|
-| `starter_monthly` | Starter | **USD 7.00 / month** | Unlimited Drafts, 3 Super Drafts / month |
-| `pro_monthly` | Pro | **USD 15.00 / month** | Unlimited Drafts, 5 Super Drafts / month |
+| *(none — the free tier is not a product)* | Free | — | 20 Drafts, 1 Super Draft / month, top 10 of each ranking |
+| `starter_monthly` | Starter | **USD 3.99 / month** | 60 Drafts, 2 Super Drafts / month, advanced filters, full rankings |
+| `pro_monthly` | Pro | **USD 7.99 / month** | Unlimited Drafts, 5 Super Drafts / month, advanced filters, full rankings, boosted visibility in Discover |
+| `elite_monthly` | Elite | **USD 12.99 / month** | Unlimited Drafts, 10 Super Drafts / month, advanced filters, full rankings, top visibility in Discover |
 
-> These are the **live** prices Stripe already charges on web, read from the
-> production Stripe account. Use exactly these so the same plan does not cost a
-> different sum depending on where it was bought.
+> These match the **live** Stripe prices on web (`Starter` 3.99, `Pro` 7.99,
+> `Elite` 12.99 in the client's Stripe account). Use exactly these so the same
+> plan does not cost a different sum depending on where it was bought.
 >
 > Both stores price by tier rather than exact figure — pick the tier equal to
-> USD 7.00 and USD 15.00 in the US storefront and let the store convert the rest.
+> USD 3.99 / 7.99 / 12.99 in the US storefront and let the store convert the
+> rest.
 
-Both belong to **one subscription group** (call it `GetDraft Membership`) so a
-user can move between them instead of holding both.
+All three belong to **one subscription group** (call it `GetDraft Membership`)
+so a user can move between them instead of holding two.
+
+Every feature in the table is enforced by the server (`PLAN_SWIPE_LIMITS`,
+`SUPER_DRAFT_LIMITS`, `PLAN_FEATURES` in `backend/src/common/types`). Nothing
+on a plan card is marketing only.
 
 ### Consumables — Draft packs
 
@@ -40,22 +49,22 @@ user can move between them instead of holding both.
 
 Type: **Consumable** on both stores — used up, and buyable again.
 
-> Worth raising with the client before these go live: `drafts_100` costs the
-> same $7.00 as a Starter subscription, which gives *unlimited* Drafts plus 3
-> Super Drafts every month. Nobody rationally buys the pack at that price, and
+> Worth raising with the client before these go live: `drafts_100` at $7.00
+> costs almost the same as Pro at $7.99, which gives *unlimited* Drafts every
+> month plus 5 Super Drafts. Nobody rationally buys the pack at that price, and
 > side by side it makes the pack look broken.
 
 ### The free tier is not a product
 
-`basic` — 20 Drafts and 1 Super Draft per month — is the default state of every
-account. Do **not** create a store product for it.
+`basic` — 20 Drafts, 1 Super Draft per month, top 10 of each ranking — is the
+default state of every account. Do **not** create a store product for it.
 
 ---
 
 ## iOS — App Store Connect
 
-1. Create the five products above
-2. Put both subscriptions in one subscription group
+1. Create the six products above
+2. Put the three subscriptions in one subscription group
 3. Give every product a **display name, description and review screenshot** —
    Apple will not make a product available without them
 4. **Sign the Paid Applications Agreement**, and complete tax and banking
@@ -74,7 +83,7 @@ is no shared secret to create, send or leak.
 
 ## Android — Play Console
 
-1. **Monetise → Subscriptions**: create `starter_monthly` and `pro_monthly`
+1. **Monetise → Subscriptions**: create `starter_monthly`, `pro_monthly` and `elite_monthly`
 2. Add a **base plan** to each, monthly renewal, then **activate** it —
    creating the subscription alone leaves it invisible to the app
 3. **Monetise → In-app products**: create the three `drafts_*` consumables

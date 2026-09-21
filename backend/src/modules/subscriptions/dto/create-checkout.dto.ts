@@ -3,7 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PlanId } from '../../../common/types';
 
 export class CreateCheckoutDto {
-  @ApiProperty({ enum: ['starter', 'pro', 'premium'], example: 'pro' })
+  @ApiProperty({ enum: ['starter', 'pro', 'elite', 'premium'], example: 'pro' })
   @IsEnum(PlanId, { message: 'planId must be starter, pro, or premium' })
   planId: PlanId;
 }

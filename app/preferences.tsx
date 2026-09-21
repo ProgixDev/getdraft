@@ -32,6 +32,7 @@ import {
   resetDiscoverPreferences,
   setDiscoverPreferences,
 } from "@/store/slices/discoverPreferencesSlice";
+import { isFreePlan, usePlanId } from "@/hooks/use-plan";
 
 // Cap the picker list so a long location list scrolls inside the sheet instead
 // of overflowing past the bottom edge (where it was previously cut off).
@@ -209,6 +210,16 @@ export default function PreferencesScreen() {
   const peer = preferences.mode === "peer";
   const targetsAthletes = peer ? user?.role === "athlete" : isRecruiter;
   const targetsRecruiters = peer ? isRecruiter : !isRecruiter;
+
+  // Position / level / verified-only are a paid feature (Starter and up).
+  // The server strips them from a free user's request anyway; the lock here
+  // says so instead of letting them pick a filter that does nothing. Unknown
+  // plan (still loading) is treated as unlocked so a paying user never sees
+  // a lock flash.
+  const planId = usePlanId();
+  const filtersLocked = isFreePlan(planId);
+  const LOCKED_HELP = "Starter and above";
+  const goUpgrade = () => router.push("/subscription");
 
   const sportOptions = useMemo<PickerOption[]>(
     () => [
@@ -489,26 +500,30 @@ export default function PreferencesScreen() {
           {targetsAthletes ? (
             <>
               <SelectorRow
-                icon="body-outline"
+                icon={filtersLocked ? "lock-closed-outline" : "body-outline"}
                 label="Position"
-                value={selectedPositionLabel}
+                value={filtersLocked ? "Upgrade" : selectedPositionLabel}
                 helperText={
-                  preferences.sport === "all"
-                    ? "Pick a sport first for specific positions"
-                    : undefined
+                  filtersLocked
+                    ? LOCKED_HELP
+                    : preferences.sport === "all"
+                      ? "Pick a sport first for specific positions"
+                      : undefined
                 }
-                onPress={() => setActiveModal("position")}
+                onPress={filtersLocked ? goUpgrade : () => setActiveModal("position")}
               />
               <SelectorRow
-                icon="ribbon-outline"
+                icon={filtersLocked ? "lock-closed-outline" : "ribbon-outline"}
                 label="Athletic Level"
-                value={selectedLevelLabel}
+                value={filtersLocked ? "Upgrade" : selectedLevelLabel}
                 helperText={
-                  preferences.sport === "all"
-                    ? "Pick a sport first for sport-specific levels"
-                    : undefined
+                  filtersLocked
+                    ? LOCKED_HELP
+                    : preferences.sport === "all"
+                      ? "Pick a sport first for sport-specific levels"
+                      : undefined
                 }
-                onPress={() => setActiveModal("level")}
+                onPress={filtersLocked ? goUpgrade : () => setActiveModal("level")}
               />
             </>
           ) : targetsRecruiters ? (
@@ -529,13 +544,17 @@ export default function PreferencesScreen() {
                     Verified Recruiters Only
                   </Text>
                   <Text style={styles.switchSubtitle}>
-                    Hide recruiter profiles that are not verified.
+                    {filtersLocked
+                      ? `${LOCKED_HELP} — tap to upgrade.`
+                      : "Hide recruiter profiles that are not verified."}
                   </Text>
                 </View>
                 <Switch
-                  value={preferences.verifiedRecruitersOnly}
+                  value={filtersLocked ? false : preferences.verifiedRecruitersOnly}
                   onValueChange={(value) =>
-                    setPreferences({ verifiedRecruitersOnly: value })
+                    filtersLocked
+                      ? goUpgrade()
+                      : setPreferences({ verifiedRecruitersOnly: value })
                   }
                   trackColor={{ false: theme.borderLight, true: brand.primary }}
                   thumbColor={brand.white}

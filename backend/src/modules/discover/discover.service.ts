@@ -20,6 +20,7 @@ import {
   PlanId,
   PLAN_SWIPE_LIMITS,
   SUPER_DRAFT_LIMITS,
+  planFeatures,
 } from '../../common/types';
 
 /**
@@ -458,19 +459,41 @@ export class DiscoverService {
     const swipesRemaining = await this.getSwipesRemaining(actorId);
     const superDraftsRemaining = await this.getSuperDraftsRemaining(actorId);
 
+    // Advanced filters are a paid feature. Enforced here, not only in the
+    // app: the filters are plain query params, and a free user with a
+    // hand-crafted request must get the same feed as one using the UI.
+    const plan = await this.getPlanId(actorId);
+    const effectiveQuery: DiscoverQueryDto = planFeatures(plan).advancedFilters
+      ? query
+      : {
+          ...query,
+          athletePosition: undefined,
+          athleteLevel: undefined,
+          verifiedRecruitersOnly: undefined,
+        };
+
     // Role-targeted feed (client matrix): athletes — and parents on their
     // athlete's behalf — see coaches/agents; coaches and agents see athletes.
     // In peer mode everyone sees their own role.
     return this.getEveryoneFeed(
       actorId,
       user.role,
-      query,
+      effectiveQuery,
       offset,
       limit,
       swipesRemaining,
       superDraftsRemaining,
       mode,
     );
+  }
+
+  /** The user's plan id, defaulting to the free tier when there is no row. */
+  private async getPlanId(userId: string): Promise<string> {
+    const sub = await this.prisma.subscriptions.findUnique({
+      where: { user_id: userId },
+      select: { plan_id: true },
+    });
+    return String(sub?.plan_id ?? PlanId.BASIC);
   }
 
   /**
@@ -743,6 +766,8 @@ export class DiscoverService {
         latitude: true,
         longitude: true,
         created_at: true,
+        // Paid tiers sort ahead within the page ("visibility boost").
+        plan_id: true,
         // Feeds the card's verified checkmark (athletes: KYC-approved).
         kyc_status: true,
         // Settings toggles: profileVisible (hidden from feed) and
@@ -812,7 +837,25 @@ export class DiscoverService {
       }
     }
 
-    const cards = users
+    // Visibility boost: Pro and Elite profiles sort ahead WITHIN the page,
+    // Elite ahead of Pro, newest-first otherwise. Within the page only, on
+    // purpose -- paging is by created_at cursor, and reordering across pages
+    // would make the cursor skip or repeat rows. The cursor below is taken
+    // from the unsorted list, so it still means "everything older than the
+    // last row fetched".
+    const last = users[users.length - 1];
+    const boosted = [...users].sort((a, b) => {
+      const d =
+        planFeatures(b.plan_id as string).visibilityBoost -
+        planFeatures(a.plan_id as string).visibilityBoost;
+      if (d !== 0) return d;
+      // Same boost: keep the query's newest-first order.
+      return (
+        (b.created_at?.getTime() ?? 0) - (a.created_at?.getTime() ?? 0)
+      );
+    });
+
+    const cards = boosted
       // Settings → Privacy → "Profile Visible": explicit false means the
       // user opted out of discovery. Filtered here (not in SQL) because a
       // JSONB path comparison silently drops rows with no preferences at
@@ -832,10 +875,10 @@ export class DiscoverService {
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
 
-    // Cursor for the next page = created_at of the LAST row we returned.
-    // null when the page didn't fill (hasMore=false), so the client knows
-    // to stop. ISO string so it survives JSON + the DTO's IsString check.
-    const last = users[users.length - 1];
+    // Cursor for the next page = created_at of the LAST row the QUERY
+    // returned (taken above, before the boost re-sort). null when the page
+    // didn't fill (hasMore=false), so the client knows to stop. ISO string
+    // so it survives JSON + the DTO's IsString check.
     const nextCursor =
       users.length === limit && last?.created_at
         ? last.created_at.toISOString()

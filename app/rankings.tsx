@@ -37,6 +37,7 @@ import {
   RankingDivision,
   RankingRow,
 } from "@/services/rankings";
+import { isFreePlan, usePlanId } from "@/hooks/use-plan";
 
 const DIVISIONS: RankingDivision[] = ["CA", "US", "WORLD"];
 
@@ -90,6 +91,10 @@ export default function RankingsScreen() {
   const [sport, setSport] = useState<string | undefined>(undefined);
   const [sports, setSports] = useState<string[]>([]);
   const [rows, setRows] = useState<RankingRow[]>([]);
+  // Free viewers get the top 10 of a board from the server. Mirror that
+  // here with an upsell footer rather than a silent short list.
+  const planId = usePlanId();
+  const boardCapped = isFreePlan(planId) && rows.length >= 10;
   const [myRank, setMyRank] = useState<RankingRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -275,6 +280,25 @@ export default function RankingsScreen() {
             }
           />
         )}
+        ListFooterComponent={
+          boardCapped ? (
+            <Pressable
+              style={({ pressed }) => [styles.capFooter, pressed && styles.pressed]}
+              onPress={() => router.push("/subscription")}
+              accessibilityRole="button"
+              accessibilityLabel="Upgrade to see the full rankings"
+            >
+              <Ionicons name="lock-closed" size={16} color={theme.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.capTitle}>Free shows the top 10</Text>
+                <Text style={styles.capText}>
+                  Upgrade to Starter or above to see the full board.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           loading ? (
             <View style={styles.center}>
@@ -396,6 +420,29 @@ function RankRow({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
   pressed: { opacity: 0.6 },
+  capFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 4,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: theme.cardBg,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  capTitle: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  capText: {
+    fontSize: 12,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textSecondary,
+    marginTop: 2,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
