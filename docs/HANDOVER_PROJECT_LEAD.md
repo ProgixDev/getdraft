@@ -220,6 +220,15 @@ Roughly in the order they block something.
 
 ### Post-launch, not blocking
 
+- **Enable R8 for Android release builds before Feb 2027.** Play's release
+  dashboard flags "DEX code optimization below threshold (obfuscation 2%)"
+  with a Feb 2027 deadline. Expo leaves R8 off; turn it on with the
+  `expo-build-properties` plugin (`android.enableProguardInReleaseBuilds`,
+  `enableShrinkResourcesInReleaseBuilds`) and test every native library on a
+  device afterwards -- Stripe, react-native-iap / nitro-modules, Reanimated
+  and the WebView are the usual R8 casualties and need keep rules. Do it in a
+  build of its own, not alongside a feature release.
+
 - **Reports land in a table nobody can read.** `POST /reports` works and is
   surfaced on profiles, posts and chat, but there is no moderation view. Both
   stores expect UGC reports to be *actioned*, so this needs a screen or at
