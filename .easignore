@@ -1,0 +1,93 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+.backend.log
+.expo.log
+
+# macOS
+.DS_Store
+._*
+
+# Vim
+*.swp
+*.swo
+*.pem
+
+# local env files
+.env
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders
+/ios
+/android
+
+# Local MCP config — contains credentials, never commit
+.mcp.json
+
+# Local Claude Code settings
+.claude/
+
+# Reports & doc artifacts — keep markdown and PDF deliverables out of the repo.
+# Already-tracked files are unaffected (git keeps tracking them); this only
+# stops NEW .md/.pdf from being added. Force one in with `git add -f <file>`.
+*.md
+*.pdf
+
+# Firebase service-account keys (secrets - never commit)
+*firebase-adminsdk*.json
+firebase-admin-key.json
+landing/_build/shots/
+
+# Local DB connection strings for migration runs (never commit)
+.secrets/
+
+# EAS keystore credentials — never commit
+credentials.json
+
+# ---------------------------------------------------------------------------
+# .easignore REPLACES .gitignore for what EAS Build uploads, so everything
+# above is the .gitignore verbatim, and below is what an app build never
+# needs. Why: the tarball was 69 MB and the office upstream drops large
+# uploads (Railway deploys used to fail the same way). Less to upload,
+# fewer failures.
+# ---------------------------------------------------------------------------
+backend/
+docs/
+landing/
+getdraft-landing/
+.github/
+*.md
+*.pdf
+dist/
+# 6 MB, referenced by nothing in the app
+assets/full-shot-man-playing-basketball.jpg
