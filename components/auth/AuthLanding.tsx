@@ -99,10 +99,38 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onLogin }) => {
     setState('phone-verify');
   }, []);
 
-  const handlePhoneVerified = useCallback((token: string) => {
-    setPhoneVerificationToken(token);
-    setState('phone-onboarding');
-  }, []);
+  // The code checked out but nothing is registered under this number. Stop
+  // here and say so. "Continue with Phone Number" carries no sign-in /
+  // sign-up intent, so before this a returning user who mistyped their
+  // number -- or typed a number that was never theirs -- was silently walked
+  // into creating a second account. They choose: fix the number, or make an
+  // account with this one on purpose.
+  const handlePhoneVerified = useCallback(
+    (token: string) => {
+      Alert.alert(
+        'No account with this number',
+        `${phone} isn't registered on GetDraft yet.
+
+If you already have an account, go back and use the number you signed up with. Otherwise you can create a new account with this number.`,
+        [
+          {
+            text: 'Change number',
+            style: 'cancel',
+            onPress: () => setState('phone-input'),
+          },
+          {
+            text: 'Create account',
+            onPress: () => {
+              setPhoneVerificationToken(token);
+              setState('phone-onboarding');
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    },
+    [phone],
+  );
 
   // Existing account verified by phone OTP — same shape as the OAuth
   // returning-user path. Onboarded users go straight into the app;
