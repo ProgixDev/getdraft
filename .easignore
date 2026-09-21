@@ -91,3 +91,9 @@ getdraft-landing/
 dist/
 # 6 MB, referenced by nothing in the app
 assets/full-shot-man-playing-basketball.jpg
+
+# The upload is a shallow git clone and its objects alone were 34 MB -- more
+# than half of every upload. The worker does not need history; without .git
+# it reads .gitignore directly, which also keeps the prebuilt android/ dir out
+# of the fingerprint.
+.git

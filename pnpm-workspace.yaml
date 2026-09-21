@@ -1,3 +1,9 @@
+# Flat node_modules, like npm. React Native autolinking and the Expo
+# fingerprint both walk real package paths; pnpm's default isolated layout
+# puts them under node_modules/.pnpm/<name>@<version>/..., which differs from
+# every other machine and made the EAS runtime-version check fail. Hoisted
+# is what Expo recommends for pnpm.
+nodeLinker: hoisted
 allowBuilds:
   unrs-resolver: false
 minimumReleaseAgeExclude:
