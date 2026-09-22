@@ -1,7 +1,7 @@
 """
 Store screenshot panels for GetDraft -- Google Play and App Store.
 
-    python docs/store-assets/make-screenshots.py
+    python docs/store-assets/make_screenshots.py
 
 Reads the raw phone captures in docs/store-assets/captures/, composes each one
 into a branded panel (headline, phone frame, brand gradient) and writes every
