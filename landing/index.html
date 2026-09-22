@@ -326,7 +326,8 @@ h2{font-size:clamp(30px,3.6vw,44px); font-weight:800; letter-spacing:-1.4px; lin
 .draft-banner p{color:var(--muted); max-width:520px; margin:0 auto 30px}
 
 /* pricing */
-.plans{display:grid; grid-template-columns:repeat(3,1fr); gap:22px; align-items:stretch}
+.plans{display:grid; grid-template-columns:repeat(4,1fr); gap:18px; align-items:stretch}
+@media (max-width:1000px){.plans{grid-template-columns:repeat(2,1fr)}}
 .plan{
   background:var(--card); border:1px solid var(--line); border-radius:28px; padding:34px 30px;
   display:flex; flex-direction:column; position:relative; transition:transform .3s, border-color .3s;
@@ -781,7 +782,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
     </div>
     <div class="feats">
       <div class="feat reveal"><h3>Talent Map</h3><p>Explore athletes on an interactive map — your city, your state, or worldwide.</p></div>
-      <div class="feat reveal"><h3>Rankings &amp; Draft Score</h3><p>See who's rising. Regional boards and a Draft Score that rewards real activity.</p></div>
+      <div class="feat reveal"><h3>Rankings &amp; Draft Score</h3><p>See who's rising. Country and world boards, and a Draft Score that rewards real activity.</p></div>
       <div class="feat reveal"><h3>Highlights feed</h3><p>Post photos and reels of your best plays. Your grind, visible to every scout.</p></div>
       <div class="feat reveal"><h3>Chat after the Draft</h3><p>Messages unlock only after a mutual Draft — no spam, no unsolicited contact.</p></div>
       <div class="feat reveal"><h3>Verified adults</h3><p>Every coach, recruiter and agent passes identity verification before they can connect.</p></div>
@@ -866,40 +867,53 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
     </div>
     <div class="plans">
       <div class="plan reveal">
-        <div class="pn">Rookie</div>
+        <div class="pn">Free</div>
         <div class="pp">$0<span>/month</span></div>
         <div class="pd">Everything you need to get in the game.</div>
         <ul>
           <li>Full profile, feed &amp; Talent Map</li>
           <li><b>20 Drafts</b> every month</li>
-          <li>Unlimited passing</li>
+          <li>1 Super Draft a month</li>
           <li>See who drafted you</li>
-          <li class="no">Unlimited Drafts</li>
+          <li>Top 10 of every ranking</li>
+        </ul>
+        <a class="btn ghost" href="#download">Get the app</a>
+      </div>
+      <div class="plan reveal">
+        <div class="pn">Starter</div>
+        <div class="pp">$3.99<span>/month</span></div>
+        <div class="pd">The cheap step up.</div>
+        <ul>
+          <li>Everything in Free</li>
+          <li><b>60 Drafts</b> every month</li>
+          <li>2 Super Drafts a month</li>
+          <li>Advanced filters</li>
+          <li>Full rankings</li>
         </ul>
         <a class="btn ghost" href="#download">Get the app</a>
       </div>
       <div class="plan hot reveal">
         <div class="pop">Most popular</div>
-        <div class="pn">Starter</div>
-        <div class="pp">$7<span>/month</span></div>
+        <div class="pn">Pro</div>
+        <div class="pp">$7.99<span>/month</span></div>
         <div class="pd">For athletes and coaches who are all-in.</div>
         <ul>
-          <li>Everything in Rookie</li>
+          <li>Everything in Starter</li>
           <li><b>Unlimited Drafts</b></li>
-          <li>Priority in Discover</li>
-          <li>Full “who drafted you” history</li>
+          <li>5 Super Drafts a month</li>
+          <li>Boosted visibility in Discover</li>
         </ul>
         <a class="btn" href="#download">Get the app</a>
       </div>
       <div class="plan reveal">
-        <div class="pn">Pro</div>
-        <div class="pp">$15<span>/month</span></div>
+        <div class="pn">Elite</div>
+        <div class="pp">$12.99<span>/month</span></div>
         <div class="pd">Maximum visibility for serious prospects.</div>
         <ul>
-          <li>Everything in Starter</li>
-          <li>Top placement in rankings &amp; search</li>
-          <li>Advanced filters for recruiters</li>
-          <li>Early access to new features</li>
+          <li>Everything in Pro</li>
+          <li><b>Unlimited Drafts</b></li>
+          <li>10 Super Drafts a month</li>
+          <li>Top visibility in Discover</li>
         </ul>
         <a class="btn ghost" href="#download">Get the app</a>
       </div>
@@ -922,7 +936,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
       </details>
       <details>
         <summary>How much does it cost?</summary>
-        <div class="a"><b>Free to start, forever.</b> Every account gets 20 Drafts a month with unlimited browsing and passing. Starter ($7/mo) and Pro ($15/mo) unlock unlimited Drafts and extra visibility.</div>
+        <div class="a"><b>Free to start, forever.</b> Every account gets 20 Drafts a month with unlimited browsing and passing. Starter ($3.99/mo) adds 60 Drafts, advanced filters and the full rankings; Pro ($7.99/mo) and Elite ($12.99/mo) unlock unlimited Drafts and boosted visibility.</div>
       </details>
       <details>
         <summary>My kid plays little league. Can they join?</summary>
