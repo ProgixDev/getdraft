@@ -5,6 +5,7 @@ Showcase mockups: several phones on one branded scene.
 
 Outputs into docs/store-assets/out/showcase/:
   feature-graphic-1024x500.png   Google Play feature graphic (logo + 2 phones)
+  og-1200x630.png                getdraft.net link preview (og:image)
   showcase-1920x1080.png         website hero / press
   showcase-1080x1080.png         social (square)
   showcase-1080x1920.png         story format
@@ -77,6 +78,20 @@ def feature_graphic() -> Image.Image:
     return c.convert("RGB")
 
 
+def og_image() -> Image.Image:
+    """Link preview for getdraft.net (og:image / twitter:image). 1200x630 is
+    what Facebook, WhatsApp and Telegram expect; same composition as the
+    feature graphic, just the right proportions."""
+    w, h = 1200, 630
+    c = gradient(w, h).convert("RGBA")
+    logo_block(c, 76, 118, 0.94)
+    back = phone("03-globe.png", 230)
+    front = phone("02-its-a-draft.png", 255)
+    place(c, back, 690, 70, angle=-8)
+    place(c, front, 885, 45, angle=6)
+    return c.convert("RGB")
+
+
 def showcase(w: int, h: int) -> Image.Image:
     c = gradient(w, h).convert("RGBA")
     landscape = w > h
@@ -123,6 +138,8 @@ def main() -> int:
     dest.mkdir(parents=True, exist_ok=True)
     feature_graphic().save(dest / "feature-graphic-1024x500.png", optimize=True)
     print("feature-graphic-1024x500.png")
+    og_image().save(dest / "og-1200x630.png", optimize=True)
+    print("og-1200x630.png")
     for w, h in ((1920, 1080), (1080, 1080), (1080, 1920)):
         showcase(w, h).save(dest / f"showcase-{w}x{h}.png", optimize=True)
         print(f"showcase-{w}x{h}.png")
