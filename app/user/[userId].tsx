@@ -273,6 +273,9 @@ export default function PublicProfileScreen() {
   const viewerIsRecruiter = viewerRole === 'recruiter' || viewerRole === 'coach';
   const canSendOutreach = viewerIsRecruiter && isAthlete && !!profile?.parent_user_id;
   const photos: string[] = Array.isArray(sub.photos) ? sub.photos : [];
+  // What the avatar is actually showing, so tapping it opens that image.
+  const heroPhoto: string | null =
+    profile?.avatar_url ?? (photos.length > 0 ? photos[0] : null);
   const videos: string[] = Array.isArray(sub.videos) ? sub.videos : [];
   const displayLocation = profile?.location ?? null;
 
@@ -318,7 +321,30 @@ export default function PublicProfileScreen() {
               style={styles.banner}
             />
             <View style={styles.avatarWrapper}>
-              <View style={styles.avatarPlaceholder}>
+              {/* The avatar is the first thing anyone taps on a profile, so
+                  it opens the viewer too -- with the gallery behind it when
+                  there is one, the avatar alone otherwise. */}
+              <Pressable
+                style={styles.avatarPlaceholder}
+                disabled={!heroPhoto}
+                onPress={() =>
+                  heroPhoto &&
+                  router.push({
+                    pathname: '/photo',
+                    params: {
+                      urls: JSON.stringify(
+                        photos.length > 0 ? photos : [heroPhoto],
+                      ),
+                      index: String(
+                        photos.length > 0 ? Math.max(photos.indexOf(heroPhoto), 0) : 0,
+                      ),
+                      title: profile?.name ?? '',
+                    },
+                  })
+                }
+                accessibilityRole={heroPhoto ? 'button' : undefined}
+                accessibilityLabel={heroPhoto ? 'View photo' : undefined}
+              >
                 {profile.avatar_url ? (
                   <Image
                     source={{ uri: profile.avatar_url }}
@@ -338,7 +364,7 @@ export default function PublicProfileScreen() {
                     color={theme.textMuted}
                   />
                 )}
-              </View>
+              </Pressable>
               {isRecruiter && sub.verified && (
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark" size={12} color={brand.white} />
@@ -493,9 +519,23 @@ export default function PublicProfileScreen() {
               <Text style={styles.sectionTitle}>Photos</Text>
               <View style={styles.photoGrid}>
                 {photos.map((url, i) => (
-                  <View key={i} style={styles.photoItem}>
+                  <Pressable
+                    key={i}
+                    style={({ pressed }) => [
+                      styles.photoItem,
+                      pressed && styles.photoPressed,
+                    ]}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/photo',
+                        params: { urls: JSON.stringify(photos), index: String(i) },
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}
+                  >
                     <Image source={{ uri: url }} style={styles.photoImage} contentFit="cover" />
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -888,6 +928,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  photoPressed: { opacity: 0.7 },
   photoItem: {
     width: PHOTO_SIZE,
     height: PHOTO_SIZE,

@@ -1016,15 +1016,42 @@ export default function ProfileScreen() {
               <Text style={styles.sectionTitle}>Photos</Text>
             </View>
             <View style={styles.photoGrid}>
-              {photos.map((photo, i) => (
-                <View key={i} style={styles.photoItem}>
-                  <Image
-                    source={typeof photo === "string" ? { uri: photo } : photo}
-                    style={styles.photoImage}
-                    contentFit="cover"
-                  />
-                </View>
-              ))}
+              {photos.map((photo, i) => {
+                // Bundled fallbacks are require()'d numbers, not URLs; only
+                // real remote photos can open in the viewer.
+                const uri = typeof photo === "string" ? photo : null;
+                const remote = photos.filter(
+                  (p): p is string => typeof p === "string",
+                );
+                return (
+                  <Pressable
+                    key={i}
+                    style={({ pressed }) => [
+                      styles.photoItem,
+                      pressed && uri ? styles.photoPressed : null,
+                    ]}
+                    disabled={!uri}
+                    onPress={() =>
+                      uri &&
+                      router.push({
+                        pathname: "/photo",
+                        params: {
+                          urls: JSON.stringify(remote),
+                          index: String(remote.indexOf(uri)),
+                        },
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Photo ${i + 1} of ${photos.length}`}
+                  >
+                    <Image
+                      source={typeof photo === "string" ? { uri: photo } : photo}
+                      style={styles.photoImage}
+                      contentFit="cover"
+                    />
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         )}
@@ -1653,6 +1680,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  photoPressed: { opacity: 0.7 },
   photoItem: {
     width: PHOTO_SIZE,
     height: PHOTO_SIZE,
