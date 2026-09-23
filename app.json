@@ -2,7 +2,7 @@
   "expo": {
     "name": "GetDraft",
     "slug": "getdraft",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "runtimeVersion": {
       "policy": "fingerprint"
     },
@@ -18,6 +18,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.getdraft.app",
+      "appleTeamId": "NH82KPKHVK",
+      "buildNumber": "44",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "GetDraft needs access to your photos so you can showcase your athletic profile and add highlight reels.",
@@ -147,6 +149,7 @@
     },
     "android": {
       "package": "com.getdraft.app",
+      "versionCode": 44,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#121212",
@@ -162,8 +165,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
-      ],
-      "versionCode": 43
+      ]
     },
     "web": {
       "output": "static",
@@ -214,7 +216,8 @@
         {
           "locationWhenInUsePermission": "GetDraft uses your location to set where you're based and place you on the talent map."
         }
-      ]
+      ],
+      "./plugins/with-pod-deployment-target"
     ],
     "experiments": {
       "typedRoutes": true
