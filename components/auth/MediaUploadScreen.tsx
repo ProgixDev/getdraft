@@ -31,7 +31,7 @@ import { profilesService } from "@/services/profiles";
 // the profiles scouts browse are never empty. Video is optional (any mix of 4).
 const MIN_MEDIA = 4;
 const MAX_PHOTOS = 6;
-const MAX_VIDEOS = 1; // matches the single "highlight video" cap in edit-profile
+const MAX_VIDEOS = 3; // matches MAX_HIGHLIGHT_VIDEOS in edit-profile
 
 interface Props {
   /** Athlete profile row already exists from the previous step; we merge the
@@ -74,7 +74,10 @@ export const MediaUploadScreen: React.FC<Props> = ({ onComplete, onBack }) => {
   const addVideo = async () => {
     if (busy) return;
     if (videos.length >= MAX_VIDEOS) {
-      Alert.alert("Video limit", `You can add ${MAX_VIDEOS} highlight video.`);
+      Alert.alert(
+        "Video limit",
+        `You can add up to ${MAX_VIDEOS} highlight videos.`,
+      );
       return;
     }
     setBusy("video");

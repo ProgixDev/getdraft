@@ -153,7 +153,11 @@ function pickFields<T extends string>(
 }
 
 const MAX_GALLERY_PHOTOS = 6;
-const MAX_HIGHLIGHT_VIDEOS = 1;
+// Three reels, not one: athletes have more than a single clip worth showing
+// (a game, a workout, a skills tape) and the client asked for it. Each file
+// is capped at 15 MB by the bucket (migration 038), so three is ~45 MB an
+// athlete -- worth revisiting if storage gets tight.
+const MAX_HIGHLIGHT_VIDEOS = 3;
 
 export default function EditProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -1012,13 +1016,14 @@ export default function EditProfileScreen() {
         {(isAthlete || isRecruiter) && (
           <View style={styles.section}>
             <View style={styles.mediaHeader}>
-              <Text style={styles.sectionTitle}>Highlight Video</Text>
+              <Text style={styles.sectionTitle}>Highlight Videos</Text>
               <Text style={styles.mediaSubLabel}>
                 {galleryVideos.length}/{MAX_HIGHLIGHT_VIDEOS}
               </Text>
             </View>
             <Text style={styles.mediaHelper}>
-              The reel that plays on your card. Tap to add, long-press to remove.
+              Your reels. The first one plays on your card. Tap to add,
+              long-press to remove.
             </Text>
             <View style={styles.videoList}>
               {galleryVideos.map((url) => (
@@ -1035,7 +1040,11 @@ export default function EditProfileScreen() {
                       size={42}
                       color={brand.white}
                     />
-                    <Text style={styles.videoTileLabel}>Highlight reel</Text>
+                    <Text style={styles.videoTileLabel}>
+                      {galleryVideos.length > 1
+                        ? `Reel ${galleryVideos.indexOf(url) + 1}`
+                        : "Highlight reel"}
+                    </Text>
                   </View>
                 </Pressable>
               ))}
@@ -1054,7 +1063,11 @@ export default function EditProfileScreen() {
                         size={26}
                         color={theme.text}
                       />
-                      <Text style={styles.videoAddLabel}>Add highlight video</Text>
+                      <Text style={styles.videoAddLabel}>
+                        {galleryVideos.length === 0
+                          ? "Add highlight video"
+                          : "Add another"}
+                      </Text>
                     </>
                   )}
                 </Pressable>
