@@ -8,6 +8,10 @@ into a branded panel (headline, phone frame, brand gradient) and writes every
 store size into docs/store-assets/out/<store>/. Re-run whenever a screen
 changes; the panels are regenerated in a few seconds.
 
+Sizes cover what each store REQUIRES: Google Play phone screenshots, plus
+Apple's 6.9" iPhone and 13" iPad sets -- App Store Connect refuses an upload
+that is missing either of those, and scales every other device from them.
+
 Captures should be real phone screenshots (about 1080x2400). Anything much
 smaller gets upscaled and looks soft on a store page.
 
@@ -63,11 +67,19 @@ PANELS = [
 ]
 
 # ------------------------------------------------------------- store sizes
-# (name, width, height). Play accepts 9:16 phone screenshots; Apple's 6.7"
-# size is what App Store Connect asks for first and scales to the rest.
+# (width, height, how wide the phone sits as a fraction of the canvas).
+#
+# Apple REQUIRES the 6.9" iPhone set, and -- because app.json sets
+# supportsTablet -- the 13" iPad set as well; App Store Connect refuses the
+# upload without them and scales everything else from those two. 1290x2796
+# is the accepted 6.9" alternative and the size Apple lists first.
+#
+# The iPad is 3:4 rather than 9:19.5, so a phone at 72% of the width would
+# tower over it: the art shrinks and the copy gets more room instead.
 SIZES = {
-    "google-play": (1080, 1920),
-    "app-store-6.7": (1290, 2796),
+    "google-play": (1080, 1920, 0.72),
+    "app-store-6.9": (1290, 2796, 0.72),
+    "app-store-ipad-13": (2048, 2732, 0.46),
 }
 
 
@@ -143,15 +155,18 @@ def phone_frame(shot: Image.Image, target_w: int) -> Image.Image:
     return frame
 
 
-def compose(panel: Panel, w: int, h: int) -> Image.Image:
+def compose(panel: Panel, w: int, h: int, phone_scale: float = 0.72) -> Image.Image:
     img = gradient(w, h).convert("RGBA")
     d = ImageDraw.Draw(img)
-    margin = int(w * 0.08)
+    margin = int(min(w, int(h * 9 / 16)) * 0.08)
 
     # --- headline block -------------------------------------------------
-    head_size = int(w * 0.082)
+    # Scale type off the 9:16 equivalent width, not the raw width: on the
+    # squarer iPad canvas a headline at 8.2% of 2048 would be absurd.
+    type_w = min(w, int(h * 9 / 16))
+    head_size = int(type_w * 0.082)
     f_head = font("800ExtraBold", head_size)
-    f_sub = font("500Medium", int(w * 0.036))
+    f_sub = font("500Medium", int(type_w * 0.036))
     y = int(h * 0.075)
     for line, color in ((panel.headline, WHITE), (panel.accent, ACCENT)):
         for part in wrap(d, line, f_head, w - margin * 2):
@@ -165,7 +180,7 @@ def compose(panel: Panel, w: int, h: int) -> Image.Image:
 
     # --- the screenshot -------------------------------------------------
     shot = Image.open(CAPTURES / panel.file).convert("RGB")
-    art = phone_frame(shot, int(w * 0.72))
+    art = phone_frame(shot, int(w * phone_scale))
 
     x = (w - art.width) // 2
     # The phone bleeds off the bottom edge -- what fits above the fold is
@@ -185,11 +200,11 @@ def main() -> int:
     if missing:
         print("missing captures:", ", ".join(missing))
         return 1
-    for store, (w, h) in SIZES.items():
+    for store, (w, h, phone_scale) in SIZES.items():
         dest = OUT / store
         dest.mkdir(parents=True, exist_ok=True)
         for i, panel in enumerate(PANELS, 1):
-            out = compose(panel, w, h)
+            out = compose(panel, w, h, phone_scale)
             path = dest / f"{i:02d}-{Path(panel.file).stem.split('-', 1)[1]}.png"
             out.save(path, "PNG", optimize=True)
             print(f"{store}: {path.name} {w}x{h}")
