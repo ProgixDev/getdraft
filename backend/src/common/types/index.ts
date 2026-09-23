@@ -83,13 +83,19 @@ export enum PushPlatform {
   ANDROID = 'android',
 }
 
-// Monthly DRAFT allowance per plan. Passes are always free; only Drafts
-// (right-swipes) count against this. -1 = unlimited. The free tier is
-// intentionally limited so users upgrade; Starter is the cheap step up,
-// Pro and Elite are unlimited.
+// DAILY Draft allowance per plan. Passes are always free; only Drafts
+// (right-swipes) count against this. -1 = unlimited.
+//
+// Daily, not monthly, since 2026-09-23. A free user who spent 20 Drafts on
+// day one was locked out for the rest of the month, which is a month of not
+// opening the app -- the client watched it happen to real users. A daily
+// allowance ends the session, not the relationship: come back tomorrow.
+//
+// The numbers are deliberately not "20 a day". Free at 20/day is 600 a
+// month, which would leave the paid tiers selling nothing anyone needs.
 export const PLAN_SWIPE_LIMITS: Record<PlanId, number> = {
-  [PlanId.BASIC]: 20, // free: 20 Drafts / month
-  [PlanId.STARTER]: 60,
+  [PlanId.BASIC]: 10, // free: 10 Drafts / day
+  [PlanId.STARTER]: 30, // 30 / day
   [PlanId.PRO]: -1, // unlimited Drafts
   [PlanId.ELITE]: -1, // unlimited Drafts
   [PlanId.PREMIUM]: -1, // legacy alias for Pro

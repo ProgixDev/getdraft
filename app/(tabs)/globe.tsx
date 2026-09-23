@@ -696,7 +696,7 @@ export default function GlobeTab() {
           dismissAll();
           Alert.alert(
             "Out of Drafts",
-            "You're out of Drafts this month — upgrade or come back next month.",
+            "You're out of Drafts for today — upgrade, or come back tomorrow.",
           );
         } else {
           // Network / server hiccup — keep the card open so they can retry.

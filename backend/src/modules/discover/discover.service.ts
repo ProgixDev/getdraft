@@ -1221,7 +1221,7 @@ export class DiscoverService {
       const remaining = await this.getSwipesRemaining(actor.id);
       if (remaining === 0) {
         throw new HttpException(
-          'Monthly Draft limit reached. Upgrade for unlimited Drafts.',
+          'Out of Drafts for today. Come back tomorrow, or upgrade for unlimited.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -1243,10 +1243,9 @@ export class DiscoverService {
       throw new BadRequestException((e as Error).message);
     }
 
-    // Only NORMAL Drafts consume the monthly allowance (passes are free; Super
-    // Drafts are metered separately by SUPER_DRAFT_LIMITS). Spend the plan quota
-    // first; if exhausted, dip into bonus_swipes (from swipe-packs).
-    // swipes_used_today is reused as the month-to-date Draft counter.
+    // Only NORMAL Drafts consume the daily allowance (passes are free; Super
+    // Drafts are metered separately by SUPER_DRAFT_LIMITS, monthly). Spend the
+    // plan quota first; if exhausted, dip into bonus_swipes (from swipe-packs).
     if (dto.direction === SwipeDirection.DRAFT && !isSuper) {
       const subForSpend = await this.prisma.subscriptions.findUnique({
         where: { user_id: actor.id },
@@ -1544,9 +1543,9 @@ export class DiscoverService {
     }));
   }
 
-  // Remaining DRAFTS this month. Passes are free; the monthly allowance comes
-  // from the plan (PLAN_SWIPE_LIMITS) and resets on the 1st. -1 = unlimited.
-  // swipes_used_today/swipes_reset_at are reused as the month-to-date counter.
+  // Remaining DRAFTS today. Passes are free; the daily allowance comes from
+  // the plan (PLAN_SWIPE_LIMITS) and resets at UTC midnight. -1 = unlimited.
+  // swipes_used_today/swipes_reset_at are the counter and the day it counts.
   private async getSwipesRemaining(userId: string): Promise<number> {
     const sub = await this.prisma.subscriptions.findUnique({
       where: { user_id: userId },
@@ -1566,19 +1565,20 @@ export class DiscoverService {
     const bonus = sub.bonus_swipes ?? 0;
     const UNLIMITED = 9999;
 
-    // Monthly reset: compare YYYY-MM.
+    // Daily reset: compare YYYY-MM-DD in UTC. A row whose counter belongs to
+    // an earlier day is zeroed on first read, so there is no cron job and no
+    // window where yesterday's total still blocks today.
     const now = new Date();
-    const monthKey = (d: Date) =>
-      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    const resetMonth = sub.swipes_reset_at ? monthKey(sub.swipes_reset_at) : null;
+    const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+    const resetDay = sub.swipes_reset_at ? dayKey(sub.swipes_reset_at) : null;
 
-    if (resetMonth !== monthKey(now)) {
-      const firstOfMonth = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    if (resetDay !== dayKey(now)) {
+      const today = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
       await this.prisma.subscriptions.update({
         where: { user_id: userId },
-        data: { swipes_used_today: 0, swipes_reset_at: firstOfMonth },
+        data: { swipes_used_today: 0, swipes_reset_at: today },
       });
       return (limit === -1 ? UNLIMITED : limit) + bonus;
     }

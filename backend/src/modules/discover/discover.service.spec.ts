@@ -40,8 +40,8 @@ describe('DiscoverService', () => {
     role: UserRole.PARENT,
   };
 
-  // A subscription dated in the CURRENT month so getSwipesRemaining doesn't
-  // trigger the monthly reset.
+  // A subscription dated TODAY so getSwipesRemaining doesn't trigger the
+  // daily reset (which would zero the counter and report a full allowance).
   const sub = (
     plan_id = 'basic',
     swipes_used_today = 0,
@@ -146,8 +146,8 @@ describe('DiscoverService', () => {
       expect(prisma.guardian_links.findFirst).not.toHaveBeenCalled();
     });
 
-    it('returns the feed with the monthly Draft allowance remaining', async () => {
-      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 3)); // 20 - 3
+    it('returns the feed with the daily Draft allowance remaining', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 3)); // 10 - 3
       prisma.public_users.findMany.mockResolvedValue([
         {
           id: 'rec-1',
@@ -174,7 +174,7 @@ describe('DiscoverService', () => {
 
       expect(result.cards).toHaveLength(1);
       expect(result.cards[0].name).toBe('Coach Mike');
-      expect(result.swipesRemaining).toBe(17);
+      expect(result.swipesRemaining).toBe(7);
     });
 
     it('gives unlimited Drafts on a paid plan', async () => {

@@ -908,7 +908,7 @@ export default function DiscoverScreen() {
               setSwipesRemaining(0);
               setSnackbar({
                 visible: true,
-                message: "Out of Drafts this month — upgrade for unlimited",
+                message: "Out of Drafts for today — upgrade for unlimited",
                 canUndo: false,
               });
             }
@@ -1022,8 +1022,8 @@ export default function DiscoverScreen() {
       // them to upgrade would sell them a plan on their own account that does
       // nothing for the athlete's quota. Point at the athlete instead.
       message: isParent
-        ? "Your athlete is out of Drafts this month"
-        : "Out of Drafts this month — upgrade for unlimited",
+        ? "Your athlete is out of Drafts for today"
+        : "Out of Drafts for today — upgrade for unlimited",
       canUndo: false,
     });
   }, [isParent]);
@@ -1517,15 +1517,15 @@ export default function DiscoverScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={
                   isParent
-                    ? "Your athlete is out of Drafts this month. Tap to learn more."
-                    : "Out of Drafts this month. Upgrade for unlimited Drafts."
+                    ? "Your athlete is out of Drafts for today. Tap to learn more."
+                    : "Out of Drafts for today. Upgrade for unlimited Drafts."
                 }
               >
                 <Ionicons name="lock-closed" size={18} color={brand.white} />
                 <Text style={styles.lockedCtaText}>
                   {isParent
-                    ? "Your athlete is out of Drafts this month"
-                    : "Out of Drafts this month — upgrade for unlimited"}
+                    ? "Your athlete is out of Drafts for today"
+                    : "Out of Drafts for today — upgrade for unlimited"}
                 </Text>
               </Pressable>
               {/* Passing stays free even when Drafts are used up. */}

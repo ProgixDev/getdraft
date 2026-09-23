@@ -37,7 +37,7 @@ const FAQ_ITEMS = [
     icon: "card-outline" as const,
     question: "Is GetDraft free?",
     answer:
-      "Athletes get a free Basic plan with 20 Drafts per month and core features. Upgrade to Starter, Pro, or Premium for unlimited Drafts, advanced filters, and a premium badge. Seeing who drafted you is always free.",
+      "Athletes get a free plan with 10 Drafts every day and core features. Upgrade to Starter (30 a day), or Pro and Elite for unlimited Drafts, advanced filters and boosted visibility. Seeing who drafted you is always free.",
   },
   {
     icon: "chatbubble-outline" as const,
