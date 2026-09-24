@@ -112,8 +112,8 @@ function getStepsForRole(role: string): Step[] {
         },
         {
           id: "level",
-          label: "Level (optional)",
-          placeholder: "Pick a level",
+          label: "League / Level (optional)",
+          placeholder: "Pick or type your league",
           icon: "trending-up-outline",
           optional: true,
         },
@@ -327,6 +327,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
   // Role-specific step set — recomputed only when the role prop changes.
   const steps = useMemo(() => getStepsForRole(role), [role]);
+  const isRecruiterRole = role === "coach" || role === "recruiter";
 
   const dispatch = useAppDispatch();
   const [currentStep, setCurrentStep] = useState(0);
@@ -335,6 +336,12 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [sportModalVisible, setSportModalVisible] = useState(false);
   const [positionModalVisible, setPositionModalVisible] = useState(false);
   const [levelModalVisible, setLevelModalVisible] = useState(false);
+  // A curated list of leagues can never be complete -- a coach wrote in the
+  // day after launch because his junior league was not there. Rather than
+  // chase every league in every sport, the picker ends with an entry that
+  // lets him type his own.
+  const [customLevel, setCustomLevel] = useState("");
+  const [customLevelOpen, setCustomLevelOpen] = useState(false);
   const [agencyModalVisible, setAgencyModalVisible] = useState(false);
   const [agencyCustom, setAgencyCustom] = useState(false);
   const [genderModalVisible, setGenderModalVisible] = useState(false);
@@ -495,6 +502,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const handleLevelSelect = (level: string) => {
     handleFieldChange("level", level);
     setLevelModalVisible(false);
+    setCustomLevelOpen(false);
+    setCustomLevel("");
   };
 
   const handleGenderSelect = (gender: string) => {
@@ -1497,7 +1506,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 >
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>
-                      Level {formData.sport && `(${formData.sport})`}
+                      {isRecruiterRole ? "League / Level" : "Level"}{" "}
+                      {formData.sport && `(${formData.sport})`}
                     </Text>
                     <Pressable onPress={() => setLevelModalVisible(false)}>
                       <Ionicons
@@ -1508,7 +1518,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     </Pressable>
                   </View>
                   <Text style={styles.modalSubtitle}>
-                    Select your competition level
+                    {isRecruiterRole
+                      ? "Pick the league you coach in, or add your own"
+                      : "Select your competition level"}
                   </Text>
                   <ScrollView
                     style={styles.modalScroll}
@@ -1542,6 +1554,53 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                         )}
                       </Pressable>
                     ))}
+
+                    {/* Any league, not just the curated ones. A coach whose
+                        junior league is missing types it instead of leaving
+                        the field blank -- which is what happened on day one. */}
+                    {customLevelOpen ? (
+                      <View style={styles.customLevelRow}>
+                        <TextInput
+                          style={styles.customLevelInput}
+                          value={customLevel}
+                          onChangeText={setCustomLevel}
+                          placeholder={
+                            isRecruiterRole
+                              ? "e.g. Amateur Junior Football"
+                              : "Your level"
+                          }
+                          placeholderTextColor={neutral.gray400}
+                          autoFocus
+                          returnKeyType="done"
+                          maxLength={60}
+                          onSubmitEditing={() => {
+                            const v = customLevel.trim();
+                            if (v) handleLevelSelect(v);
+                          }}
+                        />
+                        <Pressable
+                          style={[
+                            styles.customLevelAdd,
+                            !customLevel.trim() && styles.customLevelAddOff,
+                          ]}
+                          disabled={!customLevel.trim()}
+                          onPress={() => handleLevelSelect(customLevel.trim())}
+                        >
+                          <Text style={styles.customLevelAddText}>Add</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        style={styles.modalOption}
+                        onPress={() => setCustomLevelOpen(true)}
+                      >
+                        <Text style={styles.modalOptionText}>
+                          + {isRecruiterRole
+                            ? "My league isn't listed"
+                            : "Other"}
+                        </Text>
+                      </Pressable>
+                    )}
                   </ScrollView>
                 </Pressable>
               </Pressable>
@@ -1812,6 +1871,35 @@ const styles = StyleSheet.create({
   modalOptionSelected: {
     backgroundColor: brand.white,
     borderColor: brand.primary,
+  },
+  customLevelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  customLevelInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: neutral.gray300,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: "Poppins_500Medium",
+    color: neutral.gray900,
+  },
+  customLevelAdd: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: brand.primary,
+  },
+  customLevelAddOff: { opacity: 0.4 },
+  customLevelAddText: {
+    color: brand.white,
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
   },
   modalOptionText: {
     fontSize: 15,

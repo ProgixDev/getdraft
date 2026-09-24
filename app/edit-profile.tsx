@@ -1113,6 +1113,13 @@ export default function EditProfileScreen() {
         selectedValue={modalSelected}
         onClose={() => setActiveModal(null)}
         onSelect={handleSelectFromModal}
+        // Only the league/level list: a curated list of leagues can never be
+        // complete, while positions and sports are finite and fixed.
+        allowCustom={activeModal === "level"}
+        customLabel={isRecruiter ? "My league isn't listed" : "Other"}
+        customPlaceholder={
+          isRecruiter ? "e.g. Amateur Junior Football" : "Your level"
+        }
       />
 
       {Platform.OS === "ios" && (
@@ -1220,6 +1227,10 @@ function OptionPickerModal({
   selectedValue,
   onClose,
   onSelect,
+  /** Let the user type a value the list does not contain. */
+  allowCustom = false,
+  customPlaceholder,
+  customLabel = "Not listed",
 }: {
   visible: boolean;
   title: string;
@@ -1227,8 +1238,21 @@ function OptionPickerModal({
   selectedValue: string;
   onClose: () => void;
   onSelect: (value: string) => void;
+  allowCustom?: boolean;
+  customPlaceholder?: string;
+  customLabel?: string;
 }) {
   const insets = useSafeAreaInsets();
+  const [customOpen, setCustomOpen] = useState(false);
+  const [custom, setCustom] = useState("");
+  // A fresh sheet every time: a half-typed league from last time would be
+  // confusing, and worse, submittable.
+  useEffect(() => {
+    if (!visible) {
+      setCustomOpen(false);
+      setCustom("");
+    }
+  }, [visible]);
   return (
     <Modal
       visible={visible}
@@ -1281,6 +1305,47 @@ function OptionPickerModal({
                 </Pressable>
               );
             })}
+
+            {allowCustom &&
+              (customOpen ? (
+                <View style={styles.customRow}>
+                  <TextInput
+                    style={styles.customInput}
+                    value={custom}
+                    onChangeText={setCustom}
+                    placeholder={customPlaceholder}
+                    placeholderTextColor={theme.inputPlaceholder}
+                    autoFocus
+                    returnKeyType="done"
+                    maxLength={60}
+                    onSubmitEditing={() => {
+                      const v = custom.trim();
+                      if (v) onSelect(v);
+                    }}
+                  />
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.customAdd,
+                      !custom.trim() && styles.customAddOff,
+                      pressed && styles.pressed,
+                    ]}
+                    disabled={!custom.trim()}
+                    onPress={() => onSelect(custom.trim())}
+                  >
+                    <Text style={styles.customAddText}>Add</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.modalOption,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => setCustomOpen(true)}
+                >
+                  <Text style={styles.modalOptionText}>+ {customLabel}</Text>
+                </Pressable>
+              ))}
           </ScrollView>
         </View>
       </View>
@@ -1289,6 +1354,36 @@ function OptionPickerModal({
 }
 
 const styles = StyleSheet.create({
+  customRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  customInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: "Poppins_500Medium",
+    color: theme.text,
+    backgroundColor: theme.inputBg,
+  },
+  customAdd: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: theme.accent,
+  },
+  customAddOff: { opacity: 0.4 },
+  customAddText: {
+    color: theme.accentText,
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+  },
   container: {
     flex: 1,
     backgroundColor: theme.bg,
