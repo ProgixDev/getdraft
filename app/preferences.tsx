@@ -225,7 +225,7 @@ export default function PreferencesScreen() {
     () => [
       { label: "All Sports", value: "all" },
       ...SPORTS_WITH_POSITIONS.map((sport) => ({
-        label: sport.name,
+        label: `${sport.emoji}  ${sport.name}`,
         value: sport.name,
       })),
     ],

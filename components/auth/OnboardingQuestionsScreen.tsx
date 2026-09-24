@@ -24,7 +24,7 @@ import {
 import { brand, neutral } from '@/config/colors';
 import { usersService } from '@/services/users';
 import { profilesService } from '@/services/profiles';
-import { SPORTS_WITH_POSITIONS } from '@/constants/sportsData';
+import { SPORTS_WITH_POSITIONS, sportEmoji } from '@/constants/sportsData';
 
 type Role = 'athlete' | 'parent' | 'coach' | 'recruiter';
 
@@ -380,6 +380,7 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
                                             disabled={isSaving}
                                         >
                                             <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                                                {sportEmoji(opt) ? `${sportEmoji(opt)}  ` : ''}
                                                 {opt}
                                             </Text>
                                             {selected && (

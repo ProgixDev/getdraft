@@ -34,7 +34,7 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
-import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
+import { SPORTS_WITH_POSITIONS, sportEmoji } from "@/constants/sportsData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { profilesService } from "@/services/profiles";
@@ -838,6 +838,11 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                             !formData[field.id] && styles.inputPlaceholder,
                           ]}
                         >
+                          {/* The chosen sport keeps its glyph once the
+                              picker closes, so the field matches the list. */}
+                          {sportEmoji(formData[field.id])
+                            ? `${sportEmoji(formData[field.id])}  `
+                            : ''}
                           {formData[field.id] || field.placeholder}
                         </Text>
                         <Ionicons
@@ -1316,7 +1321,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                               styles.modalOptionTextSelected,
                           ]}
                         >
-                          {sport.name}
+                          {sport.emoji}  {sport.name}
                         </Text>
                         {formData.sport === sport.name && (
                           <Ionicons

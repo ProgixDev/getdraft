@@ -7,6 +7,13 @@
 export interface SportWithPositions {
   id: string;
   name: string;
+  /**
+   * Shown next to the name everywhere a sport is chosen. A picker of 23
+   * identical text rows is slow to scan; the glyph is what the eye lands on.
+   * Emoji rather than image assets: nothing to bundle, nothing to load, and
+   * it inherits the text colour and size.
+   */
+  emoji: string;
   positions: string[];
   levels: string[];
 }
@@ -15,6 +22,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "soccer",
     name: "Soccer",
+    emoji: "⚽",
     positions: [
       "Goalkeeper",
       "Center Back",
@@ -46,6 +54,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "basketball",
     name: "Basketball",
+    emoji: "🏀",
     positions: [
       "Point Guard",
       "Shooting Guard",
@@ -74,6 +83,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "cricket",
     name: "Cricket",
+    emoji: "🏏",
     positions: ["Batsman", "Bowler", "All-rounder", "Wicket-keeper"],
     levels: [
       "Club",
@@ -90,6 +100,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "tennis",
     name: "Tennis",
+    emoji: "🎾",
     positions: ["Singles", "Doubles"],
     levels: [
       "Recreational",
@@ -111,6 +122,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "volleyball",
     name: "Volleyball",
+    emoji: "🏐",
     positions: [
       "Setter",
       "Outside Hitter",
@@ -136,6 +148,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "table-tennis",
     name: "Table Tennis",
+    emoji: "🏓",
     positions: ["Singles", "Doubles"],
     levels: [
       "Recreational",
@@ -152,6 +165,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "baseball",
     name: "Baseball",
+    emoji: "⚾",
     positions: [
       "Pitcher",
       "Catcher",
@@ -181,6 +195,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "american-football",
     name: "American Football",
+    emoji: "🏈",
     positions: [
       "Quarterback",
       "Running Back",
@@ -213,6 +228,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "hockey",
     name: "Hockey",
+    emoji: "🏒",
     positions: ["Center", "Left Wing", "Right Wing", "Defenseman", "Goalie"],
     levels: [
       "Recreational",
@@ -235,6 +251,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "rugby",
     name: "Rugby",
+    emoji: "🏉",
     positions: [
       "Prop",
       "Hooker",
@@ -264,6 +281,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "badminton",
     name: "Badminton",
+    emoji: "🏸",
     positions: ["Singles", "Doubles", "Mixed Doubles"],
     levels: [
       "Recreational",
@@ -281,6 +299,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "swimming",
     name: "Swimming",
+    emoji: "🏊",
     positions: [
       "Freestyle",
       "Backstroke",
@@ -307,6 +326,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "golf",
     name: "Golf",
+    emoji: "⛳",
     positions: ["Professional", "Amateur"],
     levels: [
       "Recreational",
@@ -327,6 +347,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "lacrosse",
     name: "Lacrosse",
+    emoji: "🥍",
     positions: ["Attack", "Midfield", "Defense", "Goalie"],
     levels: [
       "Recreational",
@@ -348,6 +369,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "track-field",
     name: "Track & Field",
+    emoji: "🏃",
     positions: ["Sprints", "Distance", "Hurdles", "Jumps", "Throws"],
     levels: [
       "Recreational",
@@ -368,6 +390,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "flag-football",
     name: "Flag Football",
+    emoji: "🏈",
     positions: [
       "Quarterback",
       "Center",
@@ -392,6 +415,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "wrestling",
     name: "Wrestling",
+    emoji: "🤼",
     positions: ["Freestyle", "Greco-Roman", "Folkstyle"],
     levels: [
       "Youth",
@@ -410,6 +434,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "gymnastics",
     name: "Gymnastics",
+    emoji: "🤸",
     positions: [
       "All-Around",
       "Vault",
@@ -434,6 +459,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "softball",
     name: "Softball",
+    emoji: "🥎",
     positions: [
       "Pitcher",
       "Catcher",
@@ -461,6 +487,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "boxing",
     name: "Boxing",
+    emoji: "🥊",
     positions: [
       "Flyweight",
       "Bantamweight",
@@ -486,6 +513,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "alpine-skiing",
     name: "Alpine Skiing",
+    emoji: "⛷️",
     positions: ["Slalom", "Giant Slalom", "Super-G", "Downhill", "Combined"],
     levels: [
       "Recreational",
@@ -501,6 +529,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "snowboarding",
     name: "Snowboarding",
+    emoji: "🏂",
     positions: [
       "Halfpipe",
       "Slopestyle",
@@ -521,6 +550,7 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
   {
     id: "figure-skating",
     name: "Figure Skating",
+    emoji: "⛸️",
     positions: ["Singles", "Pairs", "Ice Dance", "Synchronized"],
     levels: [
       "Learn to Skate",
@@ -534,3 +564,26 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
     ],
   },
 ];
+
+/**
+ * The emoji for a sport NAME, '' when we do not know it.
+ *
+ * Lookup is by name because that is what every screen stores and passes
+ * around -- profiles, filters and the onboarding questions all hold the
+ * display name, not the id. The aliases cover the shorter labels the
+ * onboarding questions use ("Football", "Track") so those rows get a glyph
+ * too instead of being the only bare ones.
+ */
+const SPORT_EMOJI_BY_NAME: Record<string, string> = {
+  ...Object.fromEntries(
+    SPORTS_WITH_POSITIONS.map((s) => [s.name.toLowerCase(), s.emoji]),
+  ),
+  football: "\u{1F3C8}",
+  track: "\u{1F3C3}",
+  mma: "\u{1F94B}",
+  "martial arts": "\u{1F94B}",
+  other: "\u{1F3C5}",
+};
+
+export const sportEmoji = (name: string | null | undefined): string =>
+  name ? (SPORT_EMOJI_BY_NAME[name.trim().toLowerCase()] ?? "") : "";

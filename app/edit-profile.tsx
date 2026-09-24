@@ -277,7 +277,10 @@ export default function EditProfileScreen() {
 
   const sportOptions = useMemo<PickerOption[]>(
     () =>
-      SPORTS_WITH_POSITIONS.map((s) => ({ label: s.name, value: s.name })),
+      SPORTS_WITH_POSITIONS.map((s) => ({
+        label: `${s.emoji}  ${s.name}`,
+        value: s.name,
+      })),
     [],
   );
 
