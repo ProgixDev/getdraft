@@ -546,7 +546,8 @@ export function LocationPicker({
                         selected && styles.countryOptionTextSelected,
                       ]}
                     >
-                      {flagEmoji(c.code)}  {c.name}
+                      {flagEmoji(c.code) ? `${flagEmoji(c.code)}  ` : ''}
+                      {c.name}
                     </Text>
                     {selected && (
                       <Ionicons

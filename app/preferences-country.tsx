@@ -403,9 +403,20 @@ export default function PreferencesCountryScreen() {
                         selected && styles.countryCodeBadgeSelected,
                       ]}
                     >
-                      <Text style={styles.countryFlag}>
-                        {flagEmoji(country.code)}
-                      </Text>
+                      {flagEmoji(country.code) ? (
+                        <Text style={styles.countryFlag}>
+                          {flagEmoji(country.code)}
+                        </Text>
+                      ) : (
+                        <Text
+                          style={[
+                            styles.countryCode,
+                            selected && styles.countryCodeSelected,
+                          ]}
+                        >
+                          {country.code}
+                        </Text>
+                      )}
                     </View>
                     <Text
                       style={[
@@ -444,7 +455,11 @@ export default function PreferencesCountryScreen() {
             ]}
           >
             <Text style={styles.applyButtonText}>
-              Use {flagEmoji(selectedCountry.code)} {selectedCountry.name}
+              Use{' '}
+              {flagEmoji(selectedCountry.code)
+                ? `${flagEmoji(selectedCountry.code)} `
+                : ''}
+              {selectedCountry.name}
             </Text>
             <Ionicons name="arrow-forward" size={18} color={theme.accentText} />
           </Pressable>

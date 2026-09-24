@@ -382,16 +382,27 @@ export const countryMatchesQuery = (
 };
 
 /**
+ * Codes with no flag glyph on real devices.
+ *
+ * Unicode only guarantees a flag for officially assigned ISO 3166-1 codes.
+ * XK (Kosovo) is user-assigned, so the regional-indicator pair renders as two
+ * boxed letters on iOS and Android instead of a flag. Returning '' lets the
+ * caller fall back to the country code, which looks deliberate; a tofu box
+ * looks broken.
+ */
+const NO_FLAG_GLYPH = new Set(['XK']);
+
+/**
  * The country's flag as an emoji, from its ISO 3166-1 alpha-2 code: each
  * letter maps to its regional indicator symbol. No image assets, no network,
- * and it renders on both platforms.
+ * and it renders on both platforms. Empty string when there is no glyph --
+ * check before rendering.
  */
 export const flagEmoji = (code: string): string => {
   if (!/^[A-Za-z]{2}$/.test(code)) return '';
+  const upper = code.toUpperCase();
+  if (NO_FLAG_GLYPH.has(upper)) return '';
   return String.fromCodePoint(
-    ...code
-      .toUpperCase()
-      .split('')
-      .map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
+    ...upper.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
   );
 };
