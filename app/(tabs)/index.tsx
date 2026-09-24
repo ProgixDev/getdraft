@@ -62,6 +62,7 @@ import {
   SPORT_IMAGES,
 } from "@/constants/sportThemes";
 import { Asset } from "expo-asset";
+import { sportEmoji } from "@/constants/sportsData";
 import {
   useCarouselGesture,
   type SwipeTrigger,
@@ -252,6 +253,11 @@ function DiscoverCardImpl({
           <Animated.View
             style={[styles.overlay, styles.likeOverlay, draftOverlayStyle]}
           >
+            {sportEmoji(recruiter.sport) ? (
+              <Text style={styles.overlayGlyph}>
+                {sportEmoji(recruiter.sport)}
+              </Text>
+            ) : null}
             <Text style={[styles.overlayText, { color: semantic.success }]}>
               DRAFT
             </Text>
@@ -259,6 +265,7 @@ function DiscoverCardImpl({
           <Animated.View
             style={[styles.overlay, styles.nopeOverlay, passOverlayStyle]}
           >
+            <Ionicons name="close" size={72} color={semantic.error} />
             <Text style={[styles.overlayText, { color: semantic.error }]}>
               PASS
             </Text>
@@ -1552,7 +1559,7 @@ export default function DiscoverScreen() {
                   accessibilityLabel={`Pass on ${topCardName}`}
                 >
                   <Ionicons
-                    name="arrow-back"
+                    name="close"
                     size={actionIconSize}
                     color={brand.white}
                   />
@@ -1614,7 +1621,7 @@ export default function DiscoverScreen() {
                   accessibilityLabel={`Pass on ${topCardName}`}
                 >
                   <Ionicons
-                    name="arrow-back"
+                    name="close"
                     size={actionIconSize}
                     color={brand.white}
                   />
@@ -1661,11 +1668,26 @@ export default function DiscoverScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Draft ${topCardName}`}
                 >
-                  <Ionicons
-                    name="arrow-forward"
-                    size={actionIconSize}
-                    color={brand.white}
-                  />
+                  {/* The card's own sport, not a generic arrow (client
+                      request): a Draft is a sport-specific act, and the
+                      glyph changes as you move through the deck. Falls back
+                      to the arrow for a sport we have no glyph for. */}
+                  {sportEmoji(topCard?.sport) ? (
+                    <Text
+                      style={[
+                        styles.draftEmoji,
+                        { fontSize: actionIconSize * 1.05 },
+                      ]}
+                    >
+                      {sportEmoji(topCard?.sport)}
+                    </Text>
+                  ) : (
+                    <Ionicons
+                      name="arrow-forward"
+                      size={actionIconSize}
+                      color={brand.white}
+                    />
+                  )}
                 </Pressable>
               </View>
             </>
@@ -2100,6 +2122,10 @@ const styles = StyleSheet.create({
   nopeOverlay: {
     borderColor: semantic.error,
   },
+  overlayGlyph: {
+    fontSize: 64,
+    marginBottom: 2,
+  },
   overlayText: {
     fontSize: 42,
     fontFamily: "Poppins_800ExtraBold",
@@ -2318,6 +2344,11 @@ const styles = StyleSheet.create({
   circleButton: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  draftEmoji: {
+    // Emoji ignore `color`; the size is set inline from actionIconSize so it
+    // tracks the arrow it replaces.
+    textAlign: "center",
   },
   passButton: {
     backgroundColor: semantic.error,

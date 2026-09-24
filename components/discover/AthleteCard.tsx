@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { brand, neutral, semantic, theme } from "@/config/colors";
+import { sportEmoji } from "@/constants/sportsData";
 import { AthleteProfile } from "@/constants/discoverData";
 import { getSportTheme } from "@/constants/sportThemes";
 import {
@@ -236,9 +237,18 @@ function AthleteCardImpl({
             <Text style={styles.cardTagText}>Available for Recruitment</Text>
           </View>
 
+          {/* The stamp the card carries as you drag it: the sport on the
+              Draft side, a red cross on the Pass side (client request). The
+              word stays underneath -- the glyph is what you see at a glance,
+              the word is what removes any doubt. */}
           <Animated.View
             style={[styles.overlay, styles.likeOverlay, draftOverlayStyle]}
           >
+            {sportEmoji(athlete.sport) ? (
+              <Text style={styles.overlayGlyph}>
+                {sportEmoji(athlete.sport)}
+              </Text>
+            ) : null}
             <Text style={[styles.overlayText, { color: semantic.success }]}>
               DRAFT
             </Text>
@@ -246,6 +256,7 @@ function AthleteCardImpl({
           <Animated.View
             style={[styles.overlay, styles.nopeOverlay, passOverlayStyle]}
           >
+            <Ionicons name="close" size={72} color={semantic.error} />
             <Text style={[styles.overlayText, { color: semantic.error }]}>
               PASS
             </Text>
@@ -383,6 +394,10 @@ const styles = StyleSheet.create({
   },
   nopeOverlay: {
     borderColor: semantic.error,
+  },
+  overlayGlyph: {
+    fontSize: 64,
+    marginBottom: 2,
   },
   overlayText: {
     fontSize: 42,
