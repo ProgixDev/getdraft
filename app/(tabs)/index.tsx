@@ -384,12 +384,14 @@ function DiscoverBackgroundImpl({
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <BackdropLayer sport={sport} sportTheme={sportTheme} />
       {/* Readable dark scrim so header / search / card text stay legible
-          over the bundled hero image. */}
+          over the bundled hero image. The middle band used to be 0.35,
+          which is where the empty state and the header sit -- white text on
+          a blurred action photo, and the client could not read it. */}
       <LinearGradient
         colors={[
-          "rgba(0,0,0,0.55)",
-          "rgba(0,0,0,0.35)",
-          "rgba(0,0,0,0.75)",
+          "rgba(0,0,0,0.72)",
+          "rgba(0,0,0,0.58)",
+          "rgba(0,0,0,0.85)",
         ]}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
@@ -1208,9 +1210,13 @@ export default function DiscoverScreen() {
         sportTheme={sportTheme}
       />
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {displayName} 👋</Text>
-          <Text style={styles.title}>{discoverTitle}</Text>
+        <View style={styles.headerTitles}>
+          <Text style={styles.greeting} numberOfLines={1}>
+            Hello, {displayName} 👋
+          </Text>
+          <Text style={styles.title} numberOfLines={1}>
+            {discoverTitle}
+          </Text>
         </View>
         <View style={styles.headerActions}>
           {isRecruiter && (
@@ -1719,10 +1725,17 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_700Bold",
     color: theme.text,
   },
+  // The greeting shrinks; the chips do not. Without this the rank chip was
+  // pushed past the right edge and clipped ("#2 Canada · A...").
+  headerTitles: {
+    flexShrink: 1,
+    marginRight: 10,
+  },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexShrink: 0,
   },
   notifyButton: {
     width: 36,
@@ -1738,7 +1751,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    maxWidth: 200,
+    maxWidth: 168,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 18,
@@ -2158,10 +2171,19 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_500Medium",
     color: brand.white,
   },
+  // A panel, not floating text. Every state that lands here -- loading,
+  // "couldn't load", "you've seen everyone" -- previously rendered white
+  // text straight onto a blurred sport photo.
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    padding: 40,
+    marginHorizontal: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 34,
+    borderRadius: 22,
+    backgroundColor: "rgba(9,12,18,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
   },
   emptyTitle: {
     fontSize: 20,
