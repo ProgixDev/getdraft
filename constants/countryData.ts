@@ -6,6 +6,18 @@ export interface CountryOption {
 }
 
 /**
+ * Lowercase and strip accents, so "cote" finds "Côte d'Ivoire", "curacao"
+ * finds "Curaçao" and "aland" finds "Åland Islands". Without this a user has
+ * to type a character their keyboard may not even offer.
+ */
+const fold = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+
+/**
  * Every ISO 3166-1 country and territory (250), with an approximate centroid.
  * Generated from the mledoze/countries dataset — do not hand-edit: a typo in a
  * centroid drops athletes into the ocean on the globe.
@@ -14,7 +26,7 @@ export interface CountryOption {
  * sport they field their own teams, so a curated "real countries only" list
  * would exclude legitimate athletes.
  */
-export const COUNTRY_OPTIONS: CountryOption[] = [
+const COUNTRY_LIST: CountryOption[] = [
   { name: "Afghanistan", code: "AF", lat: 33.0, lng: 65.0 },
   { name: "Albania", code: "AL", lat: 41.0, lng: 20.0 },
   { name: "Algeria", code: "DZ", lat: 28.0, lng: 3.0 },
@@ -267,6 +279,19 @@ export const COUNTRY_OPTIONS: CountryOption[] = [
   { name: "Åland Islands", code: "AX", lat: 60.1167, lng: 19.9 },
 ];
 
+/**
+ * The list, ordered the way a human scans it.
+ *
+ * The literal above is grouped by the source dataset, and a plain sort is no
+ * better: byte order puts every accented name past Z, so "Åland Islands" sat
+ * below Zimbabwe, "Türkiye" below Tuvalu, "São Tomé" below Syria and
+ * "Réunion" below Rwanda -- four countries nobody could find by scrolling.
+ * Sorting on the folded name puts each one under the letter people look for.
+ */
+export const COUNTRY_OPTIONS: CountryOption[] = [...COUNTRY_LIST].sort((a, b) =>
+  fold(a.name).localeCompare(fold(b.name)),
+);
+
 const normalize = (s: string): string => s.trim().toLowerCase();
 
 const BY_NAME: Map<string, CountryOption> = new Map(
@@ -320,18 +345,6 @@ export const findCountryByName = (name: string): CountryOption | undefined => {
   const aliased = LEGACY_NAME_ALIASES[key];
   return aliased ? BY_NAME.get(aliased) : undefined;
 };
-
-/**
- * Lowercase and strip accents, so "cote" finds "Côte d'Ivoire", "curacao"
- * finds "Curaçao" and "aland" finds "Åland Islands". Without this a user has
- * to type a character their keyboard may not even offer.
- */
-const fold = (s: string): string =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim();
 
 /** Every alias that resolves to a given country name, folded. */
 const ALIASES_BY_TARGET: Map<string, string[]> = (() => {
