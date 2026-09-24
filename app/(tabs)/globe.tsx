@@ -49,7 +49,12 @@ import {
   useRegionSearch,
   type RegionOption,
 } from "@/hooks/use-region-search";
-import { COUNTRY_OPTIONS, type CountryOption } from "@/constants/countryData";
+import {
+  COUNTRY_OPTIONS,
+  countryMatchesQuery,
+  flagEmoji,
+  type CountryOption,
+} from "@/constants/countryData";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -553,9 +558,8 @@ export default function GlobeTab() {
   const countryFilteredList = useMemo(() => {
     const q = sheetQuery.trim().toLowerCase();
     if (q.length < 2) return [];
-    return COUNTRY_OPTIONS.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
+    return COUNTRY_OPTIONS.filter((c) =>
+      countryMatchesQuery(c, sheetQuery),
     ).slice(0, 6);
   }, [sheetQuery]);
 

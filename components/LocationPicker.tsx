@@ -20,7 +20,11 @@ import * as Location from "expo-location";
 
 import { brand, theme } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
-import { COUNTRY_OPTIONS, type CountryOption } from "@/constants/countryData";
+import {
+  COUNTRY_OPTIONS,
+  flagEmoji,
+  type CountryOption,
+} from "@/constants/countryData";
 import { getMapboxToken, useMapboxToken } from "@/lib/mapbox-token";
 
 const SEARCH_DEBOUNCE_MS = 350;
@@ -542,7 +546,7 @@ export function LocationPicker({
                         selected && styles.countryOptionTextSelected,
                       ]}
                     >
-                      {c.name}
+                      {flagEmoji(c.code)}  {c.name}
                     </Text>
                     {selected && (
                       <Ionicons

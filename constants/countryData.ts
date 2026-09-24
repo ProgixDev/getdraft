@@ -320,3 +320,65 @@ export const findCountryByName = (name: string): CountryOption | undefined => {
   const aliased = LEGACY_NAME_ALIASES[key];
   return aliased ? BY_NAME.get(aliased) : undefined;
 };
+
+/**
+ * Lowercase and strip accents, so "cote" finds "Côte d'Ivoire", "curacao"
+ * finds "Curaçao" and "aland" finds "Åland Islands". Without this a user has
+ * to type a character their keyboard may not even offer.
+ */
+const fold = (s: string): string =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+
+/** Every alias that resolves to a given country name, folded. */
+const ALIASES_BY_TARGET: Map<string, string[]> = (() => {
+  const m = new Map<string, string[]>();
+  for (const [alias, target] of Object.entries(LEGACY_NAME_ALIASES)) {
+    const key = fold(target);
+    const list = m.get(key) ?? [];
+    list.push(fold(alias));
+    m.set(key, list);
+  }
+  return m;
+})();
+
+/**
+ * Does this country match what the user typed?
+ *
+ * Matches the name, the ISO code, and the legacy aliases -- the aliases
+ * existed but only findCountryByName consulted them, so the search box
+ * returned nothing for "USA", "UK", "UAE" or "Holland" even though the app
+ * knew what they meant. Accents are folded on both sides.
+ *
+ * Every country search in the app goes through this, so the picker, the
+ * Globe filter sheet and the location picker behave the same.
+ */
+export const countryMatchesQuery = (
+  country: CountryOption,
+  rawQuery: string,
+): boolean => {
+  const q = fold(rawQuery);
+  if (!q) return true;
+  if (fold(country.name).includes(q)) return true;
+  if (country.code.toLowerCase().startsWith(q)) return true;
+  const aliases = ALIASES_BY_TARGET.get(fold(country.name));
+  return !!aliases?.some((a) => a.includes(q));
+};
+
+/**
+ * The country's flag as an emoji, from its ISO 3166-1 alpha-2 code: each
+ * letter maps to its regional indicator symbol. No image assets, no network,
+ * and it renders on both platforms.
+ */
+export const flagEmoji = (code: string): string => {
+  if (!/^[A-Za-z]{2}$/.test(code)) return '';
+  return String.fromCodePoint(
+    ...code
+      .toUpperCase()
+      .split('')
+      .map((c) => 0x1f1e6 + c.charCodeAt(0) - 65),
+  );
+};

@@ -27,6 +27,8 @@ import {
 import { brand, neutral, theme } from "@/config/colors";
 import {
   COUNTRY_OPTIONS,
+  countryMatchesQuery,
+  flagEmoji,
   CountryOption,
   findCountryByName,
 } from "@/constants/countryData";
@@ -160,14 +162,12 @@ export default function PreferencesCountryScreen() {
   });
 
   const filteredCountries = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = searchQuery.trim();
     if (!query) return COUNTRY_OPTIONS;
-
-    return COUNTRY_OPTIONS.filter(
-      (country) =>
-        country.name.toLowerCase().includes(query) ||
-        country.code.toLowerCase().includes(query),
-    );
+    // countryMatchesQuery folds accents and knows the aliases, so "USA",
+    // "UK", "UAE", "Holland" and "Cote" all find their country. The old
+    // filter compared raw strings and returned nothing for every one of them.
+    return COUNTRY_OPTIONS.filter((c) => countryMatchesQuery(c, query));
   }, [searchQuery]);
 
   // Shared with the Globe tab's filter sheet — see hooks/use-region-search.
@@ -403,13 +403,8 @@ export default function PreferencesCountryScreen() {
                         selected && styles.countryCodeBadgeSelected,
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.countryCode,
-                          selected && styles.countryCodeSelected,
-                        ]}
-                      >
-                        {country.code}
+                      <Text style={styles.countryFlag}>
+                        {flagEmoji(country.code)}
                       </Text>
                     </View>
                     <Text
@@ -449,7 +444,7 @@ export default function PreferencesCountryScreen() {
             ]}
           >
             <Text style={styles.applyButtonText}>
-              Use {selectedCountry.name}
+              Use {flagEmoji(selectedCountry.code)} {selectedCountry.name}
             </Text>
             <Ionicons name="arrow-forward" size={18} color={theme.accentText} />
           </Pressable>
@@ -567,6 +562,10 @@ const styles = StyleSheet.create({
   countryCodeBadgeSelected: {
     backgroundColor: "rgba(255,255,255,0.2)",
     borderColor: "rgba(255,255,255,0.35)",
+  },
+  countryFlag: {
+    fontSize: 22,
+    lineHeight: 26,
   },
   countryCode: {
     fontSize: 11,
