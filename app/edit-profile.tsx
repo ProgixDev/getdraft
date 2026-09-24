@@ -38,6 +38,7 @@ import {
 
 import { brand, theme } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
+import { fold } from "@/constants/countryData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { RootState } from "@/store";
@@ -1245,14 +1246,24 @@ function OptionPickerModal({
   const insets = useSafeAreaInsets();
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState("");
+  const [query, setQuery] = useState("");
   // A fresh sheet every time: a half-typed league from last time would be
   // confusing, and worse, submittable.
   useEffect(() => {
     if (!visible) {
       setCustomOpen(false);
       setCustom("");
+      setQuery("");
     }
   }, [visible]);
+  // Hockey alone offers thirty-odd leagues. Past a dozen rows, scrolling to
+  // find one is the same complaint we already had about the country list.
+  const searchable = options.length > 12;
+  const shown = useMemo(() => {
+    const q = fold(query);
+    if (!q) return options;
+    return options.filter((o) => fold(o.label).includes(q));
+  }, [options, query]);
   return (
     <Modal
       visible={visible}
@@ -1271,11 +1282,40 @@ function OptionPickerModal({
               <Ionicons name="close" size={20} color={theme.text} />
             </Pressable>
           </View>
+          {searchable && (
+            <View style={styles.modalSearch}>
+              <Ionicons name="search" size={16} color={theme.textMuted} />
+              <TextInput
+                style={styles.modalSearchInput}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search"
+                placeholderTextColor={theme.inputPlaceholder}
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => setQuery("")} hitSlop={8}>
+                  <Ionicons
+                    name="close-circle"
+                    size={16}
+                    color={theme.textMuted}
+                  />
+                </Pressable>
+              )}
+            </View>
+          )}
           <ScrollView
             style={styles.modalOptions}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            {options.map((option) => {
+            {shown.length === 0 && (
+              <Text style={styles.modalEmpty}>
+                Nothing matches &ldquo;{query.trim()}&rdquo;
+              </Text>
+            )}
+            {shown.map((option) => {
               const selected = option.value === selectedValue;
               return (
                 <Pressable
@@ -1718,6 +1758,30 @@ const styles = StyleSheet.create({
   },
   modalOptions: {
     marginTop: 4,
+  },
+  modalSearch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.inputBg,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: theme.text,
+    padding: 0,
+  },
+  modalEmpty: {
+    paddingVertical: 18,
+    textAlign: "center",
+    fontSize: 14,
+    color: theme.textMuted,
   },
   modalOption: {
     flexDirection: "row",

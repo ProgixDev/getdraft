@@ -9,8 +9,11 @@ export interface CountryOption {
  * Lowercase and strip accents, so "cote" finds "Côte d'Ivoire", "curacao"
  * finds "Curaçao" and "aland" finds "Åland Islands". Without this a user has
  * to type a character their keyboard may not even offer.
+ *
+ * Exported because every long picker in the app wants the same behaviour,
+ * not only the country one.
  */
-const fold = (s: string): string =>
+export const fold = (s: string): string =>
   s
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')

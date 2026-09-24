@@ -25,6 +25,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { fold } from "@/constants/countryData";
 import {
   useFonts,
   Poppins_400Regular,
@@ -429,7 +430,18 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     (s) => s.name === formData.sport,
   );
   const positionOptions = selectedSportData?.positions ?? [];
-  const levelOptions = selectedSportData?.levels ?? [];
+  const levelOptions = useMemo(
+    () => selectedSportData?.levels ?? [],
+    [selectedSportData],
+  );
+  // Hockey alone lists thirty-odd leagues, so the sheet gets a search box
+  // once scrolling stops being the quick way to find one.
+  const [levelQuery, setLevelQuery] = useState("");
+  const shownLevels = useMemo(() => {
+    const q = fold(levelQuery);
+    if (!q) return levelOptions;
+    return levelOptions.filter((l) => fold(l).includes(q));
+  }, [levelOptions, levelQuery]);
 
   const formatDate = (date: Date) => {
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1522,11 +1534,39 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                       ? "Pick the league you coach in, or add your own"
                       : "Select your competition level"}
                   </Text>
+                  {levelOptions.length > 12 && (
+                    <View style={styles.levelSearch}>
+                      <Ionicons
+                        name="search"
+                        size={16}
+                        color={neutral.gray600}
+                      />
+                      <TextInput
+                        style={styles.levelSearchInput}
+                        value={levelQuery}
+                        onChangeText={setLevelQuery}
+                        placeholder="Search"
+                        placeholderTextColor={neutral.gray600}
+                        autoCorrect={false}
+                        returnKeyType="search"
+                      />
+                      {levelQuery.length > 0 && (
+                        <Pressable onPress={() => setLevelQuery("")} hitSlop={8}>
+                          <Ionicons
+                            name="close-circle"
+                            size={16}
+                            color={neutral.gray600}
+                          />
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
                   <ScrollView
                     style={styles.modalScroll}
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    {levelOptions.map((level) => (
+                    {shownLevels.map((level) => (
                       <Pressable
                         key={level}
                         style={[
@@ -1871,6 +1911,23 @@ const styles = StyleSheet.create({
   modalOptionSelected: {
     backgroundColor: brand.white,
     borderColor: brand.primary,
+  },
+  levelSearch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: neutral.gray200,
+  },
+  levelSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: neutral.gray900,
+    padding: 0,
   },
   customLevelRow: {
     flexDirection: "row",

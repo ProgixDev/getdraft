@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,7 +26,7 @@ import { brand, neutral, theme } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { getCitiesForCountry } from "@/constants/citiesData";
-import { findCountryByName } from "@/constants/countryData";
+import { findCountryByName, fold } from "@/constants/countryData";
 import { RootState } from "@/store";
 import {
   DiscoverPreferences,
@@ -122,6 +123,17 @@ function OptionPickerModal({
   emptyHint?: string;
 }) {
   const insets = useSafeAreaInsets();
+  // The city and league lists both run long now; past a dozen rows a search
+  // box beats scrolling.
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    if (!visible) setQuery("");
+  }, [visible]);
+  const shown = useMemo(() => {
+    const q = fold(query);
+    if (!q) return options;
+    return options.filter((o) => fold(o.label).includes(q));
+  }, [options, query]);
 
   return (
     <Modal
@@ -139,6 +151,29 @@ function OptionPickerModal({
               <Ionicons name="close" size={20} color={theme.text} />
             </Pressable>
           </View>
+          {options.length > 12 && (
+            <View style={styles.modalSearch}>
+              <Ionicons name="search" size={16} color={theme.textMuted} />
+              <TextInput
+                style={styles.modalSearchInput}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search"
+                placeholderTextColor={theme.inputPlaceholder}
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => setQuery("")} hitSlop={8}>
+                  <Ionicons
+                    name="close-circle"
+                    size={16}
+                    color={theme.textMuted}
+                  />
+                </Pressable>
+              )}
+            </View>
+          )}
           <ScrollView
             style={[styles.modalOptions, { maxHeight: LIST_MAX_HEIGHT }]}
             contentContainerStyle={styles.modalOptionsContent}
@@ -148,7 +183,12 @@ function OptionPickerModal({
             {emptyHint && options.length <= 1 ? (
               <Text style={styles.modalEmptyHint}>{emptyHint}</Text>
             ) : null}
-            {options.map((option) => {
+            {query.trim().length > 0 && shown.length === 0 ? (
+              <Text style={styles.modalEmptyHint}>
+                Nothing matches &ldquo;{query.trim()}&rdquo;
+              </Text>
+            ) : null}
+            {shown.map((option) => {
               const selected = option.value === selectedValue;
               return (
                 <Pressable
@@ -868,6 +908,24 @@ const styles = StyleSheet.create({
   },
   modalOptions: {
     marginTop: 4,
+  },
+  modalSearch: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.inputBg,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: theme.text,
+    padding: 0,
   },
   modalOptionsContent: {
     paddingBottom: 8,
