@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -46,6 +46,9 @@ interface PhoneInputScreenProps {
 /** Loose E.164 check: leading +, then 8–15 digits. */
 const E164 = /^\+[1-9]\d{7,14}$/;
 
+// Matches the resend timer already on the code-entry screen.
+const RESEND_COOLDOWN_SECONDS = 60;
+
 /**
  * Best-effort split: given an E.164 string, find the country whose dial
  * code matches the longest prefix. Returns the country + the rest.
@@ -87,13 +90,29 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pending, setPending] = useState<null | Channel>(null);
   const [error, setError] = useState<string | null>(null);
+  // Prelude blocks a number that asks for too many codes too quickly, and the
+  // person it locks out is the one trying to sign in. The code screen has had
+  // a resend timer all along; this screen had nothing, so the button could be
+  // tapped as fast as the round-trip allowed. Same 60s here.
+  const [cooldown, setCooldown] = useState(0);
+  const [lastSentTo, setLastSentTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((v) => v - 1), 1000);
+    return () => clearInterval(t);
+  }, [cooldown]);
+
+  const digits = localNumber.replace(/\D/g, '');
+  const normalized = `+${country.dialCode}${digits}`;
+  // Only the number we just texted is on hold -- correcting a typo and trying
+  // a different number should not be punished.
+  const onCooldown = cooldown > 0 && normalized === lastSentTo;
 
   const handleSend = async (channel: Channel) => {
-    if (pending) return;
+    if (pending || onCooldown) return;
     setError(null);
 
-    const digits = localNumber.replace(/\D/g, '');
-    const normalized = `+${country.dialCode}${digits}`;
     if (!E164.test(normalized)) {
       setError('Enter a valid phone number for the selected country.');
       return;
@@ -102,11 +121,18 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
     setPending(channel);
     try {
       await authService.requestPhoneOtp(normalized, channel, intent);
+      setLastSentTo(normalized);
+      setCooldown(RESEND_COOLDOWN_SECONDS);
       onCodeSent(normalized, channel);
     } catch (err: any) {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'Could not send the code. Try again.';
       setError(String(message));
+      // A rejected send still counts against the provider's per-number limit,
+      // so hold the button here too -- retrying into a block is what deepens
+      // it.
+      setLastSentTo(normalized);
+      setCooldown(RESEND_COOLDOWN_SECONDS);
     } finally {
       setPending(null);
     }
@@ -184,10 +210,10 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
             <Pressable
               style={[
                 styles.smsButton,
-                pending !== null && styles.buttonDisabled,
+                (pending !== null || onCooldown) && styles.buttonDisabled,
               ]}
               onPress={() => handleSend('sms')}
-              disabled={pending !== null}
+              disabled={pending !== null || onCooldown}
             >
               {pending === 'sms' ? (
                 <ActivityIndicator color={brand.white} />
@@ -202,10 +228,10 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
             <Pressable
               style={[
                 styles.whatsappButton,
-                pending !== null && styles.buttonDisabled,
+                (pending !== null || onCooldown) && styles.buttonDisabled,
               ]}
               onPress={() => handleSend('whatsapp')}
-              disabled={pending !== null}
+              disabled={pending !== null || onCooldown}
             >
               {pending === 'whatsapp' ? (
                 <ActivityIndicator color={brand.white} />
@@ -216,6 +242,12 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
                 </>
               )}
             </Pressable>
+
+            {onCooldown && (
+              <Text style={styles.cooldownText}>
+                You can ask for another code in {cooldown}s.
+              </Text>
+            )}
 
             <Text style={styles.legal}>
               Standard messaging rates may apply. By continuing you agree to our
@@ -353,6 +385,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: neutral.gray500,
     marginTop: 8,
+  },
+  cooldownText: {
+    color: neutral.gray600,
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    marginTop: 12,
+    textAlign: 'center',
   },
   errorText: {
     color: '#D14',
