@@ -623,6 +623,54 @@ export const SPORTS_WITH_POSITIONS: SportWithPositions[] = [
       "Professional",
     ],
   },
+  {
+    id: "fitness",
+    name: "Fitness",
+    emoji: "🏋️",
+    // Fitness is a discipline, not a position sport, so "position" is the
+    // thing someone actually does -- which is what a coach searching for a
+    // powerlifter or a HYROX athlete is filtering on.
+    positions: [
+      "Personal Training",
+      "Strength & Conditioning",
+      "Bodybuilding",
+      "Physique",
+      "Powerlifting",
+      "Olympic Weightlifting",
+      "CrossFit",
+      "Functional Fitness",
+      "HYROX",
+      "Calisthenics",
+      "Strongman",
+      "Group Fitness",
+      "Endurance / Hybrid",
+      "Other",
+    ],
+    // Reads as a career for both sides: an athlete's competition level and a
+    // coach's certification sit on the same ladder here, because in fitness
+    // they genuinely do.
+    levels: [
+      "Recreational",
+      "Gym / Club",
+      "High School",
+      "Certified Trainer (NASM / ACE / ISSA)",
+      "canfitpro / CSEP (Canada)",
+      "CSCS (Strength & Conditioning)",
+      "CEGEP (Canada)",
+      "College / University S&C",
+      "NCAA Strength & Conditioning",
+      "U SPORTS (Canada)",
+      "CrossFit Affiliate",
+      "Provincial / Regional",
+      "National",
+      "NPC / IFBB",
+      "CrossFit Games",
+      "HYROX Elite",
+      "World Championships",
+      "Olympic (Weightlifting)",
+      "Professional",
+    ],
+  },
   // ── Winter Olympic sports ──
   {
     id: "alpine-skiing",

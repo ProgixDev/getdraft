@@ -129,6 +129,12 @@ export const SPORT_THEMES: Record<string, SportTheme> = {
     icon: "baseball",
     image: require("@/assets/sports/baseball.jpg"),
   },
+  Fitness: {
+    gradient: ["#141018", "#221A2C", "#9B6CF0"],
+    accent: "#9B6CF0",
+    icon: "barbell",
+    image: require("@/assets/sports/default.jpg"),
+  },
   Boxing: {
     gradient: ["#2A0E0E", "#3A1515", "#D64545"],
     accent: "#D64545",
