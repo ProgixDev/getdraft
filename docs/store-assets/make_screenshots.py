@@ -74,11 +74,17 @@ PANELS = [
 # upload without them and scales everything else from those two. 1290x2796
 # is the accepted 6.9" alternative and the size Apple lists first.
 #
+# The 6.5" set is the iPhone 11 Pro Max / XS Max slot, 1242x2688. Apple no
+# longer demands it now that 6.9" is the required one, but our iOS dev asked
+# for it by name, and App Store Connect still accepts it as its own set --
+# so it is worth having rather than letting Apple downscale the 6.9" art.
+#
 # The iPad is 3:4 rather than 9:19.5, so a phone at 72% of the width would
 # tower over it: the art shrinks and the copy gets more room instead.
 SIZES = {
     "google-play": (1080, 1920, 0.72),
     "app-store-6.9": (1290, 2796, 0.72),
+    "app-store-6.5": (1242, 2688, 0.72),
     "app-store-ipad-13": (2048, 2732, 0.46),
 }
 
