@@ -639,10 +639,13 @@ export default function ProfileScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Profile</Text>
         <Pressable
-          style={styles.editButton}
+          style={({ pressed }) => [styles.editButton, pressed && { opacity: 0.6 }]}
           onPress={() => router.push("/edit-profile")}
+          accessibilityRole="button"
+          accessibilityLabel="Edit profile"
         >
-          <Ionicons name="pencil-outline" size={22} color={theme.text} />
+          <Ionicons name="pencil-outline" size={16} color={theme.text} />
+          <Text style={styles.editButtonText}>Edit Profile</Text>
         </Pressable>
       </View>
 
@@ -695,6 +698,23 @@ export default function ProfileScreen() {
                 the editor, next to everything else that is editable. */}
           </View>
           <Text style={styles.name}>{displayName}</Text>
+          {/* Coaches and agents kept turning up with the grey placeholder
+              because nothing ever asked them for a photo. A labelled button
+              only while one is missing -- deliberately not a tap handler on
+              the avatar, which is the thing that got reported as confusing. */}
+          {!avatarSource && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.addPhotoButton,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={() => router.push("/edit-profile")}
+              accessibilityRole="button"
+            >
+              <Ionicons name="camera-outline" size={16} color={brand.white} />
+              <Text style={styles.addPhotoText}>Add a profile photo</Text>
+            </Pressable>
+          )}
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>{richRoleLabel}</Text>
           </View>
@@ -1431,7 +1451,34 @@ const styles = StyleSheet.create({
     color: theme.text,
   },
   editButton: {
-    padding: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  editButtonText: {
+    fontSize: 13,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.text,
+  },
+  addPhotoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: brand.primary,
+  },
+  addPhotoText: {
+    fontSize: 13,
+    fontFamily: "Poppins_600SemiBold",
+    color: brand.white,
   },
   loadingWrap: {
     flex: 1,
