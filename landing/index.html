@@ -402,14 +402,14 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:18px; padding:28px 18px;
   background:radial-gradient(circle at 50% 38%, #0E2647 0%, transparent 62%), var(--bg);
-  transition:opacity .55s ease, visibility .55s;
+  transition:opacity .6s ease, visibility .6s;
 }
 #intro.done{opacity:0; visibility:hidden; pointer-events:none}
 
 /* beat one: the stamp */
 #intro .stamp{
   display:flex; flex-direction:column; align-items:center; gap:20px;
-  animation:wlStampOut .38s ease 1.45s forwards;
+  animation:wlStampOut .5s ease 2.0s forwards;
 }
 #intro .mark{
   width:78px; height:78px; opacity:0; transform:scale(.78);
@@ -425,7 +425,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
 #intro .welcome{
   position:absolute; inset:0; display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:14px; padding:30px 18px;
-  opacity:0; animation:wlIn .55s ease 1.65s forwards;
+  opacity:0; animation:wlIn .8s ease 2.5s forwards;
 }
 #intro .wl-title{font-size:clamp(23px,6.2vw,34px); font-weight:800; letter-spacing:-.6px; text-align:center}
 #intro .wl-sub{font-size:clamp(13px,3.6vw,17px); color:var(--muted); text-align:center; margin-top:-6px}
@@ -680,7 +680,7 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
       if(typeof target!=="number"||!isFinite(target)||target<=0){
         target=parseInt(n.getAttribute("data-fallback"),10);
       }
-      var t0=null, dur=1000;
+      var t0=null, dur=1400;
       function step(ts){
         if(t0===null) t0=ts;
         var p=Math.min(1,(ts-t0)/dur), eased=1-Math.pow(1-p,3);
@@ -695,16 +695,16 @@ footer{border-top:1px solid var(--line); padding:44px 0 40px; background:var(--b
       .then(function(r){ return r.ok?r.json():null; })
       .then(function(j){ run((j&&j.data)||{}); })
       .catch(function(){ run({}); });
-  },2050);
+  },3100);
 
-  var t=setTimeout(finish,3900);
+  var t=setTimeout(finish,7000);
   function skip(){ clearTimeout(t); finish(); }
   var btn=el.querySelector(".wl-skip");
   if(btn) btn.addEventListener("click",skip);
   ["click","keydown","wheel","touchstart"].forEach(function(ev){
     window.addEventListener(ev,skip,{once:true,passive:true});
   });
-  setTimeout(finish,5200);
+  setTimeout(finish,8600);
 })();
 </script>
 
