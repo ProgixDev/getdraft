@@ -6,24 +6,17 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { SupabaseService } from '../../config/supabase.config';
 import { CurrentUserPayload } from '../types';
 import { resolveAuthzClaims } from '../utils/authz-claims';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  /**
-   * Service-role client used only to resolve authz claims for accounts that
-   * predate app_metadata. Built lazily and cached — the guard is a
-   * singleton (APP_GUARD), so this is one client for the whole process.
-   */
-  private adminClient: SupabaseClient | null = null;
-
   constructor(
     private reflector: Reflector,
-    private configService: ConfigService,
+    private supabaseService: SupabaseService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -40,10 +33,12 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const supabase = createClient(
-        this.configService.get<string>('SUPABASE_URL')!,
-        this.configService.get<string>('SUPABASE_ANON_KEY')!,
-      );
+      // The shared client, never a fresh one. createClient() here ran on
+      // EVERY authenticated request, and supabase-js defaults to
+      // autoRefreshToken, so each call armed a 30s interval that nothing ever
+      // cleared -- a timer and a client leaked per request. SupabaseService
+      // hands out one process-wide client with that machinery switched off.
+      const supabase = this.supabaseService.getClient();
 
       const {
         data: { user },
@@ -84,13 +79,7 @@ export class JwtAuthGuard implements CanActivate {
   }
 
   private getAdminClient(): SupabaseClient {
-    if (!this.adminClient) {
-      this.adminClient = createClient(
-        this.configService.get<string>('SUPABASE_URL')!,
-        this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY')!,
-      );
-    }
-    return this.adminClient;
+    return this.supabaseService.getAdminClient();
   }
 
   private extractToken(request: any): string | null {
