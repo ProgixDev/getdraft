@@ -435,6 +435,14 @@ export default function EditProfileScreen() {
         mime,
       );
       setAvatarUploadedUrl(uploaded.publicUrl);
+      // Write it now rather than waiting for Save. Save is gated on name,
+      // sport and organization, so a coach whose recruiter row has no sport
+      // picked a photo, watched it appear, tapped Save, got "Pick a sport."
+      // -- and lost the photo, while the uploaded blob stayed orphaned in
+      // storage. That is why so many coaches still show the grey
+      // placeholder. The swipe-card gallery already commits on upload for
+      // exactly this reason.
+      await usersService.updateMe({ avatar_url: uploaded.publicUrl });
     } catch (err: any) {
       setAvatarPreview(null);
       setAvatarUploadedUrl(null);
@@ -612,6 +620,30 @@ export default function EditProfileScreen() {
     setErrorMsg(null);
     setSaving(true);
     try {
+      // The recruiter and parent branches below merge into whatever is
+      // already on the server, using `existingProfile` from the mount fetch.
+      // That fetch does .catch(() => null) on EVERY error, not just a 404,
+      // so a network blip when the screen opened turned a later save into
+      // `tags: []` -- silently erasing a coach's league and region, with no
+      // error shown. Read the live row instead, and refuse to save rather
+      // than guess at it.
+      let livePrev: any = existingProfile ?? null;
+      if (isRecruiter || isParent) {
+        try {
+          livePrev = isRecruiter
+            ? await profilesService.getRecruiterProfile()
+            : await profilesService.getParentProfile();
+        } catch (err: any) {
+          if (err?.response?.status !== 404) {
+            setErrorMsg(
+              "Couldn't load your current profile. Check your connection and try again.",
+            );
+            return;
+          }
+          livePrev = null; // a genuine 404: no row yet, first save creates it
+        }
+      }
+
       const userUpdates: Record<string, any> = {
         name: name.trim(),
         location: location.trim(),
@@ -644,7 +676,7 @@ export default function EditProfileScreen() {
           date_of_birth: dob ? toIsoDate(dob) : undefined,
         });
       } else if (isRecruiter) {
-        const prev = existingProfile ?? {};
+        const prev = livePrev ?? {};
         await profilesService.upsertRecruiterProfile({
           organization: organization.trim(),
           sport,
@@ -655,7 +687,7 @@ export default function EditProfileScreen() {
           bio: bio.trim(),
         });
       } else if (isParent) {
-        const prev = existingProfile ?? {};
+        const prev = livePrev ?? {};
         await profilesService.upsertParentProfile({
           relationship: prev.relationship ?? "Parent",
           child_athlete_id: prev.child_athlete_id ?? undefined,
