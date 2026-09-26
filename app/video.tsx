@@ -41,7 +41,6 @@ export default function VideoPlayerScreen() {
         player={player}
         style={StyleSheet.absoluteFill}
         contentFit="contain"
-        allowsFullscreen
         allowsPictureInPicture
         nativeControls
       />

@@ -22,7 +22,7 @@ import Animated, {
 import { Image as ExpoImage } from "expo-image";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useBottomTabBarHeight } from "expo-router/js-tabs";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
 import { Ionicons } from "@expo/vector-icons";
@@ -1212,7 +1212,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   reelOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-end",
     paddingBottom: 20,
     paddingHorizontal: 14,

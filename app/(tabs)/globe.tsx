@@ -1279,7 +1279,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bg,
   },
   globeContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   webview: {
     flex: 1,

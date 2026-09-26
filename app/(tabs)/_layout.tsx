@@ -1,6 +1,6 @@
-import { Tabs } from "expo-router";
+import { Tabs } from "expo-router/js-tabs";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, View, Text, StyleSheet } from "react-native";
+import { AppState, View, Text, StyleSheet, type ColorValue } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSelector } from "react-redux";
 
@@ -19,7 +19,7 @@ function BadgeIcon({
 }: {
   name: string;
   focused: boolean;
-  color: string;
+  color: ColorValue;
   count: number;
 }) {
   return (

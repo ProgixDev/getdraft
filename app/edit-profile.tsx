@@ -1524,7 +1524,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   avatarOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -1754,7 +1754,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalSheet: {

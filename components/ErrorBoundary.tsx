@@ -19,7 +19,7 @@ type GlobalErrorListener = (msg: string) => void;
 const listeners = new Set<GlobalErrorListener>();
 let lastGlobalErrorMsg: string | null = null;
 
-const _eu: any = (global as any).ErrorUtils;
+const _eu: any = (globalThis as any).ErrorUtils;
 if (_eu?.getGlobalHandler && _eu?.setGlobalHandler) {
   const _prev = _eu.getGlobalHandler();
   _eu.setGlobalHandler((e: any, isFatal: boolean) => {

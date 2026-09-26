@@ -269,7 +269,7 @@ export function GlobeAnimation({ onComplete, active }: GlobeAnimationProps) {
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.bg,

@@ -18,6 +18,14 @@ module.exports = defineConfig([
       // buried anything real. Escaping 36 apostrophes to satisfy a web rule
       // would have made the source harder to read for no benefit.
       "react/no-unescaped-entities": "off",
+
+      // React Compiler rules that arrived with eslint-plugin-react-hooks 7
+      // (Expo SDK 57). They flag 66 existing spots; warn until those are fixed.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
     },
   },
 ]);

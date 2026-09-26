@@ -1132,7 +1132,7 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     scannerOverlay: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
     },
     scannerCorner: {
         position: 'absolute',

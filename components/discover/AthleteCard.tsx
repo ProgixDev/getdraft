@@ -348,12 +348,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
   },
   media: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
   },
   videoLoading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: neutral.gray800,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     color: brand.white,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,

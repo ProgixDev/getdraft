@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
 
   // Logo layer
   centerLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
 
   // Globe + Stats content layer
   contentLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,

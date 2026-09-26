@@ -136,7 +136,7 @@ export function StatsCounter({ onComplete, active }: StatsCounterProps) {
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.bg,

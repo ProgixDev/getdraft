@@ -228,7 +228,6 @@ function ReviewCard(props: {
           <VideoView
             player={player}
             style={styles.video}
-            allowsFullscreen
             allowsPictureInPicture
             nativeControls
           />

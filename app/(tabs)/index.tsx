@@ -2060,7 +2060,7 @@ const styles = StyleSheet.create({
     left: 0,
   },
   cardWrapper: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 8,
@@ -2081,7 +2081,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.surface,
   },
   media: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: "100%",
     height: "100%",
   },
@@ -2110,7 +2110,7 @@ const styles = StyleSheet.create({
     color: brand.white,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 4,
@@ -2247,7 +2247,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   actionsScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   lockedCta: {
     flexDirection: "row",

@@ -99,7 +99,7 @@ export function LogoAnimation({ onComplete, active }: LogoAnimationProps) {
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: theme.bg,
