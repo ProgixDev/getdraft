@@ -15,6 +15,14 @@ export type VerifiedPurchase = {
 };
 
 /**
+ * SHA-256 of Apple Root CA - G3, the root StoreKit 2 signs under. Checked
+ * against https://www.apple.com/certificateauthority/AppleRootCA-G3.cer.
+ * Valid until 2039.
+ */
+const APPLE_ROOT_CA_G3_SHA256 =
+  '63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79';
+
+/**
  * Asks Apple and Google whether a receipt is real.
  *
  * This is the whole security model for in-app purchases. Everything the client
@@ -82,16 +90,28 @@ export class ReceiptVerifierService {
         }
       }
 
+      // Pinned by fingerprint, not by name: anyone can self-sign a root whose
+      // subject says "Apple Root CA - G3", and the chain walk above would
+      // happily accept it.
       const root = new crypto.X509Certificate(
         this.derToPem(chain[chain.length - 1]),
       );
-      if (!/Apple/i.test(root.subject)) {
+      if (root.fingerprint256 !== APPLE_ROOT_CA_G3_SHA256) {
         return { ok: false, reason: 'Chain does not terminate at Apple' };
       }
 
       const payload = JSON.parse(
         Buffer.from(payloadB64, 'base64url').toString('utf8'),
       );
+
+      // A genuine Apple signature only proves someone paid Apple for
+      // something. Without this, a pro_monthly bought in any other app would
+      // unlock Pro here.
+      const bundleId =
+        this.config.get<string>('IOS_BUNDLE_ID') ?? 'com.getdraft.app';
+      if (payload.bundleId !== bundleId) {
+        return { ok: false, reason: 'Purchase belongs to another app' };
+      }
 
       const expiresMs: number | undefined = payload.expiresDate;
       const revoked = !!payload.revocationDate;
