@@ -76,7 +76,7 @@
         <span>⏱️ <b>Durée totale :</b> ~30–45 minutes</span>
         <span>☕ <b>Astuce :</b> faites-les un par un</span>
       </div>
-      <div class="tip">💡 <b>Le plus simple :</b> si vous préférez, <b>invitez-nous comme membre</b> sur chaque compte (Stripe, Twilio…) et <b>nous configurons tout à votre place</b> — vous n'avez alors rien à copier. Sinon, suivez les étapes ci-dessous.</div>
+      <div class="tip">💡 <b>Le plus simple :</b> si vous préférez, <b>invitez-nous comme membre</b> sur chaque compte (Stripe, Prelude…) et <b>nous configurons tout à votre place</b> — vous n'avez alors rien à copier. Sinon, suivez les étapes ci-dessous.</div>
       <div class="tip" style="margin-top:8px">📌 <b>Avant de commencer :</b> créez chaque compte avec l'<b>e-mail de votre entreprise</b> (et non personnel), pour que l'entreprise soit propriétaire de tout. Utilisez un mot de passe fort et gardez-le.</div>
     </div>
 
@@ -96,15 +96,13 @@
     </div>
 
     <div class="card">
-      <div class="head"><div class="num">2</div><h3><span class="emoji">📱</span> Twilio — pour envoyer les codes SMS</h3></div>
-      <p class="whatfor"><b>À quoi ça sert :</b> à l'inscription par téléphone, Twilio envoie le code de vérification par SMS. Le petit coût par message vous est facturé.</p>
+      <div class="head"><div class="num">2</div><h3><span class="emoji">📱</span> Prelude — pour envoyer les codes SMS</h3></div>
+      <p class="whatfor"><b>À quoi ça sert :</b> à l'inscription ou à la connexion par téléphone, Prelude envoie le code de vérification par SMS ou WhatsApp. Le petit coût par vérification vous est facturé.</p>
       <ol class="steps">
-        <li>Allez sur <a class="btn" href="https://www.twilio.com/try-twilio">S'inscrire sur Twilio</a> → créez le compte → vérifiez votre e-mail et votre téléphone.</li>
-        <li><b>Passez du compte d'essai au compte payant</b> (ajoutez un moyen de paiement). ⚠️ Important — en essai, Twilio n'envoie de SMS qu'aux numéros vérifiés ; le compte payant permet d'envoyer à <b>tous</b> vos utilisateurs.</li>
-        <li>Sur le <a class="lnk" href="https://console.twilio.com/">tableau de bord Twilio</a>, dans l'encart <b>« Account Info »</b>, copiez le <b>Account SID</b> (<code>AC…</code>) et l'<b>Auth Token</b> (cliquez pour révéler).</li>
-        <li>Créez un service de vérification 👉 <a class="lnk" href="https://console.twilio.com/us1/develop/verify/services">Verify → Services</a> → <b>Create new</b> → nom <b>« GetDraft »</b> → copiez le <b>Service SID</b> (<code>VA…</code>).</li>
+        <li>Allez sur <a class="btn" href="https://app.prelude.so/">S'inscrire sur Prelude</a> → créez le compte → ajoutez un moyen de paiement.</li>
+        <li>Dans le tableau de bord, ouvrez <b>API keys</b> → créez une clé → copiez-la (<code>sk_…</code>). Une seule clé sert à envoyer et à vérifier les codes.</li>
       </ol>
-      <div class="send">📩 <b>À nous envoyer :</b> Account SID (<code>AC…</code>), Auth Token, et Verify Service SID (<code>VA…</code>).</div>
+      <div class="send">📩 <b>À nous envoyer :</b> la clé API Prelude (<code>sk_…</code>).</div>
     </div>
 
     <div class="card">
@@ -157,7 +155,7 @@
     <h2 class="sec">Récapitulatif — à nous envoyer</h2>
     <div class="check">
       <div class="row"><div class="ck"></div><div><span class="svc">Stripe :</span> Clé publiable (<code>pk_…</code>), Clé secrète (<code>sk_…</code>), ID de prix (<code>price_…</code>), Webhook secret (<code>whsec_…</code>)</div></div>
-      <div class="row"><div class="ck"></div><div><span class="svc">Twilio :</span> Account SID (<code>AC…</code>), Auth Token, Verify Service SID (<code>VA…</code>)</div></div>
+      <div class="row"><div class="ck"></div><div><span class="svc">Prelude :</span> clé API (<code>sk_…</code>)</div></div>
       <div class="row"><div class="ck"></div><div><span class="svc">Resend :</span> clé (<code>re_…</code>), votre domaine, votre e-mail d'expéditeur</div></div>
       <div class="row"><div class="ck"></div><div><span class="svc">Didit :</span> API Key, Workflow ID, Webhook Secret</div></div>
       <div class="row"><div class="ck"></div><div><span class="svc">Plus tard :</span> comptes Google Play + Apple Developer</div></div>

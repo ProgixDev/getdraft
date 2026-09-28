@@ -51,16 +51,8 @@ services:
         sync: false
       - key: STRIPE_PRICE_PREMIUM
         sync: false
-      # --- Twilio (phone OTP via Verify) ---
-      - key: TWILIO_ACCOUNT_SID
-        sync: false
-      - key: TWILIO_API_KEY_SID
-        sync: false
-      - key: TWILIO_API_KEY_SECRET
-        sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: TWILIO_VERIFY_SERVICE_SID
+      # --- Prelude (phone OTP via SMS / WhatsApp) ---
+      - key: PRELUDE_API_KEY
         sync: false
       # --- Didit (KYC identity verification; webhook fails closed if unset) ---
       - key: DIDIT_API_KEY

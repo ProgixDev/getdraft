@@ -129,17 +129,15 @@
       <div class="send">📩 <b>Send us:</b> Publishable key (<code>pk_…</code>), Secret key (<code>sk_…</code>), and each plan's Price ID (<code>price_…</code>). <i>(We'll set up the payment webhook for you — nothing to do there.)</i></div>
     </div>
 
-    <!-- 2 TWILIO -->
+    <!-- 2 PRELUDE -->
     <div class="card">
-      <div class="head"><div class="num">2</div><h3><span class="emoji">📱</span> Twilio — to send SMS codes</h3></div>
-      <p class="whatfor"><b>What it's for:</b> when a user signs up with a phone number, Twilio texts them the verification code. The small per-message cost is billed to you.</p>
+      <div class="head"><div class="num">2</div><h3><span class="emoji">📱</span> Prelude — to send SMS codes</h3></div>
+      <p class="whatfor"><b>What it's for:</b> when a user signs up or logs in with a phone number, Prelude sends them the verification code by SMS or WhatsApp. The small per-verification cost is billed to you.</p>
       <ol class="steps">
-        <li>Go to <a class="btn" href="https://www.twilio.com/try-twilio">Sign up for Twilio</a> → create the account → verify your own email + phone.</li>
-        <li><b>Upgrade from the free trial</b> (add a payment method). ⚠️ Important — on the trial, Twilio can only text numbers you've manually verified; upgrading lets it text <b>all</b> your users.</li>
-        <li>On the <a class="lnk" href="https://console.twilio.com/">Twilio Console</a> home, in the <b>“Account Info”</b> box, copy the <b>Account SID</b> (<code>AC…</code>) and the <b>Auth Token</b> (click to reveal).</li>
-        <li>Create a verification service at <a class="lnk" href="https://console.twilio.com/us1/develop/verify/services">Verify → Services</a> → <b>Create new</b> → name it <b>“GetDraft”</b> → copy the <b>Service SID</b> (<code>VA…</code>).</li>
+        <li>Go to <a class="btn" href="https://app.prelude.so/">Sign up for Prelude</a> → create the account → add a payment method.</li>
+        <li>In the dashboard, open <b>API keys</b> → create a key → copy it (<code>sk_…</code>). One key covers sending and checking codes.</li>
       </ol>
-      <div class="send">📩 <b>Send us:</b> Account SID (<code>AC…</code>), Auth Token, and Verify Service SID (<code>VA…</code>).</div>
+      <div class="send">📩 <b>Send us:</b> the Prelude API key (<code>sk_…</code>).</div>
     </div>
 
     <!-- 3 RESEND -->
@@ -195,7 +193,7 @@
     <h2 class="sec">Final checklist — what to send us</h2>
     <div class="check">
       <div class="row"><div class="ck"></div><div><span class="svc">Stripe:</span> Publishable key (<code>pk_…</code>), Secret key (<code>sk_…</code>), Plan Price IDs (<code>price_…</code>)</div></div>
-      <div class="row"><div class="ck"></div><div><span class="svc">Twilio:</span> Account SID (<code>AC…</code>), Auth Token, Verify Service SID (<code>VA…</code>)</div></div>
+      <div class="row"><div class="ck"></div><div><span class="svc">Prelude:</span> API key (<code>sk_…</code>)</div></div>
       <div class="row"><div class="ck"></div><div><span class="svc">Resend:</span> API key (<code>re_…</code>), your domain, your “from” email</div></div>
       <div class="row"><div class="ck"></div><div><span class="svc">Didit:</span> API Key, Workflow ID, Webhook Secret</div></div>
       <div class="row"><div class="ck"></div><div><span class="svc">Later:</span> Google Play + Apple Developer accounts</div></div>
