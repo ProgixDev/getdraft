@@ -148,7 +148,7 @@
     },
     "android": {
       "package": "com.getdraft.app",
-      "versionCode": 45,
+      "versionCode": 46,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#121212",
