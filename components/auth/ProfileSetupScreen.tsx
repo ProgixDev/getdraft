@@ -1123,6 +1123,20 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                           keyboardType={
                             field.id === "experience" ? "number-pad" : "default"
                           }
+                          {...(field.id === "firstName" || field.id === "lastName"
+                            ? {
+                                autoCapitalize: "words" as const,
+                                autoCorrect: false,
+                                textContentType:
+                                  field.id === "firstName"
+                                    ? ("givenName" as const)
+                                    : ("familyName" as const),
+                                autoComplete:
+                                  field.id === "firstName"
+                                    ? ("name-given" as const)
+                                    : ("name-family" as const),
+                              }
+                            : {})}
                         />
                       </View>
                     </>
