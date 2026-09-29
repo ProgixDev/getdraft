@@ -8,7 +8,8 @@
  *
  * Apple requires StoreKit for digital goods and rejects third-party payment
  * sheets outright (guideline 3.1.1), so iOS sells NOTHING until store
- * billing is configured. That is the safe state for review: an app with no
+ * billing is configured (EXPO_PUBLIC_IAP_IOS=1). That is the safe state for
+ * review: an app with no
  * purchase flow passes, an app with the wrong one fails.
  *
  * Android is the exception, knowingly. Until Play Billing is configured it

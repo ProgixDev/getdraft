@@ -22,6 +22,10 @@ import {
 import { brand, neutral } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { Plan, plans } from "@/constants/plansData";
+import { USES_STORE_BILLING } from "@/constants/purchases";
+import { storeProductForPlan } from "@/services/billing";
+import { useStorePrices } from "@/hooks/use-store-prices";
+import { SubscriptionTerms } from "@/components/billing/SubscriptionTerms";
 
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
 const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
@@ -60,6 +64,13 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(
     null,
   );
+  const { prices: storePrices } = useStorePrices("subs");
+  // On the store path a paid plan is shown only once the store has returned
+  // its localised price; one it did not return is not set up to be sold.
+  const storePrice = (plan: Plan) => {
+    const productId = storeProductForPlan(plan.id);
+    return productId ? storePrices[productId] : undefined;
+  };
 
   const handlePick = async (planId: string) => {
     if (processingPlanId) return;
@@ -119,7 +130,10 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
 
         {/* Plans */}
         <View style={styles.plansContainer}>
-          {plans.filter((p) => !p.legacy).map((plan, index) => {
+          {plans
+            .filter((p) => !p.legacy)
+            .filter((p) => !USES_STORE_BILLING || p.price === 0 || !!storePrice(p))
+            .map((plan, index) => {
             const isProcessing = processingPlanId === plan.id;
             const isDisabled = processingPlanId !== null && !isProcessing;
             const isSelected = isProcessing; // visual highlight for the tapped one
@@ -163,6 +177,15 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
                         ]}
                       >
                         FREE
+                      </Text>
+                    ) : USES_STORE_BILLING ? (
+                      <Text
+                        style={[
+                          styles.priceAmount,
+                          isSelected && styles.priceSelected,
+                        ]}
+                      >
+                        {storePrice(plan)}
                       </Text>
                     ) : (
                       <>
@@ -251,6 +274,8 @@ export const PlanSelectionScreen: React.FC<PlanSelectionScreenProps> = ({
             );
           })}
         </View>
+
+        {USES_STORE_BILLING && <SubscriptionTerms />}
       </ScrollView>
     </LinearGradient>
   );

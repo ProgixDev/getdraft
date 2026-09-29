@@ -75,9 +75,20 @@ default state of every account. Do **not** create a store product for it.
 > screen with no error, and it looks exactly like a bug in the code. Check it
 > says Active, not Pending.
 
+6. **App Store Server Notifications**: App Information → App Store Server
+   Notifications → Version 2, for both **Production** and **Sandbox**:
+   `https://api.getdraft.net/api/billing/apple/notifications`
+
+   This is how the server learns about renewals, expiries, refunds and plan
+   changes. Without it, a user who cancels keeps the plan forever.
+
 **No keys or secrets are needed from Apple.** The server verifies StoreKit 2
-receipts by checking the signature against Apple's certificate chain, so there
-is no shared secret to create, send or leak.
+receipts and notifications by checking the signature against Apple's
+certificate chain, so there is no shared secret to create, send or leak.
+
+Every purchase carries the buyer's GetDraft user id (`appAccountToken`), and a
+subscription is recorded against one account only. A second GetDraft account
+on the same Apple ID cannot restore someone else's plan.
 
 ---
 
@@ -128,13 +139,17 @@ Send that JSON, and it goes into the backend as `GOOGLE_SERVICE_ACCOUNT_JSON`.
 The app and server code is already written and merged:
 
 ```
-services/billing.ts          buys through StoreKit / Play Billing
-POST /api/billing/validate   verifies the receipt with Apple or Google,
-                             then grants the plan or the Drafts
+services/billing.ts                       buys through StoreKit / Play Billing
+POST /api/billing/validate                verifies the receipt with Apple or
+                                          Google, then grants the plan or Drafts
+POST /api/billing/apple/notifications     renewals, expiries, refunds from Apple
 ```
 
-To switch it on: set `EXPO_PUBLIC_IAP_ENABLED=1`, add
-`GOOGLE_SERVICE_ACCOUNT_JSON` for Android, and rebuild both apps.
+Each store has its own switch, so turning one on never moves the other:
+
+- **iOS:** `EXPO_PUBLIC_IAP_IOS=1`, then rebuild the iOS app.
+- **Android:** `EXPO_PUBLIC_IAP_ENABLED=1` and `GOOGLE_SERVICE_ACCOUNT_JSON` on
+  the server, then rebuild the Android app. Until then Android keeps Stripe.
 
 Until then both mobile platforms sell nothing, which is the safe state — an app
 with no purchase flow passes review, an app with the wrong one does not.

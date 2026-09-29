@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -24,6 +25,7 @@ import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
 import { PURCHASES_ENABLED, USES_STORE_BILLING } from '@/constants/purchases';
 import { purchaseProduct } from '@/services/billing';
+import { useStorePrices } from '@/hooks/use-store-prices';
 
 interface SwipePack {
   id: string;
@@ -67,7 +69,17 @@ export default function BuySwipesScreen() {
     Poppins_700Bold,
   });
 
-  const [packs, setPacks] = useState<SwipePack[]>([]);
+  const [allPacks, setPacks] = useState<SwipePack[]>([]);
+  const { prices: storePrices } = useStorePrices('packs');
+  // On the store path only packs the store actually sells are offered, at the
+  // store's localised price.
+  const packs = useMemo(
+    () =>
+      USES_STORE_BILLING
+        ? allPacks.filter((p) => !!storePrices[`drafts_${p.swipes}`])
+        : allPacks,
+    [allPacks, storePrices],
+  );
   const [loading, setLoading] = useState(true);
   const [pendingPackId, setPendingPackId] = useState<string | null>(null);
   const [bonusSwipes, setBonusSwipes] = useState<number | null>(null);
@@ -264,8 +276,14 @@ export default function BuySwipesScreen() {
                     <Text style={styles.packSwipesLabel}>Drafts</Text>
                   </View>
                   <View style={styles.packRight}>
-                    <Text style={styles.packPrice}>{formatPrice(pack.amountCents)}</Text>
-                    <Text style={styles.packUnit}>{pricePerSwipe(pack)}</Text>
+                    <Text style={styles.packPrice}>
+                      {USES_STORE_BILLING
+                        ? storePrices[`drafts_${pack.swipes}`]
+                        : formatPrice(pack.amountCents)}
+                    </Text>
+                    {!USES_STORE_BILLING && (
+                      <Text style={styles.packUnit}>{pricePerSwipe(pack)}</Text>
+                    )}
                   </View>
                 </View>
 
@@ -286,7 +304,9 @@ export default function BuySwipesScreen() {
           <View style={styles.footer}>
             <Ionicons name="shield-checkmark" size={14} color={theme.textSecondary} />
             <Text style={styles.footerText}>
-              Secure payment via Stripe · No subscription · Drafts never expire
+              {USES_STORE_BILLING
+                ? `Paid through ${Platform.OS === 'ios' ? 'the App Store' : 'Google Play'} · No subscription · Drafts never expire`
+                : 'Secure payment via Stripe · No subscription · Drafts never expire'}
             </Text>
           </View>
         </ScrollView>

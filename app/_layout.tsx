@@ -18,7 +18,11 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { StripeProvider } from "@stripe/stripe-react-native";
-import { initBilling, restorePurchases } from "@/services/billing";
+import {
+  initBilling,
+  restorePurchases,
+  setBillingUser,
+} from "@/services/billing";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
@@ -82,6 +86,10 @@ function RootLayoutContent() {
   // network dropped, server briefly down. Those transactions stay in the
   // store's queue on purpose, because purchaseProduct never finishes an
   // unvalidated one. Runs quietly; the user sees the plan simply be correct.
+  useEffect(() => {
+    setBillingUser(user?.id ?? null);
+  }, [user?.id]);
+
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
     initBilling().then((ready) => {

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -21,7 +22,13 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
 import { PURCHASES_ENABLED, USES_STORE_BILLING } from '@/constants/purchases';
-import { purchaseProduct, storeProductForPlan } from '@/services/billing';
+import {
+  openManageSubscriptions,
+  purchaseProduct,
+  storeProductForPlan,
+} from '@/services/billing';
+import { SubscriptionTerms } from '@/components/billing/SubscriptionTerms';
+import { useStorePrices } from '@/hooks/use-store-prices';
 import { plans } from '@/constants/plansData';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
@@ -35,6 +42,7 @@ interface ApiSubscription {
   swipes_used_today?: number;
   daily_swipe_limit?: number | null;
   cancel_at_period_end?: boolean;
+  store?: 'stripe' | 'apple' | 'google';
 }
 
 function formatPeriodEnd(value: ApiSubscription['current_period_end']): string | null {
@@ -87,6 +95,7 @@ export default function SubscriptionScreen() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const { prices: storePrices } = useStorePrices('subs');
 
   const refresh = useCallback(async () => {
     try {
@@ -243,6 +252,30 @@ export default function SubscriptionScreen() {
     }
   }, [pendingAction, refresh]);
 
+  /**
+   * A subscription bought in the App Store or Google Play can only be changed
+   * or cancelled there; our server has no say over it.
+   */
+  const handleManageInStore = useCallback(async () => {
+    const store = apiSub?.store;
+    const here =
+      Platform.OS === 'ios' ? 'apple' : Platform.OS === 'android' ? 'google' : null;
+    if (store !== here) {
+      Alert.alert(
+        'Manage your subscription',
+        store === 'apple'
+          ? 'This subscription was bought in the App Store. Manage it from Settings on your iPhone or iPad.'
+          : 'This subscription was bought on Google Play. Manage it from the Play Store on your Android device.',
+      );
+      return;
+    }
+    try {
+      await openManageSubscriptions();
+    } finally {
+      await refresh();
+    }
+  }, [apiSub?.store, refresh]);
+
   const goToBuySwipes = useCallback(() => {
     if (pendingAction) return;
     router.push('/buy-swipes');
@@ -257,6 +290,24 @@ export default function SubscriptionScreen() {
   const periodEnd = formatPeriodEnd(apiSub?.current_period_end);
   const isPaidPlan = currentPlanId !== 'basic';
   const showManage = isPaidPlan;
+  const boughtInStore = apiSub?.store === 'apple' || apiSub?.store === 'google';
+
+  // On the store path the price comes from StoreKit / Play, localised to the
+  // buyer's storefront. A plan the store did not return has no price, and no
+  // buy button: it is not set up in App Store Connect yet.
+  const priceFor = (plan: (typeof plans)[number]) => {
+    if (plan.price === 0) return 'Free';
+    if (!USES_STORE_BILLING) return `$${plan.price}`;
+    const productId = storeProductForPlan(plan.id);
+    return (productId && storePrices[productId]) || '—';
+  };
+  const canBuy = (plan: (typeof plans)[number]) => {
+    if (!USES_STORE_BILLING) return true;
+    const productId = storeProductForPlan(plan.id);
+    // A web (Stripe) subscriber buying in the store would be billed twice.
+    if (isPaidPlan && !boughtInStore) return false;
+    return !!productId && !!storePrices[productId];
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -293,7 +344,7 @@ export default function SubscriptionScreen() {
             </View>
             <Text style={styles.currentPlanName}>{currentPlan.name}</Text>
             <Text style={styles.currentPlanPrice}>
-              {currentPlan.price === 0 ? 'Free' : `$${currentPlan.price}`}
+              {priceFor(currentPlan)}
               <Text style={styles.currentPlanPeriod}> {currentPlan.period}</Text>
             </Text>
             <View style={styles.currentPlanSwipeRow}>
@@ -310,7 +361,9 @@ export default function SubscriptionScreen() {
 
             {periodEnd && status !== 'canceled' && (
               <Text style={styles.periodText}>
-                {apiSub?.cancel_at_period_end ? 'Cancels' : 'Renews'} on {periodEnd}
+                {boughtInStore
+                  ? `Paid through ${periodEnd}`
+                  : `${apiSub?.cancel_at_period_end ? 'Cancels' : 'Renews'} on ${periodEnd}`}
               </Text>
             )}
             {status === 'canceled' && periodEnd && (
@@ -353,7 +406,7 @@ export default function SubscriptionScreen() {
                   <View>
                     <Text style={styles.planName}>{plan.name}</Text>
                     <Text style={styles.planPrice}>
-                      {plan.price === 0 ? 'Free' : `$${plan.price}`}
+                      {priceFor(plan)}
                       <Text style={styles.planPeriod}> {plan.period}</Text>
                     </Text>
                   </View>
@@ -376,7 +429,7 @@ export default function SubscriptionScreen() {
                   ))}
                 </View>
 
-                {PURCHASES_ENABLED && !isCurrent && plan.id !== 'basic' && (
+                {PURCHASES_ENABLED && !isCurrent && plan.id !== 'basic' && canBuy(plan) && (
                   <Pressable
                     style={[
                       styles.upgradeButton,
@@ -425,7 +478,15 @@ export default function SubscriptionScreen() {
               selling one, and Play does not restrict it. Removing it would
               strand an Android user who subscribed on the web with no way to
               cancel from the app. */}
-          {showManage && apiSub?.cancel_at_period_end ? (
+          {showManage && boughtInStore ? (
+            <Pressable
+              style={[styles.resumeButton, pendingAction !== null && styles.upgradeButtonDisabled]}
+              onPress={handleManageInStore}
+              disabled={pendingAction !== null}
+            >
+              <Text style={styles.resumeButtonText}>Manage subscription</Text>
+            </Pressable>
+          ) : showManage && apiSub?.cancel_at_period_end ? (
             <Pressable
               style={[styles.resumeButton, pendingAction !== null && styles.upgradeButtonDisabled]}
               onPress={handleResume}
@@ -450,6 +511,8 @@ export default function SubscriptionScreen() {
               )}
             </Pressable>
           ) : null}
+
+          {USES_STORE_BILLING && <SubscriptionTerms onRestored={refresh} />}
         </ScrollView>
       )}
     </View>
