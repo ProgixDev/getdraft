@@ -104,6 +104,24 @@ export class MailService implements OnModuleInit {
     await this.deliver(to, subject, html, text);
   }
 
+  /**
+   * Identity check finished. Sent because a manual review can take hours,
+   * and the verification screen tells the user "we'll notify you".
+   */
+  async sendKycDecision(to: string, approved: boolean): Promise<void> {
+    const heading = approved ? "You're verified. Game On!" : "We couldn't verify your ID";
+    const sub = approved
+      ? 'Your identity check is approved. Open GetDraft to finish setting up your profile and start scouting.'
+      : 'Your identity check was not approved. Open GetDraft to try again: use a valid government ID, good lighting, and make sure the photo is sharp and uncropped.';
+    const text = approved
+      ? 'Your GetDraft identity check is approved. Open the app to finish setting up your profile.'
+      : 'Your GetDraft identity check was not approved. Open the app to try again with a valid government ID in good lighting.';
+    const subject = approved
+      ? 'Your GetDraft identity check is approved'
+      : 'Your GetDraft identity check needs another try';
+    await this.deliver(to, subject, noticeEmailHtml(heading, sub), text);
+  }
+
   private async deliver(to: string, subject: string, html: string, text: string): Promise<void> {
     if (this.resendApiKey) {
       await this.sendViaResend(to, subject, html, text);

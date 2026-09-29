@@ -12,6 +12,8 @@ import {
   normalizeDiditStatus,
 } from './didit.service';
 import { isMinor } from '../../common/utils/age';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 
 export type KycStatus = 'none' | 'pending' | 'in_review' | 'approved' | 'declined';
 
@@ -23,6 +25,8 @@ export class KycService {
     private supabaseService: SupabaseService,
     private diditService: DiditService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
+    private mailService: MailService,
   ) {}
 
   /**
@@ -234,27 +238,72 @@ export class KycService {
     const userStatus: KycStatus =
       compact === 'expired' ? 'none' : (compact as KycStatus);
 
-    if (userStatus !== 'approved') {
-      const { data: currentUser } = await admin
-        .from('users')
-        .select('kyc_status')
-        .eq('id', row.user_id)
-        .maybeSingle();
-      if (currentUser?.kyc_status === 'approved') {
-        this.logger.log(
-          `[kyc] ignoring late ${compact} decision for user ${row.user_id} — already approved`,
-        );
-        return;
-      }
+    const { data: currentUser } = await admin
+      .from('users')
+      .select('kyc_status, email')
+      .eq('id', row.user_id)
+      .maybeSingle();
+    if (userStatus !== 'approved' && currentUser?.kyc_status === 'approved') {
+      this.logger.log(
+        `[kyc] ignoring late ${compact} decision for user ${row.user_id} — already approved`,
+      );
+      return;
     }
 
-    await admin
+    // Conditional on the status actually changing, so exactly one caller
+    // "wins" the transition: the webhook and the status poll can deliver
+    // the same decision at the same moment, and only one may notify.
+    const { data: changed } = await admin
       .from('users')
       .update({
         kyc_status: userStatus,
         kyc_completed_at: completed ? now : null,
       })
-      .eq('id', row.user_id);
+      .eq('id', row.user_id)
+      .or(`kyc_status.is.null,kyc_status.neq.${userStatus}`)
+      .select('id');
+
+    // The verification screen promises "we'll notify you when it's done".
+    if (
+      (userStatus === 'approved' || userStatus === 'declined') &&
+      (changed?.length ?? 0) > 0
+    ) {
+      // Phone signups carry a synthetic @phone.getdraft.local address; mail
+      // to it would only bounce and hurt the sending domain's reputation.
+      const email = currentUser?.email?.endsWith('.getdraft.local')
+        ? null
+        : (currentUser?.email ?? null);
+      void this.notifyDecision(row.user_id, email, userStatus === 'approved');
+    }
+  }
+
+  /** Push + email. Best-effort: a delivery failure never undoes the decision. */
+  private async notifyDecision(
+    userId: string,
+    email: string | null,
+    approved: boolean,
+  ): Promise<void> {
+    const title = approved ? "You're verified ✅" : 'Identity check not approved';
+    const body = approved
+      ? 'Game On! Open GetDraft to finish your profile.'
+      : 'Open GetDraft to try again with a clear photo of your ID.';
+    await Promise.allSettled([
+      this.notificationsService.sendPushToUser(userId, title, body, {
+        type: 'kyc_decision',
+        status: approved ? 'approved' : 'declined',
+      }),
+      email
+        ? this.mailService.sendKycDecision(email, approved)
+        : Promise.resolve(),
+    ]).then((results) => {
+      results.forEach((r) => {
+        if (r.status === 'rejected') {
+          this.logger.warn(
+            `[kyc] decision notice failed for user ${userId}: ${r.reason?.message ?? r.reason}`,
+          );
+        }
+      });
+    });
   }
 
   private callbackUrlFor(_userId: string): string {

@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  AppState,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,6 +63,19 @@ export const KycVerificationScreen: React.FC<KycVerificationScreenProps> = ({
     return () => {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
+  }, []);
+
+  // A manual review can take hours; the user leaves, then comes back from
+  // the "you're verified" push or email. Re-check on every return to the
+  // foreground so they move on without hunting for "Check status again".
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      kycService.getStatus()
+        .then((r) => setStatus(r.kycStatus))
+        .catch(() => {});
+    });
+    return () => sub.remove();
   }, []);
 
   // When approved, auto-advance to the next step.
