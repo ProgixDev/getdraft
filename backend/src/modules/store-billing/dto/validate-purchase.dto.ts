@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum PurchasePlatform {
@@ -29,6 +29,9 @@ export class ValidatePurchaseDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  // A real StoreKit JWS is a few KB; the cap keeps a public endpoint from
+  // doing signature work on megabytes of attacker text.
+  @MaxLength(20_000)
   purchaseToken!: string;
 }
 
@@ -36,5 +39,7 @@ export class ValidatePurchaseDto {
 export class AppleNotificationDto {
   @IsString()
   @IsNotEmpty()
+  // Envelope plus the nested transaction and renewal JWSs: well under 64 KB.
+  @MaxLength(64_000)
   signedPayload!: string;
 }

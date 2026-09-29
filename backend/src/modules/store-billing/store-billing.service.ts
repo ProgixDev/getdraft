@@ -86,15 +86,16 @@ export class StoreBillingService {
       return;
     }
 
-    // The account that validated the purchase owns it. The token the app
-    // attached covers a notification that arrives before that validation.
-    const userId =
-      (await this.ownerOfStoreSubscription(purchase.transactionId)) ??
-      purchase.appAccountToken?.toLowerCase() ??
-      null;
+    // Only the account that validated the purchase through /billing/validate
+    // owns it. The appAccountToken is NOT used as a fallback: the buyer's
+    // device chooses it, so a purchase stamped with someone else's user id
+    // would let the buyer grant, and later downgrade, a victim's plan. A
+    // notification that beats validation loses nothing: the app re-sends
+    // unfinished transactions on launch, and the next notification applies.
+    const userId = await this.ownerOfStoreSubscription(purchase.transactionId);
     if (!userId) {
       this.logger.warn(
-        `[apple] ${label}: no account for transaction ${purchase.transactionId}`,
+        `[apple] ${label}: no account has validated transaction ${purchase.transactionId}, not applied`,
       );
       return;
     }

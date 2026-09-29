@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import {
+  Environment,
+  SignedDataVerifier,
+  VerificationException,
+  VerificationStatus,
+} from '@apple/app-store-server-library';
 
 export type VerifiedPurchase = {
   ok: boolean;
@@ -14,6 +20,8 @@ export type VerifiedPurchase = {
   active?: boolean;
   /** Apple only: the GetDraft user id the app attached to the purchase. */
   appAccountToken?: string | null;
+  /** Apple only: 'Production' or 'Sandbox' (App Review and TestFlight). */
+  environment?: string | null;
 };
 
 export type AppleNotification = {
@@ -24,12 +32,27 @@ export type AppleNotification = {
 };
 
 /**
- * SHA-256 of Apple Root CA - G3, the root StoreKit 2 signs under. Checked
- * against https://www.apple.com/certificateauthority/AppleRootCA-G3.cer.
- * Valid until 2039.
+ * Apple Root CA - G3, DER, base64: the root StoreKit 2 signs under. Taken
+ * from https://www.apple.com/certificateauthority/AppleRootCA-G3.cer. Its
+ * SHA-256 is APPLE_ROOT_CA_G3_SHA256, which the spec asserts, so a bad paste
+ * fails the tests instead of failing every purchase. Valid until 2039.
  */
-const APPLE_ROOT_CA_G3_SHA256 =
+export const APPLE_ROOT_CA_G3_BASE64 =
+  'MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwSQXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcNMTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBSb290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtfTjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3r6966/ayySrMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+yRhHFD/3meoyhpmvOwgPUnPWTxnS4at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+YhidDkLF1vLUagM6BgD56KyKA==';
+
+export const APPLE_ROOT_CA_G3_SHA256 =
   '63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79';
+
+/** GetDraft's numeric App Store id (Apple requires it for production data). */
+const DEFAULT_APPLE_APP_ID = 6802070784;
+
+/** Errors where the other App Store environment may still accept the data. */
+const WRONG_ENVIRONMENT = new Set<VerificationStatus>([
+  VerificationStatus.INVALID_ENVIRONMENT,
+  // Sandbox notifications carry no appAppleId, so the production verifier
+  // reports them as the wrong app rather than the wrong environment.
+  VerificationStatus.INVALID_APP_IDENTIFIER,
+]);
 
 /**
  * Asks Apple and Google whether a receipt is real.
@@ -44,101 +67,117 @@ const APPLE_ROOT_CA_G3_SHA256 =
 @Injectable()
 export class ReceiptVerifierService {
   private readonly logger = new Logger(ReceiptVerifierService.name);
+  private readonly appleProduction: SignedDataVerifier;
+  /** Null when sandbox purchases are refused (APPLE_ALLOW_SANDBOX=false). */
+  private readonly appleSandbox: SignedDataVerifier | null;
 
-  constructor(private config: ConfigService) {}
+  constructor(private config: ConfigService) {
+    // Apple's own verifier, not a hand-rolled one. Twice a hand-written check
+    // here accepted forged receipts: first a root pinned by name, then a
+    // chain whose leaf was parsed as PEM, so a JWS signed with any key passed
+    // next to Apple's genuine public root. The library parses every
+    // certificate as DER, checks the chain against the root we supply (never
+    // the one in the request), requires exactly three certificates with
+    // Apple's App Store OIDs on the leaf (1.2.840.113635.100.6.11.1) and
+    // intermediate (1.2.840.113635.100.6.2.1), checks validity dates and
+    // OCSP, verifies the signature with the verified leaf's key, and checks
+    // bundle id, app id and environment.
+    const roots = this.appleRootCertificates();
+    const bundleId =
+      this.config.get<string>('IOS_BUNDLE_ID') ?? 'com.getdraft.app';
+    const appAppleId = Number(
+      this.config.get<string>('APPLE_APP_ID') ?? DEFAULT_APPLE_APP_ID,
+    );
+    // OCSP revocation checks; turned off only by tests, which run offline.
+    const onlineChecks =
+      this.config.get<string>('APPLE_ONLINE_CHECKS') !== 'false';
+
+    this.appleProduction = new SignedDataVerifier(
+      roots,
+      onlineChecks,
+      Environment.PRODUCTION,
+      bundleId,
+      appAppleId,
+    );
+    // App Review buys in the sandbox against this production server, so
+    // refusing sandbox data would fail review. TestFlight purchases are
+    // sandbox too, which means testers get plans without paying: the price
+    // of passing review. Set APPLE_ALLOW_SANDBOX=false to refuse them.
+    this.appleSandbox =
+      this.config.get<string>('APPLE_ALLOW_SANDBOX') === 'false'
+        ? null
+        : new SignedDataVerifier(
+            roots,
+            onlineChecks,
+            Environment.SANDBOX,
+            bundleId,
+          );
+  }
+
+  /**
+   * The roots Apple data must chain to. Only the spec overrides this, to
+   * sign test data under a throwaway root built like Apple's; production
+   * always trusts exactly Apple Root CA - G3.
+   */
+  protected appleRootCertificates(): Buffer[] {
+    return [Buffer.from(APPLE_ROOT_CA_G3_BASE64, 'base64')];
+  }
 
   // ------------------------------------------------------------------ Apple
 
   /**
-   * Verify a StoreKit 2 JWS.
+   * Verify a StoreKit 2 signed transaction (JWS), as the app sends it.
    *
-   * StoreKit 2 hands the app a signed JWS whose payload already contains the
-   * transaction. Apple's public keys sit in the x5c header chain, so the
-   * signature can be checked without calling Apple at all -- which means no
-   * shared secret to leak and no dependency on Apple's availability at the
-   * moment of purchase.
-   *
-   * The chain is verified back to Apple's root, because an unverified JWS is
-   * just JSON: anyone can mint one claiming a Pro subscription.
+   * The JWS carries the transaction and Apple's signature over it, so it can
+   * be checked without a shared secret. An unverified JWS is just JSON:
+   * anyone can mint one claiming a Pro subscription, so nothing is trusted
+   * until SignedDataVerifier has accepted it.
    */
-  verifyApple(jws: string, gracePeriodExpiresMs?: number): VerifiedPurchase {
+  async verifyApple(jws: string): Promise<VerifiedPurchase> {
     try {
-      const signed = this.verifyAppleJws(jws);
-      if (!signed.ok) return { ok: false, reason: signed.reason };
-      const payload = signed.payload;
-
-      // A genuine Apple signature only proves someone paid Apple for
-      // something. Without this, a pro_monthly bought in any other app would
-      // unlock Pro here.
-      if (payload.bundleId !== this.appleBundleId()) {
-        return { ok: false, reason: 'Purchase belongs to another app' };
-      }
-
-      const expiresMs: number | undefined = payload.expiresDate;
-      const revoked = !!payload.revocationDate;
-      // During a billing grace period Apple keeps the subscription in force
-      // while it retries the card, so access continues until grace ends.
-      const inForce =
-        !expiresMs ||
-        expiresMs > Date.now() ||
-        (!!gracePeriodExpiresMs && gracePeriodExpiresMs > Date.now());
-
-      return {
-        ok: true,
-        productId: payload.productId,
-        transactionId: String(
-          payload.originalTransactionId ?? payload.transactionId,
-        ),
-        purchasedAt: payload.purchaseDate
-          ? new Date(payload.purchaseDate).toISOString()
-          : null,
-        expiresAt: expiresMs ? new Date(expiresMs).toISOString() : null,
-        active: !revoked && inForce,
-        appAccountToken: payload.appAccountToken ?? null,
-      };
-    } catch (err: any) {
-      this.logger.error(`apple verification threw: ${err?.message}`);
-      return { ok: false, reason: 'Could not verify the receipt' };
+      const { value } = await this.withAppleVerifier((v) =>
+        v.verifyAndDecodeTransaction(jws),
+      );
+      return this.toPurchase(value);
+    } catch (err) {
+      return { ok: false, reason: this.appleFailure('transaction', err) };
     }
   }
 
   /**
    * Verify an App Store Server Notification (V2).
    *
-   * The notification and the transaction inside it are separate JWSs, each
-   * signed by Apple, so both are checked: a genuine outer envelope around a
-   * forged transaction would otherwise grant whatever the forger wrote.
+   * The envelope, the renewal info and the transaction inside are separate
+   * JWSs, each signed by Apple, so each is verified, and by the verifier that
+   * accepted the envelope: a genuine envelope around a forged transaction,
+   * or a sandbox transaction inside a production envelope, is refused.
    */
-  verifyAppleNotification(
+  async verifyAppleNotification(
     signedPayload: string,
-  ):
+  ): Promise<
     | { ok: true; notification: AppleNotification }
-    | { ok: false; reason: string } {
+    | { ok: false; reason: string }
+  > {
     try {
-      const outer = this.verifyAppleJws(signedPayload);
-      if (!outer.ok) return { ok: false, reason: outer.reason };
-      const body = outer.payload;
-      const data = body.data ?? {};
-
-      if (data.bundleId && data.bundleId !== this.appleBundleId()) {
-        return { ok: false, reason: 'Notification belongs to another app' };
-      }
+      const { value: body, verifier } = await this.withAppleVerifier((v) =>
+        v.verifyAndDecodeNotification(signedPayload),
+      );
+      const data = body.data;
 
       let gracePeriodExpiresMs: number | undefined;
-      if (data.signedRenewalInfo) {
-        const renewal = this.verifyAppleJws(data.signedRenewalInfo);
-        if (!renewal.ok) return { ok: false, reason: renewal.reason };
-        gracePeriodExpiresMs = renewal.payload.gracePeriodExpiresDate;
+      if (data?.signedRenewalInfo) {
+        const renewal = await verifier.verifyAndDecodeRenewalInfo(
+          data.signedRenewalInfo,
+        );
+        gracePeriodExpiresMs = renewal.gracePeriodExpiresDate;
       }
 
       let purchase: VerifiedPurchase | null = null;
-      if (data.signedTransactionInfo) {
-        purchase = this.verifyApple(
+      if (data?.signedTransactionInfo) {
+        const transaction = await verifier.verifyAndDecodeTransaction(
           data.signedTransactionInfo,
-          gracePeriodExpiresMs,
         );
-        if (!purchase.ok)
-          return { ok: false, reason: purchase.reason ?? 'Bad transaction' };
+        purchase = this.toPurchase(transaction, gracePeriodExpiresMs);
       }
 
       return {
@@ -149,77 +188,92 @@ export class ReceiptVerifierService {
           purchase,
         },
       };
-    } catch (err: any) {
-      this.logger.error(
-        `apple notification verification threw: ${err?.message}`,
-      );
-      return { ok: false, reason: 'Could not verify the notification' };
+    } catch (err) {
+      return { ok: false, reason: this.appleFailure('notification', err) };
     }
   }
 
-  private appleBundleId(): string {
-    return this.config.get<string>('IOS_BUNDLE_ID') ?? 'com.getdraft.app';
-  }
-
-  /** Check a StoreKit JWS signature back to Apple's root and return its payload. */
-  private verifyAppleJws(
-    jws: string,
-  ): { ok: true; payload: any } | { ok: false; reason: string } {
-    const [headerB64, payloadB64, signatureB64] = jws.split('.');
-    if (!headerB64 || !payloadB64 || !signatureB64) {
-      return { ok: false, reason: 'Malformed JWS' };
-    }
-
-    const header = JSON.parse(
-      Buffer.from(headerB64, 'base64url').toString('utf8'),
-    );
-    const chain: string[] = header.x5c ?? [];
-    if (chain.length < 2) {
-      return { ok: false, reason: 'Missing certificate chain' };
-    }
-
-    // Leaf certificate signs the token; verify the token against it first.
-    const leafPem = this.derToPem(chain[0]);
-    const verifier = crypto.createVerify('SHA256');
-    verifier.update(`${headerB64}.${payloadB64}`);
-    const signature = Buffer.from(signatureB64, 'base64url');
-    const signatureOk = verifier.verify(
-      { key: leafPem, dsaEncoding: 'ieee-p1363' },
-      signature,
-    );
-    if (!signatureOk) {
-      return { ok: false, reason: 'Signature does not match' };
-    }
-
-    // Then walk the chain: each certificate must be signed by the next.
-    // Without this a self-signed leaf would pass the check above.
-    for (let i = 0; i < chain.length - 1; i += 1) {
-      const child = new crypto.X509Certificate(this.derToPem(chain[i]));
-      const parent = new crypto.X509Certificate(this.derToPem(chain[i + 1]));
-      if (!child.verify(parent.publicKey)) {
-        return { ok: false, reason: 'Broken certificate chain' };
+  /**
+   * Run a verification in production first, then in the sandbox when the
+   * data is simply from the other environment. Any other failure stands.
+   */
+  private async withAppleVerifier<T>(
+    run: (verifier: SignedDataVerifier) => Promise<T>,
+  ): Promise<{ value: T; verifier: SignedDataVerifier }> {
+    try {
+      return {
+        value: await run(this.appleProduction),
+        verifier: this.appleProduction,
+      };
+    } catch (err) {
+      if (
+        this.appleSandbox &&
+        err instanceof VerificationException &&
+        WRONG_ENVIRONMENT.has(err.status)
+      ) {
+        return {
+          value: await run(this.appleSandbox),
+          verifier: this.appleSandbox,
+        };
       }
+      throw err;
     }
-
-    // Pinned by fingerprint, not by name: anyone can self-sign a root whose
-    // subject says "Apple Root CA - G3", and the chain walk above would
-    // happily accept it.
-    const root = new crypto.X509Certificate(
-      this.derToPem(chain[chain.length - 1]),
-    );
-    if (root.fingerprint256 !== APPLE_ROOT_CA_G3_SHA256) {
-      return { ok: false, reason: 'Chain does not terminate at Apple' };
-    }
-
-    const payload = JSON.parse(
-      Buffer.from(payloadB64, 'base64url').toString('utf8'),
-    );
-    return { ok: true, payload };
   }
 
-  private derToPem(der: string): string {
-    const lines = der.match(/.{1,64}/g)?.join('\n') ?? der;
-    return `-----BEGIN CERTIFICATE-----\n${lines}\n-----END CERTIFICATE-----\n`;
+  /** Log a failed Apple verification and turn it into a short reason. */
+  private appleFailure(what: string, err: unknown): string {
+    if (err instanceof VerificationException) {
+      const status = VerificationStatus[err.status] ?? String(err.status);
+      this.logger.warn(
+        `apple ${what} rejected: ${status}${err.cause ? ` (${err.cause.message})` : ''}`,
+      );
+      return err.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE
+        ? 'Could not reach Apple to verify the purchase; try again'
+        : `Apple verification failed (${status})`;
+    }
+    this.logger.error(
+      `apple ${what} verification threw: ${(err as Error)?.message ?? err}`,
+    );
+    return 'Could not verify the purchase';
+  }
+
+  /** Map a verified Apple transaction onto the store-neutral shape. */
+  private toPurchase(
+    payload: {
+      productId?: string;
+      transactionId?: string;
+      originalTransactionId?: string;
+      purchaseDate?: number;
+      expiresDate?: number;
+      revocationDate?: number;
+      appAccountToken?: string;
+      environment?: string;
+    },
+    gracePeriodExpiresMs?: number,
+  ): VerifiedPurchase {
+    const expiresMs: number | undefined = payload.expiresDate;
+    const revoked = !!payload.revocationDate;
+    // During a billing grace period Apple keeps the subscription in force
+    // while it retries the card, so access continues until grace ends.
+    const inForce =
+      !expiresMs ||
+      expiresMs > Date.now() ||
+      (!!gracePeriodExpiresMs && gracePeriodExpiresMs > Date.now());
+
+    return {
+      ok: true,
+      productId: payload.productId,
+      transactionId: String(
+        payload.originalTransactionId ?? payload.transactionId,
+      ),
+      purchasedAt: payload.purchaseDate
+        ? new Date(payload.purchaseDate).toISOString()
+        : null,
+      expiresAt: expiresMs ? new Date(expiresMs).toISOString() : null,
+      active: !revoked && inForce,
+      appAccountToken: payload.appAccountToken ?? null,
+      environment: payload.environment ?? null,
+    };
   }
 
   // ----------------------------------------------------------------- Google

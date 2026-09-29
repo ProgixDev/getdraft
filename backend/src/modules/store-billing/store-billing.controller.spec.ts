@@ -9,7 +9,7 @@ const OTHER = '22222222-2222-4222-8222-222222222222';
 
 function setup(verified: Record<string, unknown>, owner: string | null = null) {
   const verifier = {
-    verifyApple: jest.fn().mockReturnValue({ ok: true, ...verified }),
+    verifyApple: jest.fn().mockResolvedValue({ ok: true, ...verified }),
     verifyAppleNotification: jest.fn(),
   };
   const storeBilling = {
@@ -98,7 +98,7 @@ describe('StoreBillingController.validate', () => {
 describe('StoreBillingController.appleNotification', () => {
   it('rejects a notification that fails verification', async () => {
     const { controller, verifier, storeBilling } = setup({});
-    verifier.verifyAppleNotification.mockReturnValue({
+    verifier.verifyAppleNotification.mockResolvedValue({
       ok: false,
       reason: 'Chain does not terminate at Apple',
     });
@@ -140,16 +140,22 @@ describe('StoreBillingService.applyAppleNotification', () => {
     );
   });
 
-  it('falls back to the account token before the app has validated', async () => {
+  it('never assigns a purchase to the account named by its token alone', async () => {
+    // The buyer's device picks appAccountToken. Trusting it here let a buyer
+    // stamp a victim's user id on a purchase, then grant or downgrade the
+    // victim's plan through notifications.
     const { svc, apply } = service(null);
     await svc.applyAppleNotification({
       notificationType: 'SUBSCRIBED',
       subtype: 'INITIAL_BUY',
       purchase: purchase({ active: true, appAccountToken: USER.toUpperCase() }),
     });
-    expect(apply).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: USER, active: true }),
-    );
+    await svc.applyAppleNotification({
+      notificationType: 'REFUND',
+      subtype: null,
+      purchase: purchase({ active: false, appAccountToken: OTHER }),
+    });
+    expect(apply).not.toHaveBeenCalled();
   });
 
   it('ignores notifications with no transaction or no account', async () => {

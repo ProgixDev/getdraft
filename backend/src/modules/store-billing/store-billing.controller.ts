@@ -7,7 +7,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import {
@@ -64,7 +64,7 @@ export class StoreBillingController {
 
     const verified =
       dto.platform === PurchasePlatform.IOS
-        ? this.verifier.verifyApple(dto.purchaseToken)
+        ? await this.verifier.verifyApple(dto.purchaseToken)
         : await this.verifier.verifyGoogle(
             dto.productId,
             dto.purchaseToken,
@@ -153,16 +153,20 @@ export class StoreBillingController {
    *
    * Public, because Apple does not log in. The signed payload is the
    * authentication: it is verified back to Apple's root before anything is
-   * applied. Not throttled, because Apple retries failed deliveries and a
-   * dropped retry would leave a plan out of date.
+   * applied. Throttled generously rather than not at all: Apple sends a few
+   * notifications per subscriber per month and retries a refused one for
+   * days, while an unlimited public endpoint that does signature work on
+   * every request is an easy way to burn the server's CPU.
    */
   @Public()
-  @SkipThrottle()
+  @Throttle({ default: { ttl: 60_000, limit: 300 } })
   @Post('apple/notifications')
   @HttpCode(200)
   @ApiExcludeEndpoint()
   async appleNotification(@Body() dto: AppleNotificationDto) {
-    const result = this.verifier.verifyAppleNotification(dto.signedPayload);
+    const result = await this.verifier.verifyAppleNotification(
+      dto.signedPayload,
+    );
     if (!result.ok) {
       this.logger.warn(`apple notification rejected: ${result.reason}`);
       throw new BadRequestException(result.reason);
