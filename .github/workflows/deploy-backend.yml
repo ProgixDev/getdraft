@@ -55,7 +55,6 @@ jobs:
         run: npm i -g @railway/cli
 
       - name: Deploy
-        working-directory: backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
@@ -63,9 +62,13 @@ jobs:
             echo "RAILWAY_TOKEN is not set — add it under repo Settings > Secrets."
             exit 1
           fi
-          # --detach: the runner's job is to hand the code over, not to sit
-          # watching a build it cannot influence.
-          railway up --service getdraft-api --detach
+          # Uploaded from the repo root: the Railway service's Root Directory
+          # is `backend`, so the upload must contain a backend/ folder.
+          # Uploading from inside backend/ fails the build at once.
+          # --ci streams the build and fails this step if the build fails;
+          # --detach returned before the build and the health check below
+          # then passed against the old, still-running version.
+          railway up --service getdraft-api --ci
 
       - name: Wait for the API to answer
         run: |
