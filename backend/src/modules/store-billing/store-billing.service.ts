@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import { PlanId, PLAN_SWIPE_LIMITS } from '../../common/types';
+import type { AppleNotification } from './receipt-verifier.service';
 
 /** Product ids as created in App Store Connect and Play Console. */
 export const STORE_PLAN_PRODUCTS: Record<string, PlanId> = {
@@ -39,6 +40,75 @@ export class StoreBillingService {
   private readonly logger = new Logger(StoreBillingService.name);
 
   constructor(private supabaseService: SupabaseService) {}
+
+  /** The account a store subscription is already recorded against, if any. */
+  async ownerOfStoreSubscription(
+    transactionId: string,
+  ): Promise<string | null> {
+    const { data } = await this.supabaseService
+      .getAdminClient()
+      .from('subscriptions')
+      .select('user_id')
+      .eq('store_transaction_id', transactionId)
+      .maybeSingle();
+    return data?.user_id ?? null;
+  }
+
+  /**
+   * Apply an App Store Server Notification to the account that owns it.
+   *
+   * Every notification carries the subscription's latest transaction, and
+   * that transaction already says whether it is in force (expiry, grace
+   * period, revocation). So renewals, expiries, refunds and plan changes all
+   * reduce to "write what the latest transaction says", and one code path
+   * covers them all.
+   */
+  async applyAppleNotification(notification: AppleNotification): Promise<void> {
+    const { notificationType, subtype, purchase } = notification;
+    const label = `${notificationType}${subtype ? `/${subtype}` : ''}`;
+
+    if (!purchase?.ok || !purchase.productId || !purchase.transactionId) {
+      this.logger.log(`[apple] ${label}: no transaction, nothing to apply`);
+      return;
+    }
+
+    if (STORE_PACK_PRODUCTS[purchase.productId]) {
+      // Refunded Drafts are usually spent already, so they are not clawed back.
+      this.logger.log(
+        `[apple] ${label} for pack ${purchase.productId} (${purchase.transactionId}), no action`,
+      );
+      return;
+    }
+    if (!STORE_PLAN_PRODUCTS[purchase.productId]) {
+      this.logger.error(
+        `[apple] ${label}: unknown product "${purchase.productId}"`,
+      );
+      return;
+    }
+
+    // The account that validated the purchase owns it. The token the app
+    // attached covers a notification that arrives before that validation.
+    const userId =
+      (await this.ownerOfStoreSubscription(purchase.transactionId)) ??
+      purchase.appAccountToken?.toLowerCase() ??
+      null;
+    if (!userId) {
+      this.logger.warn(
+        `[apple] ${label}: no account for transaction ${purchase.transactionId}`,
+      );
+      return;
+    }
+
+    await this.applyStoreSubscription({
+      userId,
+      store: 'apple',
+      productId: purchase.productId,
+      transactionId: purchase.transactionId,
+      periodStart: purchase.purchasedAt ?? null,
+      periodEnd: purchase.expiresAt ?? null,
+      active: purchase.active !== false,
+    });
+  }
 
   /**
    * Grant or renew a subscription bought in a store.

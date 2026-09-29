@@ -31,3 +31,10 @@ export class ValidatePurchaseDto {
   @IsNotEmpty()
   purchaseToken!: string;
 }
+
+/** The body Apple POSTs for an App Store Server Notification (V2). */
+export class AppleNotificationDto {
+  @IsString()
+  @IsNotEmpty()
+  signedPayload!: string;
+}

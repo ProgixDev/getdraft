@@ -12,6 +12,15 @@ export type VerifiedPurchase = {
   purchasedAt?: string | null;
   /** True when the store says the subscription is currently in force. */
   active?: boolean;
+  /** Apple only: the GetDraft user id the app attached to the purchase. */
+  appAccountToken?: string | null;
+};
+
+export type AppleNotification = {
+  notificationType: string;
+  subtype: string | null;
+  /** Null for notifications that carry no transaction, such as TEST. */
+  purchase: VerifiedPurchase | null;
 };
 
 /**
@@ -52,71 +61,27 @@ export class ReceiptVerifierService {
    * The chain is verified back to Apple's root, because an unverified JWS is
    * just JSON: anyone can mint one claiming a Pro subscription.
    */
-  async verifyApple(jws: string): Promise<VerifiedPurchase> {
+  verifyApple(jws: string, gracePeriodExpiresMs?: number): VerifiedPurchase {
     try {
-      const [headerB64, payloadB64, signatureB64] = jws.split('.');
-      if (!headerB64 || !payloadB64 || !signatureB64) {
-        return { ok: false, reason: 'Malformed JWS' };
-      }
-
-      const header = JSON.parse(
-        Buffer.from(headerB64, 'base64url').toString('utf8'),
-      );
-      const chain: string[] = header.x5c ?? [];
-      if (chain.length < 2) {
-        return { ok: false, reason: 'Missing certificate chain' };
-      }
-
-      // Leaf certificate signs the token; verify the token against it first.
-      const leafPem = this.derToPem(chain[0]);
-      const verifier = crypto.createVerify('SHA256');
-      verifier.update(`${headerB64}.${payloadB64}`);
-      const signature = Buffer.from(signatureB64, 'base64url');
-      const signatureOk = verifier.verify(
-        { key: leafPem, dsaEncoding: 'ieee-p1363' },
-        signature,
-      );
-      if (!signatureOk) {
-        return { ok: false, reason: 'Signature does not match' };
-      }
-
-      // Then walk the chain: each certificate must be signed by the next.
-      // Without this a self-signed leaf would pass the check above.
-      for (let i = 0; i < chain.length - 1; i += 1) {
-        const child = new crypto.X509Certificate(this.derToPem(chain[i]));
-        const parent = new crypto.X509Certificate(this.derToPem(chain[i + 1]));
-        if (!child.verify(parent.publicKey)) {
-          return { ok: false, reason: 'Broken certificate chain' };
-        }
-      }
-
-      // Pinned by fingerprint, not by name: anyone can self-sign a root whose
-      // subject says "Apple Root CA - G3", and the chain walk above would
-      // happily accept it.
-      const root = new crypto.X509Certificate(
-        this.derToPem(chain[chain.length - 1]),
-      );
-      if (root.fingerprint256 !== APPLE_ROOT_CA_G3_SHA256) {
-        return { ok: false, reason: 'Chain does not terminate at Apple' };
-      }
-
-      const payload = JSON.parse(
-        Buffer.from(payloadB64, 'base64url').toString('utf8'),
-      );
+      const signed = this.verifyAppleJws(jws);
+      if (!signed.ok) return { ok: false, reason: signed.reason };
+      const payload = signed.payload;
 
       // A genuine Apple signature only proves someone paid Apple for
       // something. Without this, a pro_monthly bought in any other app would
       // unlock Pro here.
-      const bundleId =
-        this.config.get<string>('IOS_BUNDLE_ID') ?? 'com.getdraft.app';
-      if (payload.bundleId !== bundleId) {
+      if (payload.bundleId !== this.appleBundleId()) {
         return { ok: false, reason: 'Purchase belongs to another app' };
       }
 
       const expiresMs: number | undefined = payload.expiresDate;
       const revoked = !!payload.revocationDate;
-      const active =
-        !revoked && (!expiresMs || expiresMs > Date.now());
+      // During a billing grace period Apple keeps the subscription in force
+      // while it retries the card, so access continues until grace ends.
+      const inForce =
+        !expiresMs ||
+        expiresMs > Date.now() ||
+        (!!gracePeriodExpiresMs && gracePeriodExpiresMs > Date.now());
 
       return {
         ok: true,
@@ -128,12 +93,128 @@ export class ReceiptVerifierService {
           ? new Date(payload.purchaseDate).toISOString()
           : null,
         expiresAt: expiresMs ? new Date(expiresMs).toISOString() : null,
-        active,
+        active: !revoked && inForce,
+        appAccountToken: payload.appAccountToken ?? null,
       };
     } catch (err: any) {
       this.logger.error(`apple verification threw: ${err?.message}`);
       return { ok: false, reason: 'Could not verify the receipt' };
     }
+  }
+
+  /**
+   * Verify an App Store Server Notification (V2).
+   *
+   * The notification and the transaction inside it are separate JWSs, each
+   * signed by Apple, so both are checked: a genuine outer envelope around a
+   * forged transaction would otherwise grant whatever the forger wrote.
+   */
+  verifyAppleNotification(
+    signedPayload: string,
+  ):
+    | { ok: true; notification: AppleNotification }
+    | { ok: false; reason: string } {
+    try {
+      const outer = this.verifyAppleJws(signedPayload);
+      if (!outer.ok) return { ok: false, reason: outer.reason };
+      const body = outer.payload;
+      const data = body.data ?? {};
+
+      if (data.bundleId && data.bundleId !== this.appleBundleId()) {
+        return { ok: false, reason: 'Notification belongs to another app' };
+      }
+
+      let gracePeriodExpiresMs: number | undefined;
+      if (data.signedRenewalInfo) {
+        const renewal = this.verifyAppleJws(data.signedRenewalInfo);
+        if (!renewal.ok) return { ok: false, reason: renewal.reason };
+        gracePeriodExpiresMs = renewal.payload.gracePeriodExpiresDate;
+      }
+
+      let purchase: VerifiedPurchase | null = null;
+      if (data.signedTransactionInfo) {
+        purchase = this.verifyApple(
+          data.signedTransactionInfo,
+          gracePeriodExpiresMs,
+        );
+        if (!purchase.ok)
+          return { ok: false, reason: purchase.reason ?? 'Bad transaction' };
+      }
+
+      return {
+        ok: true,
+        notification: {
+          notificationType: String(body.notificationType ?? ''),
+          subtype: body.subtype ?? null,
+          purchase,
+        },
+      };
+    } catch (err: any) {
+      this.logger.error(
+        `apple notification verification threw: ${err?.message}`,
+      );
+      return { ok: false, reason: 'Could not verify the notification' };
+    }
+  }
+
+  private appleBundleId(): string {
+    return this.config.get<string>('IOS_BUNDLE_ID') ?? 'com.getdraft.app';
+  }
+
+  /** Check a StoreKit JWS signature back to Apple's root and return its payload. */
+  private verifyAppleJws(
+    jws: string,
+  ): { ok: true; payload: any } | { ok: false; reason: string } {
+    const [headerB64, payloadB64, signatureB64] = jws.split('.');
+    if (!headerB64 || !payloadB64 || !signatureB64) {
+      return { ok: false, reason: 'Malformed JWS' };
+    }
+
+    const header = JSON.parse(
+      Buffer.from(headerB64, 'base64url').toString('utf8'),
+    );
+    const chain: string[] = header.x5c ?? [];
+    if (chain.length < 2) {
+      return { ok: false, reason: 'Missing certificate chain' };
+    }
+
+    // Leaf certificate signs the token; verify the token against it first.
+    const leafPem = this.derToPem(chain[0]);
+    const verifier = crypto.createVerify('SHA256');
+    verifier.update(`${headerB64}.${payloadB64}`);
+    const signature = Buffer.from(signatureB64, 'base64url');
+    const signatureOk = verifier.verify(
+      { key: leafPem, dsaEncoding: 'ieee-p1363' },
+      signature,
+    );
+    if (!signatureOk) {
+      return { ok: false, reason: 'Signature does not match' };
+    }
+
+    // Then walk the chain: each certificate must be signed by the next.
+    // Without this a self-signed leaf would pass the check above.
+    for (let i = 0; i < chain.length - 1; i += 1) {
+      const child = new crypto.X509Certificate(this.derToPem(chain[i]));
+      const parent = new crypto.X509Certificate(this.derToPem(chain[i + 1]));
+      if (!child.verify(parent.publicKey)) {
+        return { ok: false, reason: 'Broken certificate chain' };
+      }
+    }
+
+    // Pinned by fingerprint, not by name: anyone can self-sign a root whose
+    // subject says "Apple Root CA - G3", and the chain walk above would
+    // happily accept it.
+    const root = new crypto.X509Certificate(
+      this.derToPem(chain[chain.length - 1]),
+    );
+    if (root.fingerprint256 !== APPLE_ROOT_CA_G3_SHA256) {
+      return { ok: false, reason: 'Chain does not terminate at Apple' };
+    }
+
+    const payload = JSON.parse(
+      Buffer.from(payloadB64, 'base64url').toString('utf8'),
+    );
+    return { ok: true, payload };
   }
 
   private derToPem(der: string): string {
