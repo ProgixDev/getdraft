@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Modal,
@@ -34,6 +35,7 @@ import {
   setDiscoverPreferences,
 } from "@/store/slices/discoverPreferencesSlice";
 import { isFreePlan, usePlanId } from "@/hooks/use-plan";
+import { useCitySearch } from "@/hooks/use-region-search";
 
 // Cap the picker list so a long location list scrolls inside the sheet instead
 // of overflowing past the bottom edge (where it was previously cut off).
@@ -113,6 +115,7 @@ function OptionPickerModal({
   onClose,
   onSelect,
   emptyHint,
+  citySearch,
 }: {
   visible: boolean;
   title: string;
@@ -121,6 +124,13 @@ function OptionPickerModal({
   onClose: () => void;
   onSelect: (value: string) => void;
   emptyHint?: string;
+  /**
+   * Set for the City picker. The bundled list only holds the biggest cities
+   * of 31 countries, so typing also searches Mapbox inside the country and
+   * offers the typed name itself -- the feed matches city as free text, so
+   * any real place name is a valid filter.
+   */
+  citySearch?: { countryCode?: string };
 }) {
   const insets = useSafeAreaInsets();
   // The city and league lists both run long now; past a dozen rows a search
@@ -129,11 +139,30 @@ function OptionPickerModal({
   useEffect(() => {
     if (!visible) setQuery("");
   }, [visible]);
+  const { results: foundCities, searching } = useCitySearch(
+    query,
+    citySearch?.countryCode,
+    visible && Boolean(citySearch),
+  );
   const shown = useMemo(() => {
     const q = fold(query);
     if (!q) return options;
-    return options.filter((o) => fold(o.label).includes(q));
-  }, [options, query]);
+    const local = options.filter((o) => fold(o.label).includes(q));
+    if (!citySearch) return local;
+
+    const seen = new Set(local.map((o) => fold(o.value)));
+    const remote = foundCities
+      .filter((name) => !seen.has(fold(name)))
+      .map((name) => ({ label: name, value: name }));
+    remote.forEach((o) => seen.add(fold(o.value)));
+
+    const typed = query.trim();
+    const useTyped = seen.has(fold(typed))
+      ? []
+      : [{ label: `Use “${typed}”`, value: typed }];
+    return [...local, ...remote, ...useTyped];
+  }, [options, query, citySearch, foundCities]);
+  const showSearch = options.length > 12 || Boolean(citySearch);
 
   return (
     <Modal
@@ -151,18 +180,22 @@ function OptionPickerModal({
               <Ionicons name="close" size={20} color={theme.text} />
             </Pressable>
           </View>
-          {options.length > 12 && (
+          {showSearch && (
             <View style={styles.modalSearch}>
               <Ionicons name="search" size={16} color={theme.textMuted} />
               <TextInput
                 style={styles.modalSearchInput}
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search"
+                placeholder={citySearch ? "Search any city" : "Search"}
                 placeholderTextColor={theme.inputPlaceholder}
                 autoCorrect={false}
+                autoCapitalize={citySearch ? "words" : "none"}
                 returnKeyType="search"
               />
+              {searching && (
+                <ActivityIndicator size="small" color={theme.textMuted} />
+              )}
               {query.length > 0 && (
                 <Pressable onPress={() => setQuery("")} hitSlop={8}>
                   <Ionicons
@@ -180,7 +213,7 @@ function OptionPickerModal({
             showsVerticalScrollIndicator
             keyboardShouldPersistTaps="handled"
           >
-            {emptyHint && options.length <= 1 ? (
+            {emptyHint && options.length <= 1 && !query.trim() ? (
               <Text style={styles.modalEmptyHint}>{emptyHint}</Text>
             ) : null}
             {query.trim().length > 0 && shown.length === 0 ? (
@@ -635,7 +668,15 @@ export default function PreferencesScreen() {
         onSelect={handleSelectFromModal}
         emptyHint={
           activeModal === "city"
-            ? "No cities to show yet. Pick a country first to see its cities here."
+            ? "Type a city name above to search."
+            : undefined
+        }
+        citySearch={
+          activeModal === "city"
+            ? {
+                countryCode:
+                  findCountryByName(preferences.country)?.code || undefined,
+              }
             : undefined
         }
       />
