@@ -7,7 +7,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import {
@@ -153,13 +153,14 @@ export class StoreBillingController {
    *
    * Public, because Apple does not log in. The signed payload is the
    * authentication: it is verified back to Apple's root before anything is
-   * applied. Throttled generously rather than not at all: Apple sends a few
-   * notifications per subscriber per month and retries a refused one for
-   * days, while an unlimited public endpoint that does signature work on
-   * every request is an easy way to burn the server's CPU.
+   * applied. Not throttled: behind Railway's proxy every caller shares one
+   * throttle bucket, so any limit here would let anyone use it up and get
+   * Apple's real notifications refused, which Apple stops retrying after a
+   * few days. The work per request is bounded instead: the payload is capped
+   * at 64 KB, and a chain that is not Apple's fails before any network call.
    */
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 300 } })
+  @SkipThrottle()
   @Post('apple/notifications')
   @HttpCode(200)
   @ApiExcludeEndpoint()

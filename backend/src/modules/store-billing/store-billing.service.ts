@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import { PlanId, PLAN_SWIPE_LIMITS } from '../../common/types';
 import type { AppleNotification } from './receipt-verifier.service';
@@ -45,12 +50,23 @@ export class StoreBillingService {
   async ownerOfStoreSubscription(
     transactionId: string,
   ): Promise<string | null> {
-    const { data } = await this.supabaseService
+    const { data, error } = await this.supabaseService
       .getAdminClient()
       .from('subscriptions')
       .select('user_id')
       .eq('store_transaction_id', transactionId)
       .maybeSingle();
+    // A failed read is not "nobody owns it". Treating it that way would drop
+    // an Apple notification with a 200 (never retried) and let /validate
+    // skip the ownership check, so fail and let the caller retry.
+    if (error) {
+      this.logger.error(
+        `owner lookup failed for store transaction ${transactionId}: ${error.message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not check who owns this purchase; try again',
+      );
+    }
     return data?.user_id ?? null;
   }
 

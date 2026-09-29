@@ -1,4 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PurchasePlatform } from './dto/validate-purchase.dto';
 import { StoreBillingController } from './store-billing.controller';
 import { StoreBillingService } from './store-billing.service';
@@ -155,6 +158,33 @@ describe('StoreBillingService.applyAppleNotification', () => {
       subtype: null,
       purchase: purchase({ active: false, appAccountToken: OTHER }),
     });
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it('fails, so Apple retries, when the owner lookup itself fails', async () => {
+    const failingDb = {
+      getAdminClient: () => ({
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: null,
+                error: { message: 'connection reset' },
+              }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const svc = new StoreBillingService(failingDb as never);
+    const apply = jest.spyOn(svc, 'applyStoreSubscription');
+    await expect(
+      svc.applyAppleNotification({
+        notificationType: 'REFUND',
+        subtype: null,
+        purchase: purchase({ active: false }),
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(apply).not.toHaveBeenCalled();
   });
 
