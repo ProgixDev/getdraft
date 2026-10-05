@@ -116,6 +116,26 @@ export class UsersService {
       if (dto.role === UserRole.ADMIN) {
         throw new ForbiddenException('The admin role cannot be self-assigned.');
       }
+      // The account type is chosen once, during signup. After onboarding it
+      // is fixed: an athlete who could flip to coach and back would see every
+      // minor in the recruiting deck, match them as a "coach", and then sit
+      // in an athlete-to-minor chat that no Community rule ever checked. A
+      // coach flipping to parent would likewise pass role checks they never
+      // earned. Sending the role you already have stays a no-op, because the
+      // app resends it on some profile saves.
+      const { data: current, error: currentErr } = await supabase
+        .from('users')
+        .select('role, is_onboarded')
+        .eq('id', user.id)
+        .single();
+      if (currentErr) {
+        throw new BadRequestException(currentErr.message);
+      }
+      if (current.is_onboarded && current.role !== dto.role) {
+        throw new ForbiddenException(
+          "Your account type can't be changed. Contact support.",
+        );
+      }
       // Mirror onto auth.users.app_metadata, NOT user_metadata. OAuth signup
       // hits this right after the provider returns, and onboarding hits it
       // when the user picks a role — JwtAuthGuard resolves `role` from

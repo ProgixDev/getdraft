@@ -24,6 +24,20 @@ export class OutreachService {
     private notificationsService: NotificationsService,
   ) {}
 
+  /** True if either user has blocked the other. */
+  private async isBlockedPair(a: string, b: string): Promise<boolean> {
+    const { data } = await this.supabaseService
+      .getAdminClient()
+      .from('blocks')
+      .select('id')
+      .or(
+        `and(blocker_id.eq.${a},blocked_id.eq.${b}),` +
+          `and(blocker_id.eq.${b},blocked_id.eq.${a})`,
+      )
+      .limit(1);
+    return (data?.length ?? 0) > 0;
+  }
+
   async createOutreach(user: CurrentUserPayload, dto: CreateOutreachDto) {
     if (user.role !== UserRole.RECRUITER && user.role !== UserRole.COACH) {
       throw new ForbiddenException('Only recruiters/coaches can send outreach');
@@ -47,6 +61,28 @@ export class OutreachService {
       .maybeSingle();
     if (!child || child.role !== UserRole.ATHLETE) {
       throw new BadRequestException('Target child is not an athlete');
+    }
+
+    // Both ids come from the client. Without this a recruiter could write to
+    // ANY parent about ANY child, so the parent must be that athlete's
+    // approved guardian -- the same link the public profile reads to hand a
+    // coach the guardian in the first place.
+    const { data: links } = await supabase
+      .from('guardian_links')
+      .select('id')
+      .eq('guardian_user_id', dto.parentId)
+      .eq('athlete_user_id', dto.childAthleteId)
+      .eq('status', 'approved')
+      .limit(1);
+    if (!links || links.length === 0) {
+      throw new ForbiddenException('This parent is not linked to that athlete');
+    }
+
+    // A parent who blocked this recruiter must not get a new thread and a
+    // push from them. Outreach is the one channel that needs no match, so it
+    // has to honour blocks itself.
+    if (await this.isBlockedPair(user.id, dto.parentId)) {
+      throw new ForbiddenException('You cannot contact this user');
     }
 
     const { data: outreach, error } = await supabase
@@ -269,6 +305,13 @@ export class OutreachService {
     if (!outreach) throw new NotFoundException('Outreach not found');
     if (outreach.parent_id !== userId && outreach.recruiter_id !== userId) {
       throw new ForbiddenException('Not authorized');
+    }
+
+    // Blocking someone ends the thread for both sides.
+    const otherId =
+      outreach.parent_id === userId ? outreach.recruiter_id : outreach.parent_id;
+    if (await this.isBlockedPair(userId, otherId)) {
+      throw new ForbiddenException('You cannot message this user');
     }
 
     const { data, error } = await supabase

@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 import { writeAuthzClaims } from '../../common/utils/authz-claims';
+import { ChatGateway } from '../chat/chat.gateway';
 
 @Injectable()
 export class AdminService {
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private chatGateway: ChatGateway,
+  ) {}
 
   async getUsers(
     page = 1,
@@ -96,6 +100,13 @@ export class AdminService {
       await supabase.auth.admin.signOut(userId, 'global');
     } catch {
       // Best-effort: the DB flag + guard check still apply on next login.
+    }
+
+    // Revoking sessions does not close a chat socket that is already open.
+    try {
+      this.chatGateway.disconnectUser(userId);
+    } catch {
+      // Best-effort: the gateway also re-checks the ban on every send.
     }
 
     return { message: 'User banned' };

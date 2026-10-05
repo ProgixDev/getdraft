@@ -64,6 +64,15 @@ export class ChatGateway
           this.logger.warn(`WS handshake refused: banned user (${socket.id})`);
           return next(new Error('account suspended'));
         }
+        // Nest does not run global guards for gateway events, so the
+        // ActivationGuard that keeps a minor without an approved guardian
+        // out of the REST API never saw the socket. Same rule, here.
+        if (claims.activationStatus === 'pending_guardian') {
+          this.logger.warn(
+            `WS handshake refused: awaiting guardian approval (${socket.id})`,
+          );
+          return next(new Error('account pending guardian approval'));
+        }
       } catch (err: any) {
         // Unresolvable claims are a denial, same as the REST guard.
         this.logger.warn(
@@ -83,6 +92,67 @@ export class ChatGateway
 
   handleDisconnect(_client: Socket) {
     // socket.io cleans rooms automatically
+  }
+
+  /**
+   * Drop every socket a user has open. A ban revokes their REST sessions at
+   * once, but a socket that was already connected kept sending into every
+   * thread until the app was closed.
+   */
+  disconnectUser(userId: string) {
+    this.server?.in(`user:${userId}`).disconnectSockets(true);
+  }
+
+  /** Sends per user in the current window (see maySend). */
+  private readonly sendCounts = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
+
+  /**
+   * Gate for every message a socket sends. Gateway events skip Nest's global
+   * guards, so what the REST path gets for free is repeated here:
+   *   - a rate limit (20 sends per 10 s), because each message is a database
+   *     row and usually a push to the other phone;
+   *   - the ban and guardian-approval flags, re-read on each send, because the
+   *     handshake only checked them when the socket opened and a ban or a
+   *     withdrawn guardian must stop a conversation that is already open.
+   */
+  private async maySend(client: Socket, userId: string): Promise<boolean> {
+    const now = Date.now();
+    const slot = this.sendCounts.get(userId);
+    if (!slot || slot.resetAt <= now) {
+      if (this.sendCounts.size > 5000) {
+        for (const [id, s] of this.sendCounts) {
+          if (s.resetAt <= now) this.sendCounts.delete(id);
+        }
+      }
+      this.sendCounts.set(userId, { count: 1, resetAt: now + 10_000 });
+    } else if (++slot.count > 20) {
+      client.emit('error', {
+        message: 'You are sending messages too fast. Wait a moment.',
+      });
+      return false;
+    }
+
+    const { data } = await this.supabaseService
+      .getAdminClient()
+      .from('users')
+      .select('is_banned, activation_status')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!data || data.is_banned) {
+      client.emit('error', { message: 'Account suspended' });
+      client.disconnect(true);
+      return false;
+    }
+    if (data.activation_status === 'pending_guardian') {
+      client.emit('error', {
+        message: 'Your account is waiting for guardian approval.',
+      });
+      return false;
+    }
+    return true;
   }
 
   @SubscribeMessage('join_thread')
@@ -125,6 +195,7 @@ export class ChatGateway
       client.emit('error', { message: 'Message is too long (max 2000 chars).' });
       return;
     }
+    if (!(await this.maySend(client, userId))) return;
 
     try {
       const message = await this.chatService.sendMessage(
@@ -203,6 +274,10 @@ export class ChatGateway
   ) {
     const userId = this.requireUserId(client);
     if (!userId) return;
+    // Only into a thread this socket has joined (join_thread checks
+    // membership). Without this, anyone holding a match id could show a
+    // typing indicator in a thread they were removed from.
+    if (!client.rooms.has(`thread:${data?.matchId}`)) return;
     client.to(`thread:${data.matchId}`).emit('user_typing', {
       matchId: data.matchId,
       userId,
@@ -273,6 +348,7 @@ export class ChatGateway
         client.emit('error', { message: 'Message is too long (max 2000 chars).' });
         return;
       }
+      if (!(await this.maySend(client, userId))) return;
       // Block enforcement (either direction): a blocked pair cannot DM.
       if (await this.isBlockedPair(userId, recipientId)) {
         client.emit('error', { message: 'Cannot message a blocked user' });
