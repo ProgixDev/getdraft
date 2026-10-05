@@ -1,5 +1,8 @@
+import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { AuthService } from './auth.service';
 import { SupabaseService } from '../../config/supabase.config';
 import { ConfigService } from '@nestjs/config';
@@ -7,7 +10,10 @@ import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
 import { PreludeService } from './prelude.service';
+import { SignupDto } from './dto/signup.dto';
+import { CompleteSignupDto } from './dto/email-otp.dto';
 import { UserRole } from '../../common/types';
+import { TEAM_ROLE_DISABLED_MESSAGE } from '../../common/utils/team-role';
 
 // Mock Supabase client chain builder
 const createChain = (result: any) => {
@@ -22,6 +28,7 @@ const createChain = (result: any) => {
 describe('AuthService', () => {
   let service: AuthService;
   let supabaseService: SupabaseService;
+  let verificationTokens: { verify: jest.Mock };
 
   const mockClient = {
     auth: {
@@ -136,6 +143,9 @@ describe('AuthService', () => {
 
     service = module.get<AuthService>(AuthService);
     supabaseService = module.get<SupabaseService>(SupabaseService);
+    verificationTokens = module.get(VerificationTokenService) as unknown as {
+      verify: jest.Mock;
+    };
   });
 
   describe('signup', () => {
@@ -450,6 +460,165 @@ describe('AuthService', () => {
     it('should no-op when no token is provided', async () => {
       const result = await service.logout(null);
       expect(result.message).toBe('Logged out successfully');
+    });
+  });
+
+  // Team accounts are behind TEAM_ROLE_ENABLED (default OFF): the backend
+  // deploys itself, migration 047 is run by hand, and a team created before
+  // it would be stored as an athlete.
+  describe('Team accounts (TEAM_ROLE_ENABLED)', () => {
+    const originalFlag = process.env.TEAM_ROLE_ENABLED;
+    beforeEach(() => {
+      delete process.env.TEAM_ROLE_ENABLED;
+    });
+    afterEach(() => {
+      if (originalFlag === undefined) delete process.env.TEAM_ROLE_ENABLED;
+      else process.env.TEAM_ROLE_ENABLED = originalFlag;
+    });
+
+    const teamSignup = {
+      email: 'club@example.com',
+      password: 'Password123!',
+      role: UserRole.TEAM,
+      name: 'FC Montreal',
+    };
+    const teamCompleteSignup = {
+      verificationToken: 'signed-token',
+      password: 'Password123!',
+      role: UserRole.TEAM,
+      name: 'FC Montreal',
+    };
+
+    /** Everything completeSignup touches on the email path, all succeeding. */
+    const mockCompleteSignup = () => {
+      verificationTokens.verify.mockReturnValue({
+        contact: 'club@example.com',
+        contactType: 'email',
+      });
+      const table = mockAdminTable(null); // no account with this email yet
+      mockAdminClient.auth.admin.createUser = jest.fn().mockResolvedValue({
+        data: { user: { id: 'user-1' } },
+        error: null,
+      });
+      mockClient.auth.signInWithPassword.mockResolvedValue({
+        data: { session: { access_token: 'a', refresh_token: 'r' } },
+        error: null,
+      });
+      (otpMock as any).consume = jest.fn();
+      return table;
+    };
+
+    it.each([undefined, 'false', '0', 'off'])(
+      'signup refuses a team with TEAM_ROLE_ENABLED=%p (400), before anything is created',
+      async (flag) => {
+        if (flag !== undefined) process.env.TEAM_ROLE_ENABLED = flag;
+        await expect(service.signup(teamSignup)).rejects.toThrow(
+          new BadRequestException(TEAM_ROLE_DISABLED_MESSAGE),
+        );
+        expect(mockClient.auth.signUp).not.toHaveBeenCalled();
+        expect(mockAdminClient.auth.admin.updateUserById).not.toHaveBeenCalled();
+      },
+    );
+
+    it('signup accepts a team once the switch is on: claim and column both say team', async () => {
+      process.env.TEAM_ROLE_ENABLED = 'true';
+      mockClient.auth.signUp.mockResolvedValue({
+        data: {
+          user: { id: 'user-1', email: 'club@example.com' },
+          session: { access_token: 'a', refresh_token: 'r' },
+        },
+        error: null,
+      });
+      const { update, updateEq } = mockAdminTable();
+
+      const result = await service.signup(teamSignup);
+
+      expect(result.user.role).toBe(UserRole.TEAM);
+      const [, payload] =
+        mockAdminClient.auth.admin.updateUserById.mock.calls[0];
+      expect(payload.app_metadata).toEqual({
+        provider: 'email',
+        role: UserRole.TEAM,
+        is_banned: false,
+        activation_status: 'active',
+      });
+      expect(update).toHaveBeenCalledWith({ role: UserRole.TEAM });
+      expect(updateEq).toHaveBeenCalledWith('id', 'user-1');
+    });
+
+    it('complete-signup refuses a team while the switch is off (400): no token check, no account', async () => {
+      mockCompleteSignup();
+      await expect(service.completeSignup(teamCompleteSignup)).rejects.toThrow(
+        new BadRequestException(TEAM_ROLE_DISABLED_MESSAGE),
+      );
+      expect(TEAM_ROLE_DISABLED_MESSAGE).toBe(
+        'Team accounts are not available yet.',
+      );
+      expect(verificationTokens.verify).not.toHaveBeenCalled();
+      expect(mockAdminClient.auth.admin.createUser).not.toHaveBeenCalled();
+    });
+
+    it('complete-signup creates a team account once the switch is on', async () => {
+      process.env.TEAM_ROLE_ENABLED = 'yes';
+      const { update } = mockCompleteSignup();
+
+      const result = await service.completeSignup(teamCompleteSignup);
+
+      expect(result.user).toMatchObject({
+        id: 'user-1',
+        email: 'club@example.com',
+        role: UserRole.TEAM,
+        name: 'FC Montreal',
+      });
+      expect(result.isOnboarded).toBe(false);
+      // The role is minted into app_metadata, where the guards read it...
+      const created = mockAdminClient.auth.admin.createUser.mock.calls[0][0];
+      expect(created.app_metadata).toEqual({
+        role: UserRole.TEAM,
+        is_banned: false,
+        activation_status: 'active',
+      });
+      expect(created.user_metadata).toEqual({ name: 'FC Montreal' });
+      // ...and written to public.users whatever the signup trigger did.
+      expect(update).toHaveBeenCalledWith({ role: UserRole.TEAM });
+    });
+
+    it('the switch does not touch the other roles', async () => {
+      const { update } = mockCompleteSignup();
+      const result = await service.completeSignup({
+        ...teamCompleteSignup,
+        role: UserRole.COACH,
+      });
+      expect(result.user.role).toBe(UserRole.COACH);
+      expect(update).toHaveBeenCalledWith({ role: UserRole.COACH });
+    });
+
+    it("both signup DTOs accept 'team' and still refuse 'admin'", () => {
+      const roleErrors = (dto: object) =>
+        validateSync(dto)
+          .filter((e) => e.property === 'role')
+          .map((e) => e.property);
+
+      for (const role of ['athlete', 'parent', 'coach', 'recruiter', 'team']) {
+        expect(
+          roleErrors(plainToInstance(SignupDto, { ...teamSignup, role })),
+        ).toEqual([]);
+        expect(
+          roleErrors(
+            plainToInstance(CompleteSignupDto, { ...teamCompleteSignup, role }),
+          ),
+        ).toEqual([]);
+      }
+      for (const role of ['admin', 'owner', '']) {
+        expect(
+          roleErrors(plainToInstance(SignupDto, { ...teamSignup, role })),
+        ).toEqual(['role']);
+        expect(
+          roleErrors(
+            plainToInstance(CompleteSignupDto, { ...teamCompleteSignup, role }),
+          ),
+        ).toEqual(['role']);
+      }
     });
   });
 });

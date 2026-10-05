@@ -159,7 +159,14 @@ export class AdminService {
 
     // Per-role headcounts power the admin dashboard cards. One round trip
     // per role is fine — count(head:true) doesn't pull rows.
-    const roles = ['athlete', 'coach', 'recruiter', 'parent', 'admin'] as const;
+    const roles = [
+      'athlete',
+      'coach',
+      'recruiter',
+      'team',
+      'parent',
+      'admin',
+    ] as const;
     const byRoleEntries = await Promise.all(
       roles.map(async (role) => {
         const { count } = await supabase

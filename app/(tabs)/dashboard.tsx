@@ -205,6 +205,15 @@ export default function AdminDashboardScreen() {
               label="Parents"
               value={stats?.byRole.parent ?? 0}
             />
+            {/* Only once the server counts team accounts: an older one
+                sends no figure, and "0 Teams" would be a guess. */}
+            {typeof stats?.byRole.team === "number" && (
+              <RoleTile
+                icon="shield-outline"
+                label="Teams"
+                value={stats.byRole.team}
+              />
+            )}
           </View>
 
           <Text style={styles.sectionLabel}>Activity</Text>

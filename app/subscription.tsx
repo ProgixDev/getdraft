@@ -32,6 +32,7 @@ import { useStorePrices } from '@/hooks/use-store-prices';
 import { plans } from '@/constants/plansData';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
+import { DRAFTING_ROLES } from '@/lib/roles';
 
 type SubStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
@@ -73,10 +74,11 @@ export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Billing is athlete/recruiter-side only. Parents are covered by their
-  // athlete's plan and admins never buy — deep links bounce them home
-  // (focus-based, same pattern as the role-gated tabs).
-  const redirecting = useRoleHomeRedirect(['athlete', 'coach', 'recruiter']);
+  // Billing is athlete/recruiter-side only (recruiter side = coaches, agents
+  // and teams). Parents are covered by their athlete's plan and admins never
+  // buy — deep links bounce them home (focus-based, same pattern as the
+  // role-gated tabs).
+  const redirecting = useRoleHomeRedirect(DRAFTING_ROLES);
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,

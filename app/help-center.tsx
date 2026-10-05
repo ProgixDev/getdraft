@@ -63,6 +63,12 @@ const FAQ_ITEMS = [
     answer:
       "By default, your profile is visible to all verified recruiters, coaches, and agents on the platform. You can hide your profile from search in Settings > Privacy > Profile Visible to Recruiters.",
   },
+  {
+    icon: "shield-outline" as const,
+    question: "What is a Team / Club account?",
+    answer:
+      "A Team / Club account is for an organization rather than one person: a club, school, college, academy or pro team. It has one login, scouts and Drafts athletes like a coach does, and can connect with other teams in Community. Athletes see it as a Team card showing the team's name, sport, type of organization and league. If you coach or represent athletes yourself, keep a Coach or Agent account instead.",
+  },
 ];
 
 export default function HelpCenterScreen() {

@@ -1,6 +1,6 @@
 import api from "./api";
 
-/** recruit = athletes ↔ coaches/agents; peer = your own role (Community). */
+/** recruit = athletes ↔ coaches/agents/teams; peer = your own role (Community). */
 export type DiscoverMode = "recruit" | "peer";
 
 export interface DiscoverQuery {
@@ -66,6 +66,7 @@ export function ageGroupLabel(
 export interface FeedResponse {
   cards: any[];
   hasMore: boolean;
+  /** Drafts left today. "Not counted" when isUnlimitedSwipes() says so. */
   swipesRemaining: number;
   // Remaining Super Drafts this month (separate, always-capped allowance).
   // Optional so an older backend that doesn't send it doesn't break the client.
@@ -85,8 +86,28 @@ export interface FeedResponse {
 export interface SwipeResponse {
   matched: boolean;
   matchId: string | null;
+  /** Drafts left today. "Not counted" when isUnlimitedSwipes() says so. */
   swipesRemaining: number;
   superDraftsRemaining?: number;
+}
+
+/**
+ * Whether `swipesRemaining` means "Drafts are not counted", which is the
+ * answer for Community (peer mode) on every plan, and for an unlimited plan
+ * in recruiting. Two spellings reach the app:
+ *   -1      the "no limit" sentinel. It is NOT "none left": a `<= 0` check
+ *           on its own would lock the deck.
+ *   9999+   what the server has always reported for an unlimited allowance
+ *           (9999 plus any bonus Drafts), and what it sends for Community
+ *           while builds that lock at `<= 0` are still installed.
+ */
+export const UNLIMITED_SWIPES_FLOOR = 9999;
+
+export function isUnlimitedSwipes(
+  swipesRemaining: number | null | undefined,
+): boolean {
+  if (typeof swipesRemaining !== "number") return false;
+  return swipesRemaining === -1 || swipesRemaining >= UNLIMITED_SWIPES_FLOOR;
 }
 
 /**
@@ -124,17 +145,21 @@ export interface MapPoint {
   lat: number;
   lng: number;
   avatar_url: string | null;
-  // The map mirrors the Discover role matrix: athletes get coach/agent pins,
-  // coaches/agents get athlete pins. Athlete-only fields are null on a
-  // recruiter pin (and vice-versa) — the card renders what it has.
+  // The map mirrors the Discover role matrix: athletes get coach/agent/team
+  // pins, coaches/agents/teams get athlete pins. Athlete-only fields are null
+  // on a recruiter pin (and vice-versa) — the card renders what it has.
+  // Every coach, agent and team pin is `recruiter` here, as older builds
+  // expect; `accountType` says which of the three it is.
   role: "athlete" | "recruiter";
+  /** Absent from a server that predates team accounts. */
+  accountType?: "athlete" | "coach" | "agent" | "team" | null;
   sport: string | null;
   position: string | null;
   level: string | null;
   class_year: string | null;
   height: string | null;
   gpa: number | null;
-  /** Coach/agent pins only — their org or agency name. */
+  /** Coach/agent/team pins only — their org, agency or club name. */
   organization?: string | null;
   // First gallery photo from athlete_profiles.photos[0]. The globe card
   // falls back to this when avatar_url is missing.

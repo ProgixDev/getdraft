@@ -3,7 +3,28 @@ export enum UserRole {
   PARENT = 'parent',
   COACH = 'coach',
   RECRUITER = 'recruiter',
+  // A club, school or academy account (migration 047). New signups are
+  // behind TEAM_ROLE_ENABLED -- see common/utils/team-role.ts.
+  TEAM = 'team',
   ADMIN = 'admin',
+}
+
+/**
+ * The recruiting side of the matrix: coaches, agents (role 'recruiter') and
+ * teams. All three scout athletes, share the recruiter_profiles table and
+ * may write to a minor's guardian. Listed once so a rule written for
+ * "coaches and agents" cannot quietly leave teams out.
+ */
+export const RECRUITER_ROLES = [
+  UserRole.COACH,
+  UserRole.RECRUITER,
+  UserRole.TEAM,
+] as const;
+
+export type RecruiterRole = (typeof RECRUITER_ROLES)[number];
+
+export function isRecruiterRole(role: unknown): role is RecruiterRole {
+  return (RECRUITER_ROLES as readonly unknown[]).includes(role);
 }
 
 export enum SwipeDirection {
@@ -14,12 +35,13 @@ export enum SwipeDirection {
 /**
  * Which pool Discover shows and which pairs a swipe may create.
  *
- * RECRUIT is the original product: athletes ↔ coaches/agents. PEER is the
- * community layer the client asked for -- the same role matching itself
- * (athlete↔athlete, coach↔coach, agent↔agent, parent↔parent) so people can
- * swap advice. Kept as separate pools rather than one wider deck: a coach
- * scouting athletes must never have other coaches mixed into the same stack,
- * and peer activity must stay out of the Draft Score (migration 044).
+ * RECRUIT is the original product: athletes ↔ coaches/agents/teams. PEER is
+ * the community layer the client asked for -- the same role matching itself
+ * (athlete↔athlete, coach↔coach, agent↔agent, team↔team, parent↔parent) so
+ * people can swap advice. Kept as separate pools rather than one wider deck:
+ * a coach scouting athletes must never have other coaches mixed into the
+ * same stack, and peer activity must stay out of the Draft Score (migration
+ * 044).
  */
 export enum DiscoverMode {
   RECRUIT = 'recruit',
@@ -69,6 +91,36 @@ export enum OutreachStatus {
 export enum RecruiterRoleType {
   AGENT = 'agent',
   COACH = 'coach',
+  TEAM = 'team',
+}
+
+/**
+ * recruiter_profiles.role_type for an account type, or null when the role
+ * has no recruiter profile. The server always derives it from users.role:
+ * the request body used to decide it, so a coach could label itself an agent
+ * -- and, once teams exist, a team.
+ */
+export function recruiterRoleTypeFor(role: unknown): RecruiterRoleType | null {
+  switch (role) {
+    case UserRole.COACH:
+      return RecruiterRoleType.COACH;
+    case UserRole.RECRUITER:
+      return RecruiterRoleType.AGENT;
+    case UserRole.TEAM:
+      return RecruiterRoleType.TEAM;
+    default:
+      return null;
+  }
+}
+
+/** What kind of organisation a Team account is (recruiter_profiles.org_type). */
+export enum OrgType {
+  CLUB = 'club',
+  SCHOOL = 'school',
+  COLLEGE = 'college',
+  ACADEMY = 'academy',
+  PRO = 'pro',
+  OTHER = 'other',
 }
 
 export enum SubscriptionStatus {

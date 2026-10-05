@@ -38,6 +38,7 @@ import {
 import { outreachService } from "@/services/outreach";
 import { kycService } from "@/services/kyc";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import { roleIcon } from "@/lib/roles";
 
 type IonName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -313,8 +314,10 @@ export default function GuardianHomeScreen() {
                 accessibilityRole="button"
               >
                 <View style={styles.outreachIcon}>
+                  {/* The sender label the server put on the thread: Coach,
+                      Agent or Team. */}
                   <Ionicons
-                    name={o.recruiterRole === "Coach" ? "school" : "briefcase"}
+                    name={roleIcon(o.recruiterRole)}
                     size={18}
                     color={theme.text}
                   />

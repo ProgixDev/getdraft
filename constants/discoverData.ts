@@ -5,12 +5,22 @@
  */
 
 import { images, videos as videoAssets } from "@/config/assets";
+import type { RecruiterType, UserRole } from "@/lib/roles";
 
 export interface RecruiterCard {
   id: string;
   name: string;
-  /** parent = a Community (peer-mode) card; parents reuse this card shape. */
-  role: "agent" | "coach" | "parent";
+  /**
+   * The recruiter profile's role_type (agent, coach, team).
+   * parent = a Community (peer-mode) card; parents reuse this card shape.
+   */
+  role: RecruiterType | "parent";
+  /**
+   * Team cards only: club, school, college, academy, pro or other (null when
+   * the team has not said). Absent from an older server, which never sends
+   * team cards at all.
+   */
+  orgType?: string | null;
   organization: string;
   location: string;
   country: string;
@@ -569,8 +579,9 @@ export interface AthleteMatch {
   id: string;
   recruiterName: string;
   /** Historically agent|coach; with Community matches the other side can be
-   *  any role, so the server now sends their actual role label. */
-  recruiterRole: "agent" | "coach" | "athlete" | "parent" | "recruiter";
+   *  any role, so the server now sends their actual role label (a users.role,
+   *  or the recruiter profile's `agent`). */
+  recruiterRole: UserRole | RecruiterType;
   organization: string;
   location: string;
   verified: boolean;
@@ -644,7 +655,7 @@ export interface AthleteChatMessage {
 export interface AthleteChatThread {
   id: string;
   recruiterName: string;
-  recruiterRole: "agent" | "coach";
+  recruiterRole: UserRole | RecruiterType;
   organization: string;
   verified: boolean;
   messages: AthleteChatMessage[];

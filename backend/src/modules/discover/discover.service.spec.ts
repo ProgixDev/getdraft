@@ -6,7 +6,11 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { DiscoverService } from './discover.service';
+import {
+  DiscoverService,
+  SUPER_DRAFT_RECRUIT_ONLY_MESSAGE,
+  UNLIMITED_DRAFTS,
+} from './discover.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -161,6 +165,10 @@ describe('DiscoverService', () => {
         findFirst: jest
           .fn()
           .mockResolvedValue({ athlete_user_id: 'athlete-9' }),
+      },
+      // Only read for the org_type of team cards (teamOrgTypes).
+      recruiter_profiles: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       subscriptions: {
         findUnique: jest.fn().mockResolvedValue(sub()),
@@ -879,7 +887,10 @@ describe('DiscoverService', () => {
           'community',
         );
         const where = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
-        expect(where.OR).toEqual([{ role: { in: ['coach', 'recruiter'] } }]);
+        // Coaches, agents and -- since migration 047 -- teams.
+        expect(where.OR).toEqual([
+          { role: { in: ['coach', 'recruiter', 'team'] } },
+        ]);
       });
     });
 
@@ -966,6 +977,543 @@ describe('DiscoverService', () => {
         await service.whoDraftedMe(recruiterUser);
         expect(swiperFilter()).toEqual({ is_banned: false });
       });
+    });
+  });
+
+  // ---- Team accounts (migration 047) -------------------------------------
+
+  describe('Team accounts', () => {
+    const teamUser: CurrentUserPayload = {
+      id: 'team-1',
+      email: 'team@test.com',
+      role: UserRole.TEAM,
+    };
+    const coachUser: CurrentUserPayload = {
+      id: 'coach-1',
+      email: 'coach@test.com',
+      role: UserRole.COACH,
+    };
+
+    // A feed / map row for a coach, an agent or a team.
+    const feedRecruiter = (id: string, role: string, roleType: string) => ({
+      ...feedAthlete(id, 'Soccer', null),
+      role,
+      athlete_profiles: null,
+      recruiter_profiles: {
+        organization: `${id} org`,
+        sport: 'Soccer',
+        role_type: roleType,
+        verified: true,
+        tags: [],
+        bio: null,
+        photos: [],
+        videos: [],
+      },
+    });
+
+    const targetIs = (role: string) =>
+      prisma.public_users.findUnique.mockResolvedValue({
+        is_banned: false,
+        role,
+      });
+
+    const lastWhere = () =>
+      prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+
+    describe('feed', () => {
+      it('recruiting: a parent acting for their athlete sees coaches, agents and teams', async () => {
+        await service.getFeed(parentUser, {});
+        expect(lastWhere().OR).toEqual([
+          { role: { in: ['coach', 'recruiter', 'team'] } },
+        ]);
+      });
+
+      it('recruiting: a team sees active athletes, and nobody else', async () => {
+        await service.getFeed(teamUser, {});
+        expect(lastWhere().OR).toEqual([
+          { role: 'athlete', activation_status: 'active' },
+        ]);
+      });
+
+      it("recruiterType 'team' narrows an athlete's deck to teams", async () => {
+        await service.getFeed(athleteUser, { recruiterType: 'team' });
+        expect(lastWhere().OR).toEqual([
+          {
+            role: { in: ['coach', 'recruiter', 'team'] },
+            recruiter_profiles: { is: { role_type: 'team' } },
+          },
+        ]);
+      });
+
+      it('Community: a team gets a team-only pool; recruiterType is ignored, sport still narrows', async () => {
+        const result = await service.getFeed(teamUser, {
+          mode: DiscoverMode.PEER,
+          recruiterType: 'coach',
+        });
+        expect(lastWhere().OR).toEqual([{ role: 'team' }]);
+        expect(result.community).toEqual({
+          eligible: true,
+          reason: null,
+          sport: null,
+          ageGroup: null,
+        });
+
+        await service.getFeed(teamUser, {
+          mode: DiscoverMode.PEER,
+          sport: 'Soccer',
+        });
+        expect(lastWhere().OR).toEqual([
+          { role: 'team', recruiter_profiles: { is: { sport: 'Soccer' } } },
+        ]);
+      });
+
+      it("a team is dealt as a recruiter card with role 'team', roleType 'team' and its orgType", async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedRecruiter('team-9', 'team', 'team'),
+          feedRecruiter('coach-9', 'coach', 'coach'),
+          feedRecruiter('agent-9', 'recruiter', 'agent'),
+        ]);
+        prisma.recruiter_profiles.findMany.mockResolvedValue([
+          { user_id: 'team-9', org_type: 'club' },
+        ]);
+
+        const result = await service.getFeed(athleteUser, {});
+        const card = (id: string): any =>
+          result.cards.find((c) => c.id === id);
+
+        expect(card('team-9')).toMatchObject({
+          cardType: 'recruiter',
+          role: 'team',
+          roleType: 'team',
+          orgType: 'club',
+          organization: 'team-9 org',
+          verified: true,
+        });
+        // Coach and agent cards keep their shape; the two new fields are there
+        // for them too, so the app reads one card type.
+        expect(card('coach-9')).toMatchObject({
+          cardType: 'recruiter',
+          role: 'coach',
+          roleType: 'coach',
+          orgType: null,
+        });
+        expect(card('agent-9')).toMatchObject({
+          role: 'agent',
+          roleType: 'agent',
+          orgType: null,
+        });
+        // org_type is asked for the team rows only, in one query.
+        expect(prisma.recruiter_profiles.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.recruiter_profiles.findMany).toHaveBeenCalledWith({
+          where: { user_id: { in: ['team-9'] } },
+          select: { user_id: true, org_type: true },
+        });
+      });
+
+      it('a team account is a team card even when its profile row still says coach', async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedRecruiter('team-9', 'team', 'coach'),
+        ]);
+        const result = await service.getFeed(athleteUser, {});
+        expect(result.cards[0]).toMatchObject({
+          role: 'team',
+          roleType: 'team',
+          orgType: null,
+        });
+      });
+
+      it('with no team on the page the org_type column is never read (safe before migration 047)', async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedRecruiter('coach-9', 'coach', 'coach'),
+        ]);
+        const result = await service.getFeed(athleteUser, {});
+        expect(result.cards).toHaveLength(1);
+        expect(prisma.recruiter_profiles.findMany).not.toHaveBeenCalled();
+        // ...and the page query itself never names the new columns.
+        const select = prisma.public_users.findMany.mock.calls.at(-1)[0].select;
+        expect(select.recruiter_profiles.select).not.toHaveProperty('org_type');
+        expect(select.recruiter_profiles.select).not.toHaveProperty('website');
+      });
+
+      it('a failing org_type lookup does not take the feed down', async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedRecruiter('team-9', 'team', 'team'),
+        ]);
+        prisma.recruiter_profiles.findMany.mockRejectedValue(
+          new Error('column recruiter_profiles.org_type does not exist'),
+        );
+        const result = await service.getFeed(athleteUser, {});
+        expect(result.cards).toHaveLength(1);
+        expect(result.cards[0]).toMatchObject({ role: 'team', orgType: null });
+      });
+    });
+
+    describe('swipe', () => {
+      it('recruiting: a team drafts an athlete and they match (kind=recruit, counts as a Draft received)', async () => {
+        usersById({ 'ath-2': athleteRow() });
+        prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+        const result = await service.swipe(teamUser, {
+          targetUserId: 'ath-2',
+          direction: SwipeDirection.DRAFT,
+        });
+        expect(result.matched).toBe(true);
+        expect(prisma.swipes.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              swiper_id: 'team-1',
+              swiped_id: 'ath-2',
+            }),
+          }),
+        );
+        expect(prisma.matches.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ kind: 'recruit' }),
+          }),
+        );
+        expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+          ...likesCall('ath-2'),
+        );
+      });
+
+      it('recruiting: an athlete drafts a team and they match (kind=recruit)', async () => {
+        targetIs('team');
+        prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+        for (const mode of [undefined, DiscoverMode.RECRUIT]) {
+          prisma.matches.create.mockClear();
+          const result = await service.swipe(athleteUser, {
+            targetUserId: 'team-9',
+            direction: SwipeDirection.DRAFT,
+            mode,
+          });
+          expect(result.matched).toBe(true);
+          expect(prisma.matches.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({ kind: 'recruit' }),
+            }),
+          );
+        }
+      });
+
+      it('recruiting: a parent drafts a team on behalf of their athlete', async () => {
+        targetIs('team');
+        await service.swipe(parentUser, {
+          targetUserId: 'team-9',
+          direction: SwipeDirection.DRAFT,
+        });
+        expect(prisma.swipes.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ swiper_id: 'athlete-9' }),
+          }),
+        );
+      });
+
+      it('Community: two teams connect (kind=peer), with or without a mode', async () => {
+        targetIs('team');
+        prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+        for (const mode of [undefined, DiscoverMode.PEER]) {
+          prisma.matches.create.mockClear();
+          const result = await service.swipe(teamUser, {
+            targetUserId: 'team-2',
+            direction: SwipeDirection.DRAFT,
+            mode,
+          });
+          expect(result.matched).toBe(true);
+          expect(prisma.matches.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({ kind: 'peer' }),
+            }),
+          );
+        }
+        // A Community Draft never feeds the talent counter.
+        expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+          ...likesCall('team-2'),
+        );
+      });
+
+      it.each([
+        ['coach', undefined],
+        ['coach', DiscoverMode.PEER],
+        ['coach', DiscoverMode.RECRUIT],
+        ['recruiter', undefined],
+        ['recruiter', DiscoverMode.PEER],
+        ['recruiter', DiscoverMode.RECRUIT],
+      ])(
+        'a team can never match a %s (mode %p)',
+        async (role, mode) => {
+          targetIs(role);
+          await expect(
+            service.swipe(teamUser, {
+              targetUserId: 'other-1',
+              direction: SwipeDirection.DRAFT,
+              mode,
+            }),
+          ).rejects.toThrow(
+            new ForbiddenException('You cannot match with this user'),
+          );
+          expect(prisma.swipes.create).not.toHaveBeenCalled();
+          expect(prisma.matches.create).not.toHaveBeenCalled();
+        },
+      );
+
+      it('...and a coach can never match a team, in any mode', async () => {
+        targetIs('team');
+        for (const mode of [
+          undefined,
+          DiscoverMode.PEER,
+          DiscoverMode.RECRUIT,
+        ]) {
+          await expect(
+            service.swipe(coachUser, {
+              targetUserId: 'team-9',
+              direction: SwipeDirection.DRAFT,
+              mode,
+            }),
+          ).rejects.toThrow(ForbiddenException);
+        }
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+
+      it('two teams cannot match from the recruit deck, and a team cannot peer-draft an athlete', async () => {
+        targetIs('team');
+        await expect(
+          service.swipe(teamUser, {
+            targetUserId: 'team-2',
+            direction: SwipeDirection.DRAFT,
+            mode: DiscoverMode.RECRUIT,
+          }),
+        ).rejects.toThrow(ForbiddenException);
+
+        usersById({ 'ath-2': athleteRow() });
+        await expect(
+          service.swipe(teamUser, {
+            targetUserId: 'ath-2',
+            direction: SwipeDirection.DRAFT,
+            mode: DiscoverMode.PEER,
+          }),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('globe (map)', () => {
+      it("an athlete's map shows coaches, agents and teams; role stays 'recruiter', accountType tells them apart", async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedRecruiter('coach-9', 'coach', 'coach'),
+          feedRecruiter('agent-9', 'recruiter', 'agent'),
+          feedRecruiter('team-9', 'team', 'team'),
+        ]);
+        const pins = await service.getMapPoints(athleteUser, {});
+        expect(lastWhere().role).toEqual({
+          in: ['coach', 'recruiter', 'team'],
+        });
+        // The query has to ask for the role, or every pin would be an 'agent'.
+        expect(
+          prisma.public_users.findMany.mock.calls.at(-1)[0].select.role,
+        ).toBe(true);
+        expect(
+          pins.map((p) => [p.id, p.role, p.accountType, p.organization]),
+        ).toEqual([
+          ['coach-9', 'recruiter', 'coach', 'coach-9 org'],
+          ['agent-9', 'recruiter', 'agent', 'agent-9 org'],
+          ['team-9', 'recruiter', 'team', 'team-9 org'],
+        ]);
+      });
+
+      it("a team's map shows active athletes, as accountType 'athlete'", async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedAthlete('ath-9', 'Soccer', dobYearsAgo(16)),
+        ]);
+        const pins = await service.getMapPoints(teamUser, {});
+        expect(lastWhere()).toMatchObject({
+          role: 'athlete',
+          activation_status: 'active',
+        });
+        expect(pins[0]).toMatchObject({
+          id: 'ath-9',
+          role: 'athlete',
+          accountType: 'athlete',
+        });
+      });
+
+      it("a team's Community map shows other teams only", async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          feedRecruiter('team-9', 'team', 'team'),
+        ]);
+        const pins = await service.getMapPoints(teamUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(lastWhere().role).toBe('team');
+        expect(pins[0]).toMatchObject({
+          role: 'recruiter',
+          accountType: 'team',
+        });
+      });
+    });
+  });
+
+  // ---- Community Drafts are unlimited; only recruiting is metered ---------
+
+  describe('Community Drafts are unlimited', () => {
+    const increment = 'select public.increment_swipes_used($1::uuid)';
+    const peerTarget = (role: string) =>
+      prisma.public_users.findUnique.mockResolvedValue({
+        is_banned: false,
+        role,
+      });
+
+    it('the Community feed reports no limit, even with the daily allowance used up', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10)); // 0 left
+      const result = await service.getFeed(recruiterUser, {
+        mode: DiscoverMode.PEER,
+      });
+      expect(result.swipesRemaining).toBe(UNLIMITED_DRAFTS);
+
+      // Same for an athlete, eligible or not (the early "not eligible" page).
+      usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(15)) });
+      const eligible = await service.getFeed(athleteUser, {
+        mode: DiscoverMode.PEER,
+      });
+      expect(eligible.swipesRemaining).toBe(UNLIMITED_DRAFTS);
+      usersById({ 'athlete-1': athleteRow('Soccer', null) });
+      const notEligible = await service.getFeed(athleteUser, {
+        mode: DiscoverMode.PEER,
+      });
+      expect(notEligible.swipesRemaining).toBe(UNLIMITED_DRAFTS);
+    });
+
+    it('"no limit" is a positive number: every released build locks Drafts at swipesRemaining <= 0', () => {
+      // Do not change this to 0 or -1. The apps in users' hands show "Out of
+      // Drafts for today -- upgrade" and block the Draft whenever the number
+      // is <= 0, so either value would shut every one of them out of
+      // Community. It is also the number unlimited plans have always got.
+      expect(UNLIMITED_DRAFTS).toBeGreaterThan(0);
+      expect(UNLIMITED_DRAFTS).toBe(9999);
+    });
+
+    it('recruiting still reports the real allowance', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10));
+      const result = await service.getFeed(recruiterUser, {});
+      expect(result.swipesRemaining).toBe(0);
+    });
+
+    it('a Community Draft is never a 429 and spends neither the allowance nor a bonus pack', async () => {
+      // 0 of the daily 10 left, 5 bought Drafts in reserve.
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10, 5));
+      peerTarget('recruiter');
+      const result = await service.swipe(recruiterUser, {
+        targetUserId: 'rec-2',
+        direction: SwipeDirection.DRAFT,
+        mode: DiscoverMode.PEER,
+      });
+      expect(prisma.swipes.create).toHaveBeenCalledTimes(1);
+      expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+        increment,
+        expect.anything(),
+      );
+      expect(prisma.subscriptions.update).not.toHaveBeenCalled();
+      expect(result.swipesRemaining).toBe(UNLIMITED_DRAFTS);
+    });
+
+    it('...including when the mode is inferred (old builds), and between athletes', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10));
+      peerTarget('recruiter');
+      await expect(
+        service.swipe(recruiterUser, {
+          targetUserId: 'rec-2',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).resolves.toMatchObject({ swipesRemaining: UNLIMITED_DRAFTS });
+
+      usersById({
+        'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+        'ath-2': athleteRow('Soccer', dobYearsAgo(16)),
+      });
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'ath-2',
+          direction: SwipeDirection.DRAFT,
+          mode: DiscoverMode.PEER,
+        }),
+      ).resolves.toMatchObject({ swipesRemaining: UNLIMITED_DRAFTS });
+      expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+        increment,
+        expect.anything(),
+      );
+    });
+
+    it('a recruiting Draft still spends the daily allowance, then the bonus pack', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 3));
+      await service.swipe(athleteUser, {
+        targetUserId: 'rec-1',
+        direction: SwipeDirection.DRAFT,
+      });
+      expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        increment,
+        'athlete-1',
+      );
+
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10, 2));
+      await service.swipe(athleteUser, {
+        targetUserId: 'rec-3',
+        direction: SwipeDirection.DRAFT,
+      });
+      expect(prisma.subscriptions.update).toHaveBeenCalledWith({
+        where: { user_id: 'athlete-1' },
+        data: { bonus_swipes: { decrement: 1 } },
+      });
+    });
+
+    it('a Super Draft in Community is a 400, and nothing is recorded', async () => {
+      peerTarget('recruiter');
+      for (const mode of [DiscoverMode.PEER, undefined]) {
+        await expect(
+          service.swipe(recruiterUser, {
+            targetUserId: 'rec-2',
+            direction: SwipeDirection.DRAFT,
+            isSuper: true,
+            mode,
+          }),
+        ).rejects.toThrow(
+          new BadRequestException(SUPER_DRAFT_RECRUIT_ONLY_MESSAGE),
+        );
+      }
+      expect(SUPER_DRAFT_RECRUIT_ONLY_MESSAGE).toBe(
+        'Super Drafts are for recruiting.',
+      );
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('mode=peer is not a way to Draft a coach for free: 403, even when out of Drafts', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10)); // 0 left
+      // Default target: a coach.
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.DRAFT,
+          mode: DiscoverMode.PEER,
+        }),
+      ).rejects.toThrow(
+        new ForbiddenException('You cannot match with this user'),
+      );
+      // A parent in peer mode acts as themselves, so no free Draft for their
+      // athlete either.
+      await expect(
+        service.swipe(parentUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.DRAFT,
+          mode: DiscoverMode.PEER,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+
+      // The same Draft sent as recruiting is metered: out of Drafts = 429.
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-1',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toMatchObject({ status: 429 });
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
     });
   });
 

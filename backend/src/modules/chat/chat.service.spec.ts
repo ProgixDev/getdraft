@@ -84,6 +84,7 @@ describe('ChatService', () => {
       ['parent', 'parent'],
       ['recruiter', 'agent'], // no recruiter profile: the app's word for it
       ['coach', 'coach'],
+      ['team', 'team'],
     ])('labels a %s without a recruiter profile as %p', async (role, label) => {
       const thread = await threadWith({ id: 'u-2', name: 'Alex', role });
       expect(thread.recruiterRole).toBe(label);
@@ -104,6 +105,24 @@ describe('ChatService', () => {
       expect(thread.recruiterRole).toBe('agent');
       expect(thread.organization).toBe('Elite');
       expect(thread.verified).toBe(true);
+    });
+
+    it("labels a team 'team', with its club name and verified badge", async () => {
+      const thread = await threadWith(
+        { id: 'team-2', name: 'FC Montreal', role: 'team' },
+        { role_type: 'team', organization: 'FC Montreal', verified: true },
+      );
+      expect(thread.recruiterRole).toBe('team');
+      expect(thread.organization).toBe('FC Montreal');
+      expect(thread.verified).toBe(true);
+    });
+
+    it("a team stays 'team' even if its profile row still says coach", async () => {
+      const thread = await threadWith(
+        { id: 'team-2', name: 'FC Montreal', role: 'team' },
+        { role_type: 'coach', organization: 'FC Montreal', verified: false },
+      );
+      expect(thread.recruiterRole).toBe('team');
     });
   });
 

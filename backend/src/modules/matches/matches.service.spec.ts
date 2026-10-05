@@ -44,6 +44,73 @@ describe('MatchesService', () => {
       const result = await service.getMatches('user-1');
       expect(result).toEqual([]);
     });
+
+    // One match with `other`, whose recruiter profile (if any) is `profile`.
+    const matchWith = async (other: any, profile: any = null) => {
+      mockAdminClient.from.mockImplementation((table: string) => {
+        if (table === 'matches') {
+          return mockQueryBuilder({
+            data: [
+              {
+                id: 'match-1',
+                user_1_id: 'user-1',
+                user_2_id: other.id,
+                matched_at: '2026-10-01T00:00:00Z',
+                kind: 'recruit',
+              },
+            ],
+          });
+        }
+        if (table === 'users') return mockQueryBuilder({ data: other });
+        if (table === 'recruiter_profiles') {
+          return mockQueryBuilder({ data: profile });
+        }
+        return mockQueryBuilder({ data: null, count: 0 });
+      });
+      const [row] = await service.getMatches('user-1');
+      return row;
+    };
+
+    it("a team on the Draft Board is labelled 'team', with its club name and verified badge", async () => {
+      const row = await matchWith(
+        { id: 'team-2', name: 'FC Montreal', role: 'team', is_banned: false },
+        { role_type: 'team', organization: 'FC Montreal', verified: true },
+      );
+      expect(row).toMatchObject({
+        recruiterRole: 'team',
+        organization: 'FC Montreal',
+        verified: true,
+        otherRole: 'team',
+        kind: 'recruit',
+      });
+    });
+
+    it("a team stays 'team' with a stale profile row, or with none yet", async () => {
+      const stale = await matchWith(
+        { id: 'team-2', name: 'FC Montreal', role: 'team', is_banned: false },
+        { role_type: 'coach', organization: 'FC Montreal', verified: false },
+      );
+      expect(stale.recruiterRole).toBe('team');
+
+      const none = await matchWith({
+        id: 'team-2',
+        name: 'FC Montreal',
+        role: 'team',
+        is_banned: false,
+      });
+      expect(none).toMatchObject({ recruiterRole: 'team', organization: '' });
+    });
+
+    it('coaches and agents keep the label from their profile', async () => {
+      const row = await matchWith(
+        { id: 'rec-2', name: 'Mike', role: 'recruiter', is_banned: false },
+        { role_type: 'agent', organization: 'Elite', verified: true },
+      );
+      expect(row).toMatchObject({
+        recruiterRole: 'agent',
+        organization: 'Elite',
+      });
+    });
   });
 
   describe('getMatch', () => {

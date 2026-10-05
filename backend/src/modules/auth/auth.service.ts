@@ -13,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { CompleteSignupDto } from './dto/email-otp.dto';
 import { UserRole } from '../../common/types';
 import { writeAuthzClaims } from '../../common/utils/authz-claims';
+import { assertTeamRoleAvailable } from '../../common/utils/team-role';
 import { MailService } from '../mail/mail.service';
 import { SignupOtpService } from './signup-otp.service';
 import { VerificationTokenService } from './verification-token.service';
@@ -144,6 +145,10 @@ export class AuthService {
     if (dto.role === UserRole.ADMIN) {
       throw new ForbiddenException('The admin role cannot be self-assigned.');
     }
+    // Team accounts stay closed until TEAM_ROLE_ENABLED is on. Checked before
+    // anything is created: the database only knows the role after migration
+    // 047, and an account minted without it would be stored as an athlete.
+    assertTeamRoleAvailable(dto.role);
     const supabase = this.supabaseService.getClient();
 
     const { data, error } = await supabase.auth.signUp({
@@ -452,6 +457,8 @@ export class AuthService {
     if (dto.role === UserRole.ADMIN) {
       throw new ForbiddenException('The admin role cannot be self-assigned.');
     }
+    // Same switch as signup(): no team account before TEAM_ROLE_ENABLED is on.
+    assertTeamRoleAvailable(dto.role);
     const { contact, contactType } = this.verificationTokenService.verify(dto.verificationToken);
     const admin = this.supabaseService.getAdminClient();
     const anon = this.supabaseService.getClient();

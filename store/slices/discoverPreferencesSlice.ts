@@ -1,8 +1,9 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import type { RecruiterType } from "@/lib/roles";
 
 /**
  * Which pool Discover (and the Globe) shows.
- *   recruit  athletes ↔ coaches/agents -- the original product
+ *   recruit  athletes ↔ coaches/agents/teams -- the original product
  *   peer     your own role -- the Community layer, for advice and tips
  * Lives in preferences rather than screen state so the feed effect, the
  * carousel reset and the Globe all follow it without extra wiring. It is the
@@ -21,7 +22,8 @@ export interface DiscoverPreferences {
   region: string;
   city: string;
   sport: string;
-  recruiterType: "all" | "agent" | "coach";
+  /** Recruiting, athlete side: only agents, only coaches or only teams. */
+  recruiterType: "all" | RecruiterType;
   athletePosition: string;
   athleteLevel: string;
   verifiedRecruitersOnly: boolean;

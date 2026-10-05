@@ -11,6 +11,7 @@ import { chatService } from "@/services/chat";
 import { outreachService } from "@/services/outreach";
 import { conversationsService } from "@/services/conversations";
 import { initialTabForRole, Role } from "@/lib/roleRoutes";
+import { tabVisibleForRole } from "@/lib/roles";
 
 function BadgeIcon({
   name,
@@ -82,44 +83,23 @@ const badgeStyles = StyleSheet.create({
 });
 
 /**
- * Per-role tab visibility map. `href: null` removes the tab from the bar
- * but keeps the route registered so direct `router.push(...)` still works
- * (each role-gated screen does its own redirect-to-home on focus via
- * useRoleHomeRedirect in @/lib/roleRoutes).
+ * Per-role tab visibility comes from the role registry (tabVisibleForRole in
+ * @/lib/roles). `href: null` removes the tab from the bar but keeps the route
+ * registered so direct `router.push(...)` still works (each role-gated screen
+ * does its own redirect-to-home on focus via useRoleHomeRedirect in
+ * @/lib/roleRoutes).
  *
- * The big design decisions encoded here:
+ * The big design decisions encoded there:
  *  - Globe is the map view of the discover feed (tap a point → swipe).
- *    Open to athletes, coaches and recruiters — everyone who actually
+ *    Open to athletes, coaches, agents and teams — everyone who actually
  *    drafts. Parents and admins don't get it.
  *  - Feed center button is athletes-only — recruiters posting reels was
  *    out of role; parents and admins never post.
  *  - Parents and admins each have a dedicated set: parent = guardian
  *    dashboard + messages + more; admin = dashboard + reviews + users + more.
+ *  - A role this build doesn't know gets the recruiter set, never an empty
+ *    tab bar (which left no way to reach More and log out).
  */
-function tabVisibleForRole(tab: string, role: Role | undefined): boolean {
-  if (!role) return tab !== "dashboard" && tab !== "reviews" && tab !== "users" && tab !== "home";
-
-  switch (role) {
-    case "athlete":
-      // Reference experience — original 5 tabs.
-      return ["index", "matches", "feed", "globe", "more"].includes(tab);
-    case "coach":
-    case "recruiter":
-      // Drop Feed (center "+") — recruiters posting reels was out of
-      // role. Globe is in: it's the map of swipe targets, so coaches
-      // and recruiters get it too (showing athletes instead of recruiters).
-      return ["index", "matches", "globe", "more"].includes(tab);
-    case "parent":
-      // Guardian dashboard + Discover + inbox + more. Discover is in because a
-      // parent drafts coaches/agents ON BEHALF of their linked athlete (the
-      // server proxies the swipe to that athlete). No Feed/Globe: parents don't
-      // post, and the globe maps athletes — not who a parent is looking for.
-      return ["home", "index", "matches", "more"].includes(tab);
-    case "admin":
-      // Internal console — never sees the player surface.
-      return ["dashboard", "reviews", "users", "more"].includes(tab);
-  }
-}
 
 export default function TabLayout() {
   const user = useSelector((state: RootState) => state.auth.user);
@@ -255,7 +235,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      {/* Athlete + Recruiter — Discover (swipe) */}
+      {/* Athlete + Recruiter side (coach, agent, team) — Discover (swipe) */}
       <Tabs.Screen
         name="index"
         options={{

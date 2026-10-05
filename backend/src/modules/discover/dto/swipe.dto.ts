@@ -12,9 +12,10 @@ export class SwipeDto {
   @IsEnum(SwipeDirection)
   direction: SwipeDirection;
 
-  // Super Draft: only meaningful on a DRAFT. Optional + defaults to false so
-  // an older client that never sends it keeps working (forbidNonWhitelisted
-  // would otherwise 400 an unknown field).
+  // Super Draft: only meaningful on a DRAFT, and only in recruiting -- a
+  // Super Draft sent in Community (peer mode) is refused with a 400.
+  // Optional + defaults to false so an older client that never sends it
+  // keeps working (forbidNonWhitelisted would otherwise 400 an unknown field).
   // Read from the raw body (`obj`), not `value`: the global pipe converts
   // implicitly first, and Boolean("false") is true, so a client sending the
   // string "false" would have spent a Super Draft.
@@ -26,10 +27,13 @@ export class SwipeDto {
 
   /**
    * Which pool this swipe came from. The server re-derives the allowed pairs
-   * from it: recruit permits athlete ↔ coach/agent only, peer permits the
-   * same role only (athlete pairs also need the Community rules: same sport,
-   * same age group, both active). A parent in peer mode acts as themselves
-   * instead of on behalf of their athlete.
+   * from it: recruit permits athlete ↔ coach/agent/team only, peer permits
+   * the same role only (athlete pairs also need the Community rules: same
+   * sport, same age group, both active). A parent in peer mode acts as
+   * themselves instead of on behalf of their athlete.
+   *
+   * It also decides the price: a recruit Draft spends the daily allowance, a
+   * peer Draft is free and unlimited.
    *
    * Optional. When absent the server infers it: peer when the swiper and the
    * target have the same role, recruit otherwise. That keeps screens and

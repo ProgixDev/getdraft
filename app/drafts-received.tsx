@@ -26,7 +26,7 @@ import type { RootState } from "@/store";
 import { discoverService, swipeModeFor } from "@/services/discover";
 import { apiErrorMessage } from "@/services/api";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
-import { roleDisplayLabel } from "@/lib/roles";
+import { DRAFTING_ROLES, roleDisplayLabel } from "@/lib/roles";
 
 interface DrafterSwiper {
   id: string;
@@ -60,8 +60,9 @@ function formatTimeAgo(iso?: string | null): string {
 export default function DraftsReceivedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  // Drafts are between athletes and recruiters — parents/admin bounce home.
-  const redirecting = useRoleHomeRedirect(["athlete", "coach", "recruiter"]);
+  // Drafts are between athletes and recruiters (coaches, agents, teams) —
+  // parents/admin bounce home.
+  const redirecting = useRoleHomeRedirect(DRAFTING_ROLES);
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
     Poppins_500Medium,

@@ -12,8 +12,25 @@ import {
   UpdateOutreachStatusDto,
   SendOutreachMessageDto,
 } from './dto/create-outreach.dto';
-import { CurrentUserPayload, UserRole } from '../../common/types';
+import {
+  CurrentUserPayload,
+  UserRole,
+  isRecruiterRole,
+} from '../../common/types';
 import { NotificationsService } from '../notifications/notifications.service';
+
+/**
+ * Who wrote to the parent, as the outreach list shows it: 'Team', 'Coach' or
+ * 'Agent'. A team account is a 'Team' whatever its profile row says; for the
+ * others the profile's role_type decides, as it always did.
+ */
+function senderLabel(
+  role: string | null | undefined,
+  roleType: string | null | undefined,
+): 'Team' | 'Coach' | 'Agent' {
+  if (role === UserRole.TEAM || roleType === 'team') return 'Team';
+  return roleType === 'coach' ? 'Coach' : 'Agent';
+}
 
 @Injectable()
 export class OutreachService {
@@ -39,8 +56,12 @@ export class OutreachService {
   }
 
   async createOutreach(user: CurrentUserPayload, dto: CreateOutreachDto) {
-    if (user.role !== UserRole.RECRUITER && user.role !== UserRole.COACH) {
-      throw new ForbiddenException('Only recruiters/coaches can send outreach');
+    // Coaches, agents and teams, under the same rules below: the parent must
+    // be the athlete's approved guardian, and blocks are honoured.
+    if (!isRecruiterRole(user.role)) {
+      throw new ForbiddenException(
+        'Only coaches, agents and teams can send outreach',
+      );
     }
 
     const supabase = this.supabaseService.getAdminClient();
@@ -155,7 +176,7 @@ export class OutreachService {
       outreachList.map(async (o) => {
         const { data: recruiter } = await supabase
           .from('users')
-          .select('name')
+          .select('name, role')
           .eq('id', o.recruiter_id)
           .maybeSingle();
 
@@ -181,7 +202,7 @@ export class OutreachService {
         return {
           id: o.id,
           recruiterName: recruiter?.name || '',
-          recruiterRole: rp?.role_type === 'coach' ? 'Coach' : 'Agent',
+          recruiterRole: senderLabel(recruiter?.role, rp?.role_type),
           organization: rp?.organization || '',
           childName: child?.name || '',
           message: o.message,

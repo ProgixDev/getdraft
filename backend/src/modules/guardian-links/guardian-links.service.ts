@@ -187,15 +187,27 @@ export class GuardianLinksService {
    * Parent submits a scanned QR + relationship + questionnaire. Creates
    * the link row in 'pending_video' state — the parent then has to
    * record + submit a declaration video before admin review.
+   *
+   * Parent accounts only. An approved guardian link is the consent that
+   * activates a minor's account, and it is what outreach about that minor
+   * is addressed through, so it has to belong to a parent account -- never
+   * to a coach, an agent, a team or another athlete. Nothing in the database
+   * ties guardian_user_id to a role; this check is that rule.
    */
   async submitScan(
     guardianUserId: string,
+    guardianRole: UserRole | string,
     dto: {
       qrToken: string;
       relationship: GuardianRelationship;
       questionnaire: Record<string, unknown>;
     },
   ) {
+    if (guardianRole !== 'parent') {
+      throw new ForbiddenException(
+        'Only parent accounts can link to an athlete.',
+      );
+    }
     const { athleteId } = this.verifyToken(dto.qrToken);
     if (athleteId === guardianUserId) {
       throw new BadRequestException("You can't link to your own account.");

@@ -47,6 +47,7 @@ export class GuardianLinksController {
   })
   scan(
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') callerRole: UserRole,
     @Body()
     body: {
       qrToken: string;
@@ -54,7 +55,8 @@ export class GuardianLinksController {
       questionnaire: Record<string, unknown>;
     },
   ) {
-    return this.service.submitScan(userId, body);
+    // Parents only: the service refuses every other role with a 403.
+    return this.service.submitScan(userId, callerRole, body);
   }
 
   @Post('video-upload-url')

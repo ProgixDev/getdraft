@@ -31,42 +31,33 @@ import { brand, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { adminService, AdminUserRow } from "@/services/admin";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import {
+  isKnownRole,
+  isRecruiterRole,
+  roleLabelOrUser,
+  type UserRole,
+} from "@/lib/roles";
 
-type FilterId =
-  | "all"
-  | "athlete"
-  | "coach"
-  | "recruiter"
-  | "parent"
-  | "admin"
-  | "kyc_pending"
-  | "kyc_declined"
-  | "banned";
+type FilterId = "all" | UserRole | "kyc_pending" | "kyc_declined" | "banned";
 
 const FILTERS: { id: FilterId; label: string }[] = [
   { id: "all", label: "All" },
   { id: "athlete", label: "Athletes" },
   { id: "coach", label: "Coaches" },
   { id: "recruiter", label: "Recruiters" },
+  { id: "team", label: "Teams" },
   { id: "parent", label: "Parents" },
   { id: "kyc_pending", label: "KYC pending" },
   { id: "kyc_declined", label: "KYC declined" },
   { id: "banned", label: "Banned" },
 ];
 
-function roleLabel(role: AdminUserRow["role"]) {
-  switch (role) {
-    case "athlete":
-      return "Athlete";
-    case "coach":
-      return "Coach";
-    case "recruiter":
-      return "Recruiter";
-    case "parent":
-      return "Parent";
-    case "admin":
-      return "Admin";
-  }
+// The console names a role as it is stored, so an agent is a "Recruiter"
+// here (as on the filter chips). Everything else, a team and a role this
+// build doesn't know included, comes from the role registry -- the switch
+// this replaces had no default and left an empty pill.
+function roleLabel(role: AdminUserRow["role"]): string {
+  return role === "recruiter" ? "Recruiter" : roleLabelOrUser(role);
 }
 
 function kycStatusLabel(kyc: AdminUserRow["kyc_status"]): string {
@@ -131,8 +122,7 @@ export default function AdminUsersTab() {
       // KYC/banned flags as `flag`. The old client-side slice over the
       // first 100 rows disagreed with the dashboard's full-table counts
       // past the first page.
-      const isRoleFilter = ["athlete", "coach", "recruiter", "parent", "admin"]
-        .includes(f);
+      const isRoleFilter = isKnownRole(f);
       const flag =
         f === "kyc_pending" || f === "kyc_declined" || f === "banned"
           ? f
@@ -362,7 +352,9 @@ function UserRow({
     );
   }, [row.id, runAction]);
 
-  const showVerify = row.role === "recruiter" || row.role === "coach";
+  // Coaches, agents and teams share the recruiter profile and its verified
+  // badge, so the same Verify action covers all three.
+  const showVerify = isRecruiterRole(row.role);
   const initials = (row.name ?? row.email ?? "?")
     .split(/\s+/)
     .filter(Boolean)

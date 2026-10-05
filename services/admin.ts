@@ -1,4 +1,5 @@
 import api from "./api";
+import type { UserRole } from "@/lib/roles";
 
 export interface AdminStats {
   totalUsers: number;
@@ -10,6 +11,8 @@ export interface AdminStats {
     recruiter: number;
     parent: number;
     admin: number;
+    /** Absent from a server that predates team accounts. */
+    team?: number;
   };
 }
 
@@ -26,7 +29,7 @@ export interface AdminUserRow {
   email: string | null;
   phone: string | null;
   name: string | null;
-  role: "athlete" | "coach" | "recruiter" | "parent" | "admin";
+  role: UserRole;
   kyc_status?:
     | "none"
     | "pending"

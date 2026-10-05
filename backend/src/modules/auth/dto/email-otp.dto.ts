@@ -36,11 +36,25 @@ export class CompleteSignupDto {
   // through self-service signup — otherwise any caller could promote
   // themselves and reach the admin console. Mirrors the guard in
   // users.service.ts updateMe and the defensive throw in AuthService.
+  // 'team' passes validation here; AuthService refuses it with a 400 while
+  // TEAM_ROLE_ENABLED is off (common/utils/team-role.ts).
   @ApiProperty({
-    enum: [UserRole.ATHLETE, UserRole.PARENT, UserRole.COACH, UserRole.RECRUITER],
+    enum: [
+      UserRole.ATHLETE,
+      UserRole.PARENT,
+      UserRole.COACH,
+      UserRole.RECRUITER,
+      UserRole.TEAM,
+    ],
     example: UserRole.ATHLETE,
   })
-  @IsIn([UserRole.ATHLETE, UserRole.PARENT, UserRole.COACH, UserRole.RECRUITER])
+  @IsIn([
+    UserRole.ATHLETE,
+    UserRole.PARENT,
+    UserRole.COACH,
+    UserRole.RECRUITER,
+    UserRole.TEAM,
+  ])
   role: UserRole;
 
   @ApiPropertyOptional({ example: 'Marcus Johnson' })

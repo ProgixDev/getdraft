@@ -122,6 +122,36 @@ describe('resolveAuthzClaims', () => {
     });
   });
 
+  it("recognises 'team': a team is never resolved to athlete", async () => {
+    // Fast path: the claim is taken as it is.
+    const fast = makeAdmin();
+    const claims = await resolveAuthzClaims(
+      fast.admin,
+      makeUser({ ...FULL_CLAIMS, role: 'team' }),
+    );
+    expect(claims.role).toBe(UserRole.TEAM);
+    expect(fast.from).not.toHaveBeenCalled();
+
+    // Fallback: public.users says team. A backend that did not know the role
+    // would resolve it to athlete AND write that back into app_metadata,
+    // pinning the account to the wrong side of the app for good.
+    const { admin, updateUserById } = makeAdmin({
+      role: 'team',
+      is_banned: false,
+      activation_status: 'active',
+    });
+    const resolved = await resolveAuthzClaims(admin, makeUser({}));
+    expect(resolved.role).toBe(UserRole.TEAM);
+    expect(updateUserById).toHaveBeenCalledWith('u1', {
+      app_metadata: {
+        provider: 'email',
+        role: UserRole.TEAM,
+        is_banned: false,
+        activation_status: 'active',
+      },
+    });
+  });
+
   it('resolves an unrecognised role to the least privilege', async () => {
     const { admin } = makeAdmin({
       role: 'superuser',

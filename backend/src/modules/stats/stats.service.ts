@@ -45,16 +45,19 @@ export class StatsService {
       Egypt: 'Africa',
     };
 
+    // `teams` is counted next to coaches and agents ('recruiters'). It is a
+    // new key: builds that predate Team accounts simply do not read it.
+    const empty = () => ({ athletes: 0, coaches: 0, recruiters: 0, teams: 0 });
     const stats: Record<
       string,
-      { athletes: number; coaches: number; recruiters: number }
+      { athletes: number; coaches: number; recruiters: number; teams: number }
     > = {
-      'North America': { athletes: 0, coaches: 0, recruiters: 0 },
-      'South America': { athletes: 0, coaches: 0, recruiters: 0 },
-      Europe: { athletes: 0, coaches: 0, recruiters: 0 },
-      Asia: { athletes: 0, coaches: 0, recruiters: 0 },
-      Africa: { athletes: 0, coaches: 0, recruiters: 0 },
-      Oceania: { athletes: 0, coaches: 0, recruiters: 0 },
+      'North America': empty(),
+      'South America': empty(),
+      Europe: empty(),
+      Asia: empty(),
+      Africa: empty(),
+      Oceania: empty(),
     };
 
     (users || []).forEach((u) => {
@@ -64,6 +67,7 @@ export class StatsService {
       if (u.role === 'athlete') stats[continent].athletes++;
       else if (u.role === 'coach') stats[continent].coaches++;
       else if (u.role === 'recruiter') stats[continent].recruiters++;
+      else if (u.role === 'team') stats[continent].teams++;
     });
 
     return stats;
@@ -96,11 +100,18 @@ export class StatsService {
       .eq('role', 'parent')
       .eq('is_banned', false);
 
+    const { count: teams } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'team')
+      .eq('is_banned', false);
+
     return {
       athletes: athletes || 0,
       coaches: coaches || 0,
       recruiters: recruiters || 0,
       parents: parents || 0,
+      teams: teams || 0,
     };
   }
 
@@ -110,7 +121,7 @@ export class StatsService {
    * Only the athlete's own bar is public (Profile Views / Drafts / Matches on
    * app/user/[userId].tsx) — everything else here is private. This used to
    * answer for ANY id, which let a caller enumerate view and match counts for
-   * coaches, recruiters and parents, who surface them nowhere.
+   * coaches, recruiters, teams and parents, who surface them nowhere.
    */
   async getProfileStats(userId: string, viewerId: string, viewerRole: UserRole) {
     const supabase = this.supabaseService.getAdminClient();

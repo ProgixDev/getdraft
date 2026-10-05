@@ -21,7 +21,9 @@ import {
   DiscoverMode,
   PlanId,
   PLAN_SWIPE_LIMITS,
+  RECRUITER_ROLES,
   SUPER_DRAFT_LIMITS,
+  isRecruiterRole,
   planFeatures,
 } from '../../common/types';
 import { dobBoundsForAgeGroup } from '../../common/utils/age';
@@ -42,12 +44,42 @@ import {
 } from './community';
 
 /**
+ * What `swipesRemaining` says when there is no limit to count down: Pro and
+ * Elite in recruiting, and everyone in Community.
+ *
+ * It is the value unlimited plans have always been sent, and it has to stay
+ * a large POSITIVE number. Every app build released so far locks the Draft
+ * button and shows "Out of Drafts for today -- upgrade" as soon as
+ * swipesRemaining <= 0, in Community too. Sending 0 or -1 for "unlimited"
+ * would lock every installed build out of Community Drafts until it is
+ * updated from the store. (-1 is the internal "no limit" in
+ * PLAN_SWIPE_LIMITS; it has never gone over the wire.)
+ */
+export const UNLIMITED_DRAFTS = 9999;
+
+/** 400 for a Super Draft sent from Community (peer mode). */
+export const SUPER_DRAFT_RECRUIT_ONLY_MESSAGE =
+  'Super Drafts are for recruiting.';
+
+/**
  * Globe pins are rounded to 2 decimals (~1 km). Signup stores the precise
  * coordinates Mapbox returns for the address typed in, which for most people
  * is their home; a pin must show the area, never the house.
  */
 function roundCoord(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/**
+ * accountType of a globe pin that is not an athlete, in the app's words: an
+ * agent is users.role 'recruiter'.
+ */
+function recruiterAccountType(
+  role: string | null | undefined,
+): 'coach' | 'agent' | 'team' {
+  if (role === 'team') return 'team';
+  if (role === 'coach') return 'coach';
+  return 'agent';
 }
 
 // ── Globe placement ────────────────────────────────────────────────
@@ -562,14 +594,20 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       mode === DiscoverMode.PEER
         ? user.id
         : await this.resolveActorId(user, false);
-    const swipesRemaining = await this.getSwipesRemaining(actorId);
+    // Community Drafts are unlimited for every role and plan: they never
+    // touch the daily allowance (see swipe()), so there is nothing to count
+    // down. Recruiting reports the real allowance, as before.
+    const swipesRemaining =
+      mode === DiscoverMode.PEER
+        ? UNLIMITED_DRAFTS
+        : await this.getSwipesRemaining(actorId);
     const superDraftsRemaining = await this.getSuperDraftsRemaining(actorId);
 
     // Community status, reported on every peer-mode page so the app can say
     // WHY an athlete's Community is empty (no date of birth, under 13, ...).
     // Athletes have their own gate (community.ts); every other role's
-    // Community is open. Recruiting has no such rules: undefined there, which
-    // JSON drops from the response.
+    // Community (coach, agent, team, parent) is open. Recruiting has no such
+    // rules: undefined there, which JSON drops from the response.
     const community: CommunityStatus | undefined =
       mode === DiscoverMode.PEER
         ? user.role === UserRole.ATHLETE
@@ -601,8 +639,8 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
         };
 
     // Role-targeted feed (client matrix): athletes — and parents on their
-    // athlete's behalf — see coaches/agents; coaches and agents see athletes.
-    // In peer mode everyone sees their own role.
+    // athlete's behalf — see coaches/agents/teams; coaches, agents and teams
+    // see athletes. In peer mode everyone sees their own role.
     const page = await this.getEveryoneFeed(
       actorId,
       user.role,
@@ -669,15 +707,25 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private recruiterCardFromUser(u: any) {
+  /**
+   * Card for a coach, an agent or a team: one shape, told apart by `role`
+   * ('coach' | 'agent' | 'team'). `roleType` repeats it under the name the
+   * profile uses. A team account is always a 'team' card whatever its
+   * profile row says, so it can never be dealt as a coach. `orgType` is the
+   * kind of organisation, for teams that gave one (see teamOrgTypes).
+   */
+  private recruiterCardFromUser(u: any, orgType: string | null = null) {
     const p = u.recruiter_profiles;
     const hideLocation = u.preferences?.showDistance === false;
+    const roleType = u.role === 'team' ? 'team' : p.role_type;
     return {
       cardType: 'recruiter' as const,
       id: u.id,
       name: u.name,
-      role: p.role_type,
+      role: roleType,
+      roleType,
       organization: p.organization,
+      orgType,
       location: hideLocation ? null : u.location,
       country: hideLocation ? null : u.country,
       distanceKm: 0,
@@ -719,6 +767,37 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       videos: [] as string[],
       imageUrl: u.avatar_url ?? null,
     };
+  }
+
+  /**
+   * org_type for the team accounts among `users`, in one query for the page.
+   *
+   * Looked up here rather than selected with every card on purpose. org_type
+   * arrives with migration 047, which is run by hand, and this backend can
+   * be live before it. A feed query that named the column would then fail
+   * for everyone. Read this way the column is only touched when a team row
+   * is on the page -- and a team row cannot exist before 047 (the users.role
+   * CHECK refuses it). If the lookup fails all the same, the cards go out
+   * without an org type rather than not at all.
+   */
+  private async teamOrgTypes(
+    users: { id: string; role: string }[],
+  ): Promise<Map<string, string | null>> {
+    const orgTypes = new Map<string, string | null>();
+    const teamIds = users.filter((u) => u.role === 'team').map((u) => u.id);
+    if (teamIds.length === 0) return orgTypes;
+    try {
+      const rows = await this.prisma.recruiter_profiles.findMany({
+        where: { user_id: { in: teamIds } },
+        select: { user_id: true, org_type: true },
+      });
+      for (const r of rows) orgTypes.set(r.user_id, r.org_type ?? null);
+    } catch (err: any) {
+      this.logger.warn(
+        `[team] org_type lookup failed, cards sent without it: ${err?.message ?? err}`,
+      );
+    }
+    return orgTypes;
   }
 
   /** The athlete Community status of `userId` (rules in community.ts). */
@@ -798,7 +877,10 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
         return this.athletePeerWhere(community, athleteProfileFilter, now);
       }
       case UserRole.COACH:
-      case UserRole.RECRUITER: {
+      case UserRole.RECRUITER:
+      case UserRole.TEAM: {
+        // Teams meet teams, the same way coaches meet coaches: the pool is
+        // the viewer's own account type, never the three mixed.
         const branch: Prisma.public_usersWhereInput = { role: viewerRole };
         // recruiterType is meaningless here (the pool IS one type); the
         // remaining recruiter filters (sport, verified) still apply.
@@ -897,17 +979,19 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       athleteBranch.athlete_profiles = { is: athleteProfileFilter };
     }
 
+    // Coaches, agents and teams: what athletes see in Recruiting. recruiterType
+    // ('agent' | 'coach' | 'team') narrows it through role_type above.
     const recruiterBranch: Prisma.public_usersWhereInput = {
-      role: { in: ['coach', 'recruiter'] },
+      role: { in: [...RECRUITER_ROLES] },
     };
     if (Object.keys(recruiterProfileFilter).length) {
       recruiterBranch.recruiter_profiles = { is: recruiterProfileFilter };
     }
 
     if (mode === DiscoverMode.PEER) {
-      // Community: exactly your own role, nobody else. Coaches and agents are
-      // kept apart on purpose -- the client asked for "coaches among each
-      // other, agents among each other", and the two have different concerns.
+      // Community: exactly your own role, nobody else. Coaches, agents and
+      // teams are kept apart on purpose -- the client asked for "coaches among
+      // each other, agents among each other", and they have different concerns.
       const peerBranch = this.peerBranch(
         viewerRole,
         athleteProfileFilter,
@@ -929,12 +1013,12 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       where.OR = [peerBranch];
     } else {
       // Role matrix (client): athletes — and parents acting for their
-      // athlete — see coaches/agents; coaches and agents see athletes only.
-      // Anything else (e.g. admin tooling) falls back to the full set.
+      // athlete — see coaches/agents/teams; coaches, agents and teams see
+      // athletes only. Anything else (e.g. admin tooling) falls back to the
+      // full set.
       const seesRecruiters =
         viewerRole === UserRole.ATHLETE || viewerRole === UserRole.PARENT;
-      const seesAthletes =
-        viewerRole === UserRole.COACH || viewerRole === UserRole.RECRUITER;
+      const seesAthletes = isRecruiterRole(viewerRole);
       if (seesRecruiters && !seesAthletes) where.OR = [recruiterBranch];
       else if (seesAthletes && !seesRecruiters) where.OR = [athleteBranch];
       else where.OR = [athleteBranch, recruiterBranch];
@@ -1027,6 +1111,9 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // What kind of organisation each team on this page is (club, school...).
+    const orgTypes = await this.teamOrgTypes(users);
+
     // Visibility boost: Pro and Elite profiles sort ahead WITHIN the page,
     // Elite ahead of Pro, newest-first otherwise. Within the page only, on
     // purpose -- paging is by created_at cursor, and reordering across pages
@@ -1067,8 +1154,8 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
         if (u.role === 'athlete' && u.athlete_profiles) {
           return this.athleteCardFromUser(u);
         }
-        if ((u.role === 'coach' || u.role === 'recruiter') && u.recruiter_profiles) {
-          return this.recruiterCardFromUser(u);
+        if (isRecruiterRole(u.role) && u.recruiter_profiles) {
+          return this.recruiterCardFromUser(u, orgTypes.get(u.id) ?? null);
         }
         if (u.role === 'parent') {
           return this.parentCardFromUser(u, parentSport.get(u.id) ?? null);
@@ -1121,9 +1208,10 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     const excluded = await this.excludedUserIds(user.id);
 
     // The map mirrors the Discover feed's role matrix: an athlete sees
-    // coaches/agents, a coach/agent sees athletes. Without this the map showed
-    // athletes to EVERYONE, so an athlete tapping a pin hit the swipe() role
-    // guard and got a 403 on a profile they were never allowed to draft.
+    // coaches/agents/teams, a coach/agent/team sees athletes. Without this
+    // the map showed athletes to EVERYONE, so an athlete tapping a pin hit
+    // the swipe() role guard and got a 403 on a profile they were never
+    // allowed to draft.
     // Peer mode mirrors the same way: your own role, same gates as the feed.
     const targetsRecruiters = user.role === UserRole.ATHLETE;
 
@@ -1133,7 +1221,7 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       if (!branch) return [];
       roleWhere = branch;
     } else if (targetsRecruiters) {
-      roleWhere = { role: { in: ['coach', 'recruiter'] } };
+      roleWhere = { role: { in: [...RECRUITER_ROLES] } };
     } else {
       // Same COPPA gate as the feed — unapproved minors stay off the map.
       roleWhere = { role: 'athlete', activation_status: 'active' };
@@ -1158,6 +1246,8 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
         id: true,
         email: true,
         name: true,
+        // Tells a team pin from a coach or an agent one (accountType below).
+        role: true,
         avatar_url: true,
         kyc_status: true,
         country: true,
@@ -1197,7 +1287,7 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     let skippedNoCoords = 0;
     const placed = users
       .map((u) => {
-        // Athlete pins carry the athlete profile; coach/agent pins the
+        // Athlete pins carry the athlete profile; coach/agent/team pins the
         // recruiter one. Either way a pin needs a profile to describe it.
         const ap = u.athlete_profiles;
         const rp = u.recruiter_profiles;
@@ -1239,7 +1329,11 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
           avatar_url: u.avatar_url,
           // Athlete-only fields stay null on a recruiter pin; the globe card
           // renders only the rows it actually has, so it degrades cleanly.
+          // `role` stays two-valued ('recruiter' for coach, agent AND team)
+          // because released builds branch on exactly those two words;
+          // accountType is the precise one.
           role: ap ? ('athlete' as const) : ('recruiter' as const),
+          accountType: ap ? ('athlete' as const) : recruiterAccountType(u.role),
           sport: p.sport ?? null,
           position: ap?.position ?? null,
           level: ap?.level ?? null,
@@ -1250,8 +1344,8 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
           // First gallery photo, surfaced so the globe card has something
           // to render when the user hasn't set a separate avatar_url.
           photo: photos[0] ?? null,
-          // Athletes are verified via KYC; coaches/agents via the vetted flag
-          // on their recruiter profile.
+          // Athletes are verified via KYC; coaches/agents/teams via the vetted
+          // flag on their recruiter profile.
           verified: ap ? u.kyc_status === 'approved' : (rp?.verified ?? false),
           // Seeded/demo accounts are created with @getdraft.app emails;
           // manually-created real users sign up with their own email. The
@@ -1301,10 +1395,11 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
    * The client's role-matching matrix, in one place. Symmetric:
    * canMatch(a,b,m) === canMatch(b,a,m).
    *
-   *   recruit  athletes ↔ coaches/agents, nothing else
+   *   recruit  athletes ↔ coaches/agents/teams, nothing else
    *   peer     the same role only -- athlete↔athlete (unless switched off,
    *            and then only under the Community rules, see swipe()),
-   *            coach↔coach, agent↔agent, parent↔parent
+   *            coach↔coach, agent↔agent, team↔team, parent↔parent.
+   *            Never team↔coach or team↔agent.
    *
    * The two are checked per mode rather than OR'ed together: a swipe sent
    * from the recruit deck must never create a peer match and vice versa. A
@@ -1323,17 +1418,16 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
           return peerAthletesEnabled();
         case UserRole.COACH:
         case UserRole.RECRUITER:
+        case UserRole.TEAM:
         case UserRole.PARENT:
           return true;
         default:
           return false;
       }
     }
-    const isRecruiter = (r: UserRole) =>
-      r === UserRole.COACH || r === UserRole.RECRUITER;
     return (
-      (roleA === UserRole.ATHLETE && isRecruiter(roleB)) ||
-      (isRecruiter(roleA) && roleB === UserRole.ATHLETE)
+      (roleA === UserRole.ATHLETE && isRecruiterRole(roleB)) ||
+      (isRecruiterRole(roleA) && roleB === UserRole.ATHLETE)
     );
   }
 
@@ -1463,11 +1557,26 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     const isSuper =
       dto.direction === SwipeDirection.DRAFT && dto.isSuper === true;
 
-    // Passes are always free; only Drafts (right-swipes) consume an allowance.
+    // Community Drafts are unlimited, on every plan and for every role: they
+    // neither check nor spend the daily allowance or the bonus packs, so a
+    // peer Draft is never a 429. That cannot be used to Draft a coach for
+    // free: by this point a peer-mode swipe has passed the same-role guard
+    // above (canMatch, or the athlete Community rules), so an athlete who
+    // sends mode=peer for a coach, an agent or a team was already refused
+    // with a 403 and never gets here.
+    const isPeer = mode === DiscoverMode.PEER;
+
+    // Passes are always free; only recruiting Drafts consume an allowance.
     // Block when the relevant quota is exhausted — the 429 lets the client show
     // the upgrade CTA (distinct from the 403 role/block paths). The two messages
     // differ so the client can tell "out of Drafts" from "out of Super Drafts".
-    if (isSuper) {
+    if (isPeer) {
+      // A Super Draft is a scout's standout signal, with its own scarce
+      // monthly allowance. It has no meaning between peers.
+      if (isSuper) {
+        throw new BadRequestException(SUPER_DRAFT_RECRUIT_ONLY_MESSAGE);
+      }
+    } else if (isSuper) {
       const superLeft = await this.getSuperDraftsRemaining(actor.id);
       if (superLeft <= 0) {
         throw new HttpException(
@@ -1501,10 +1610,11 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException((e as Error).message);
     }
 
-    // Only NORMAL Drafts consume the daily allowance (passes are free; Super
-    // Drafts are metered separately by SUPER_DRAFT_LIMITS, monthly). Spend the
-    // plan quota first; if exhausted, dip into bonus_swipes (from swipe-packs).
-    if (dto.direction === SwipeDirection.DRAFT && !isSuper) {
+    // Only NORMAL recruiting Drafts consume the daily allowance (passes are
+    // free; Community Drafts are unlimited; Super Drafts are metered
+    // separately by SUPER_DRAFT_LIMITS, monthly). Spend the plan quota first;
+    // if exhausted, dip into bonus_swipes (from swipe-packs).
+    if (dto.direction === SwipeDirection.DRAFT && !isSuper && !isPeer) {
       const subForSpend = await this.prisma.subscriptions.findUnique({
         where: { user_id: actor.id },
         select: {
@@ -1654,7 +1764,11 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const swipesRemaining = await this.getSwipesRemaining(actor.id);
+    // Same number the feed of this mode reports, so the app's counter does
+    // not jump: no limit in Community, the real allowance in recruiting.
+    const swipesRemaining = isPeer
+      ? UNLIMITED_DRAFTS
+      : await this.getSwipesRemaining(actor.id);
     const superDraftsRemaining = await this.getSuperDraftsRemaining(actor.id);
     return { matched, matchId, swipesRemaining, superDraftsRemaining };
   }
@@ -1870,7 +1984,7 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       PLAN_SWIPE_LIMITS[String(sub.plan_id) as PlanId] ??
       PLAN_SWIPE_LIMITS[PlanId.BASIC];
     const bonus = sub.bonus_swipes ?? 0;
-    const UNLIMITED = 9999;
+    const UNLIMITED = UNLIMITED_DRAFTS;
 
     // Daily reset: compare YYYY-MM-DD in UTC. A row whose counter belongs to
     // an earlier day is zeroed on first read, so there is no cron job and no

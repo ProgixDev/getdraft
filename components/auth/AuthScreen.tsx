@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  Dimensions,
   Image,
   Text,
   TextInput,
@@ -34,7 +33,6 @@ import {
 } from "@expo-google-fonts/poppins";
 import { useStripe } from "@stripe/stripe-react-native";
 import { images } from "@/config/assets";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { brand, neutral } from "@/config/colors";
 import { MOCK_USERS } from "@/constants/mockUsers";
 import { plans as PLAN_CATALOG } from "@/constants/plansData";
@@ -54,6 +52,7 @@ import { usersService } from "@/services/users";
 import { subscriptionsService } from "@/services/subscriptions";
 import { kycService } from "@/services/kyc";
 import { guardianLinksService } from "@/services/guardianLinks";
+import { useTeamRoleEnabled } from "@/hooks/use-team-role-enabled";
 import { EmailVerificationScreen } from "./EmailVerificationScreen";
 import { ForgotPasswordScreen } from "./ForgotPasswordScreen";
 import { PlanSelectionScreen } from "./PlanSelectionScreen";
@@ -66,9 +65,7 @@ import { TutorialScreen } from "./TutorialScreen";
 import { KycVerificationScreen } from "./KycVerificationScreen";
 import { OnboardingQuestionsScreen } from "./OnboardingQuestionsScreen";
 import { GuardianLinkScreen } from "./GuardianLinkScreen";
-
-// Phone-width app frame, not the raw window (tablets are wider than the frame).
-const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+import { RoleGrid, type SignupRole } from "./RoleGrid";
 
 interface AuthScreenProps {
   onLogin?: () => void;
@@ -120,46 +117,11 @@ type SignupStep =
   | "questions" // Per-role onboarding questionnaire — feeds the matching algorithm
   | "tutorial"
   | "plan"; // Subscription pick — LAST step; tap pays via Stripe, X skips (stay on Basic)
-type UserRole = "athlete" | "parent" | "coach" | "recruiter";
-
-interface RoleOption {
-  id: UserRole;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  price: string;
-  description: string;
-}
-
-const roleOptions: RoleOption[] = [
-  {
-    id: "athlete",
-    label: "Player",
-    icon: "trophy",
-    price: "Athlete",
-    description: "Showcase your talent",
-  },
-  {
-    id: "parent",
-    label: "Parent",
-    icon: "people",
-    price: "Guardian",
-    description: "Manage your athlete's journey",
-  },
-  {
-    id: "coach",
-    label: "Coach",
-    icon: "clipboard",
-    price: "Team Staff",
-    description: "Scout for talent",
-  },
-  {
-    id: "recruiter",
-    label: "Agent",
-    icon: "business",
-    price: "Professional",
-    description: "Discover athletes",
-  },
-];
+// A team / club follows the coach steps throughout this file: location ->
+// profile -> KYC -> questions -> tutorial -> plan. Only "athlete" adds the
+// media step and only "parent" the guardian link, so every other role falls
+// on the coach side of those checks.
+type UserRole = SignupRole;
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLogin,
@@ -210,6 +172,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const isAuthenticated = useAppSelector((s) => s.auth.isAuthenticated);
   const isOnboarded = useAppSelector((s) => s.auth.isOnboarded);
   const user = useAppSelector((s) => s.auth.user);
+
+  // The Team / Club card is offered only when the server says it accepts
+  // team accounts. Asked once, when a role step is first on screen.
+  const teamRoleEnabled = useTeamRoleEnabled(
+    mode === "signup" &&
+      (signupStep === "role" ||
+        signupStep === "phone-role" ||
+        signupStep === "oauth-role"),
+  );
 
   // Animation values
   const contentOpacity = useSharedValue(0);
@@ -334,11 +305,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           guardianLinksService.getMyLink().catch(() => null),
         ]);
         if (cancelled) return;
-        const meRole = (me?.role ?? role) as UserRole;
+        // When /users/me could not be read (offline), fall back to the role
+        // stored at sign-in before the picker's "athlete" default: a club or
+        // a coach must not be walked through the athlete steps.
+        const knownRole = (me?.role ?? user?.role) as UserRole | undefined;
+        const meRole = knownRole ?? role;
         // Sync local role state with the authoritative DB role —
         // otherwise after a reload the `role` state defaults to
         // 'athlete' and downstream upserts hit the wrong table.
-        if (me?.role && me.role !== role) setRole(me.role as UserRole);
+        if (knownRole && knownRole !== role) setRole(knownRole);
         // Also push the corrected user into Redux so the UI
         // (More tab, profile, tab gating) doesn't lag.
         if (user && me?.role && me.role !== user.role) {
@@ -648,9 +623,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   const handleProfilePayment = () => {
     // Athletes upload their media (4+ photos/videos) before KYC so the
-    // profiles scouts browse are never empty. Coaches/agents skip straight
-    // to KYC. The KYC gate sits before Payment so we don't collect money
-    // from users who'd fail verification.
+    // profiles scouts browse are never empty. Coaches/agents/teams skip
+    // straight to KYC. The KYC gate sits before Payment so we don't collect
+    // money from users who'd fail verification.
     setSignupStep(role === "athlete" ? "media" : "kyc");
   };
 
@@ -972,55 +947,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 Tell us how you'll use GetDraft.
               </Text>
 
-              <View style={styles.rolesGrid}>
-                {roleOptions.map((roleOption) => {
-                  const isActive = role === roleOption.id;
-                  return (
-                    <Pressable
-                      key={roleOption.id}
-                      style={[styles.roleCard, isActive && styles.roleCardActive]}
-                      onPress={() => setRole(roleOption.id)}
-                    >
-                      <View
-                        style={[
-                          styles.roleIconContainer,
-                          isActive && styles.roleIconContainerActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name={roleOption.icon}
-                          size={24}
-                          color={isActive ? brand.white : brand.primary}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.roleLabel,
-                          isActive && styles.roleLabelActive,
-                        ]}
-                      >
-                        {roleOption.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.roleDescription,
-                          isActive && { color: "rgba(255,255,255,0.85)" },
-                        ]}
-                      >
-                        {roleOption.description}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.rolePrice,
-                          isActive && styles.rolePriceActive,
-                        ]}
-                      >
-                        {roleOption.price}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <RoleGrid
+                value={role}
+                onChange={setRole}
+                teamEnabled={teamRoleEnabled}
+              />
 
               <View style={styles.formContainer}>
                 <View style={styles.inputWrapper}>
@@ -1107,55 +1038,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 Signing up as {initialPhone ?? "your phone"}
               </Text>
 
-              <View style={styles.rolesGrid}>
-                {roleOptions.map((roleOption) => {
-                  const isActive = role === roleOption.id;
-                  return (
-                    <Pressable
-                      key={roleOption.id}
-                      style={[styles.roleCard, isActive && styles.roleCardActive]}
-                      onPress={() => setRole(roleOption.id)}
-                    >
-                      <View
-                        style={[
-                          styles.roleIconContainer,
-                          isActive && styles.roleIconContainerActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name={roleOption.icon}
-                          size={24}
-                          color={isActive ? brand.white : brand.primary}
-                        />
-                      </View>
-                      <Text
-                        style={[
-                          styles.roleLabel,
-                          isActive && styles.roleLabelActive,
-                        ]}
-                      >
-                        {roleOption.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.roleDescription,
-                          isActive && { color: "rgba(255,255,255,0.85)" },
-                        ]}
-                      >
-                        {roleOption.description}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.rolePrice,
-                          isActive && styles.rolePriceActive,
-                        ]}
-                      >
-                        {roleOption.price}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <RoleGrid
+                value={role}
+                onChange={setRole}
+                teamEnabled={teamRoleEnabled}
+              />
 
               <View style={styles.formContainer}>
                 <View style={styles.inputWrapper}>
@@ -1285,53 +1172,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
             {/* Role Selector Grid (Signup Only) */}
             {mode === "signup" && (
-              <View style={styles.rolesGrid}>
-                {roleOptions.map((roleOption, index) => (
-                  <Pressable
-                    key={roleOption.id}
-                    style={[
-                      styles.roleCard,
-                      role === roleOption.id && styles.roleCardActive,
-                    ]}
-                    onPress={() => setRole(roleOption.id)}
-                  >
-                    <View
-                      style={[
-                        styles.roleIconContainer,
-                        role === roleOption.id &&
-                          styles.roleIconContainerActive,
-                      ]}
-                    >
-                      <Ionicons
-                        name={roleOption.icon}
-                        size={24}
-                        color={
-                          role === roleOption.id ? brand.white : brand.primary
-                        }
-                      />
-                    </View>
-                    <Text
-                      style={[
-                        styles.roleLabel,
-                        role === roleOption.id && styles.roleLabelActive,
-                      ]}
-                    >
-                      {roleOption.label}
-                    </Text>
-                    <Text style={styles.roleDescription}>
-                      {roleOption.description}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.rolePrice,
-                        role === roleOption.id && styles.rolePriceActive,
-                      ]}
-                    >
-                      {roleOption.price}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+              <RoleGrid
+                value={role}
+                onChange={setRole}
+                teamEnabled={teamRoleEnabled}
+              />
             )}
 
             {/* Form Inputs */}
@@ -1513,66 +1358,6 @@ const styles = StyleSheet.create({
     color: brand.primary,
     textAlign: "center",
     marginBottom: 24,
-  },
-  rolesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 28,
-  },
-  roleCard: {
-    width: (width - 60) / 2,
-    backgroundColor: neutral.gray50,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  roleCardActive: {
-    backgroundColor: brand.primary,
-    borderColor: brand.primary,
-    shadowColor: brand.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  roleIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: brand.white,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  roleIconContainerActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-  },
-  roleLabel: {
-    fontSize: 15,
-    fontFamily: "Poppins_600SemiBold",
-    color: brand.primary,
-    marginBottom: 4,
-  },
-  roleLabelActive: {
-    color: brand.white,
-  },
-  roleDescription: {
-    fontSize: 11,
-    fontFamily: "Poppins_400Regular",
-    color: neutral.gray600,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  rolePrice: {
-    fontSize: 13,
-    fontFamily: "Poppins_700Bold",
-    color: brand.primary,
-  },
-  rolePriceActive: {
-    color: brand.white,
   },
   formContainer: {
     gap: 14,

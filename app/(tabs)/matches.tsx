@@ -37,7 +37,11 @@ import {
 import { chatService } from "@/services/chat";
 import { discoverService, swipeModeFor } from "@/services/discover";
 import { apiErrorMessage } from "@/services/api";
-import { roleDisplayLabel } from "@/lib/roles";
+import {
+  isRecruiterRole,
+  roleDisplayLabel,
+  roleLabelOrUser,
+} from "@/lib/roles";
 
 type DraftBoardView = "received" | "sent" | "matches" | "messages";
 
@@ -133,8 +137,9 @@ export default function MatchesScreen() {
   });
 
   const isParent = user?.role === "parent";
-  const isRecruiter =
-    user?.role === "recruiter" || user?.role === "coach";
+  // Coaches, agents and teams keep a Scout Board (Interested / Scouting /
+  // Roster); everyone else a Draft Board.
+  const isRecruiter = isRecruiterRole(user?.role);
   // Tells a Community Draft (same role as mine) from a recruiting one.
   const myRole = user?.role;
 
@@ -868,7 +873,7 @@ export default function MatchesScreen() {
                         misleading default "Agent · " for athlete matches. */}
                     {match.organization ? (
                       <Text style={styles.matchRoleRow}>
-                        {roleDisplayLabel(match.recruiterRole) ?? "Coach"} ·{" "}
+                        {roleLabelOrUser(match.recruiterRole)} ·{" "}
                         {match.organization}
                       </Text>
                     ) : null}

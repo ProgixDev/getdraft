@@ -4,8 +4,11 @@ import { usersService } from "@/services/users";
 import { chatService } from "@/services/chat";
 import { notificationsService } from "@/services/notifications";
 import { saveAuth, clearAuth } from "../authStorage";
+import type { UserRole } from "@/lib/roles";
 
-export type UserRole = "athlete" | "parent" | "coach" | "recruiter" | "admin";
+// The role list lives in the role registry; re-exported for the files that
+// have always imported it from the auth slice.
+export type { UserRole };
 
 export type ActivationStatus = "active" | "pending_guardian";
 

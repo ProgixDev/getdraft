@@ -13,10 +13,13 @@ export interface ParentProfile {
   bio: string;
 }
 
+/** The sender label the server puts on an outreach thread. */
+export type OutreachSenderRole = "Agent" | "Coach" | "Team";
+
 export interface RecruiterParentOutreach {
   id: string;
   recruiterName: string;
-  recruiterRole: "Agent" | "Coach";
+  recruiterRole: OutreachSenderRole;
   organization: string;
   childName: string;
   message: string;
@@ -36,7 +39,7 @@ export interface ParentChatMessage {
 export interface ParentChatThread {
   threadId: string;
   recruiterName: string;
-  recruiterRole: "Agent" | "Coach";
+  recruiterRole: OutreachSenderRole;
   organization: string;
   childName: string;
   verified: boolean;

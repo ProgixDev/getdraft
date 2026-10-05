@@ -3,6 +3,7 @@
 // migration changes a table.
 
 import {
+  OrgType,
   OutreachStatus,
   PlanId,
   RecruiterRoleType,
@@ -66,6 +67,9 @@ export interface RecruiterProfileRow {
   bio: string | null;
   photos: string[];
   videos: string[];
+  // Team accounts (migration 047); NULL for coaches and agents.
+  org_type: OrgType | null;
+  website: string | null;
   created_at: Iso8601;
   updated_at: Iso8601;
 }

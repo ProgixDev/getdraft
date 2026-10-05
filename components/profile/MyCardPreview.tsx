@@ -13,6 +13,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { brand, semantic, theme } from "@/config/colors";
 import { getSportTheme } from "@/constants/sportThemes";
 import { getContentWidth } from "@/lib/responsive";
+import {
+  orgTypeLabel,
+  roleIcon,
+  roleLabelOrUser,
+  type RecruiterType,
+} from "@/lib/roles";
 
 // ------------------------------------------------------------------
 // My Card — "see my own card" (client request, Patrick 17/07).
@@ -27,8 +33,8 @@ import { getContentWidth } from "@/lib/responsive";
 // ------------------------------------------------------------------
 
 export interface MyCardData {
-  /** athlete → "Available for Recruitment" card; coach/agent → recruiter card */
-  role: "athlete" | "coach" | "agent";
+  /** athlete → "Available for Recruitment" card; coach/agent/team → recruiter card */
+  role: "athlete" | RecruiterType;
   name: string;
   sport?: string | null;
   /** athlete only */
@@ -37,6 +43,8 @@ export interface MyCardData {
   level?: string | null;
   /** recruiter only */
   organization?: string | null;
+  /** team only: club, school, college, academy, pro or other */
+  orgType?: string | null;
   bio?: string | null;
   location?: string | null;
   verified: boolean;
@@ -51,6 +59,7 @@ const FULL = {
   loc: 13,
   pill: 11,
   org: 14,
+  orgType: 12,
   bio: 13,
   tagTop: 18,
   tagLeft: 18,
@@ -94,10 +103,16 @@ function CardFace({
 
   const nameLine = isAthlete
     ? [data.name, data.position].filter(Boolean).join(", ")
-    : `${data.name}, ${data.role === "agent" ? "Agent" : "Coach"}`;
+    : `${data.name}, ${roleLabelOrUser(data.role)}`;
   const subLine = isAthlete
     ? [data.level, data.sport].filter(Boolean).join(" • ")
     : (data.organization ?? "");
+  // Teams say what kind of organisation they are ("Club · Soccer"), exactly
+  // as their Discover card does.
+  const orgType = data.role === "team" ? orgTypeLabel(data.orgType) : null;
+  const orgTypeLine = orgType
+    ? [orgType, data.sport].filter(Boolean).join(" · ")
+    : "";
 
   return (
     <View
@@ -120,7 +135,7 @@ function CardFace({
         ) : (
           <View style={styles.placeholderImage}>
             <Ionicons
-              name={isAthlete ? "person" : "briefcase"}
+              name={roleIcon(data.role)}
               size={s(72)}
               color={theme.textMuted}
             />
@@ -204,6 +219,17 @@ function CardFace({
               style={[styles.overlayOrg, { fontSize: s(FULL.org), marginTop: s(4) }]}
             >
               {subLine}
+            </Text>
+          )}
+          {!!orgTypeLine && (
+            <Text
+              style={[
+                styles.overlayOrgType,
+                { fontSize: s(FULL.orgType), marginTop: s(2) },
+              ]}
+              numberOfLines={1}
+            >
+              {orgTypeLine}
             </Text>
           )}
           {!!data.bio && (
@@ -396,6 +422,10 @@ const styles = StyleSheet.create({
   overlayOrg: {
     fontFamily: "Poppins_500Medium",
     color: "rgba(255,255,255,0.85)",
+  },
+  overlayOrgType: {
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.7)",
   },
   overlayBio: {
     fontFamily: "Poppins_400Regular",

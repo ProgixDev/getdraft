@@ -1,7 +1,19 @@
+import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
-import { ProfilesService, DOB_LOCKED_MESSAGE } from './profiles.service';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import {
+  ProfilesService,
+  DOB_LOCKED_MESSAGE,
+  WRONG_PROFILE_MESSAGES,
+} from './profiles.service';
+import {
+  UpsertRecruiterProfileDto,
+  WEBSITE_MAX_LENGTH,
+} from './dto/recruiter-profile.dto';
 import { SupabaseService } from '../../config/supabase.config';
+import { OrgType, RecruiterRoleType, UserRole } from '../../common/types';
 import { ageFromDob } from '../../common/utils/age';
 import { reevaluateMinorActivation } from '../../common/utils/activation';
 
@@ -193,6 +205,311 @@ describe('ProfilesService', () => {
       );
       expect(own.profile.child_athlete_id).toBe('ath-1');
     });
+
+    it("a team's public profile is its recruiter profile, org_type and website included", async () => {
+      handler = (call) => {
+        if (call.table === 'users') {
+          return ok({ id: 'team-1', name: 'FC Montreal', role: 'team' });
+        }
+        if (call.table === 'recruiter_profiles') {
+          return ok({
+            user_id: 'team-1',
+            organization: 'FC Montreal',
+            sport: 'Soccer',
+            role_type: 'team',
+            org_type: 'club',
+            website: 'https://fcmontreal.example',
+            verified: true,
+          });
+        }
+        return ok(null);
+      };
+      const result: any = await service.getPublicProfile(
+        'team-1',
+        'ath-1',
+        'athlete',
+      );
+      expect(result.role).toBe('team');
+      expect(result.profile).toMatchObject({
+        organization: 'FC Montreal',
+        role_type: 'team',
+        org_type: 'club',
+        website: 'https://fcmontreal.example',
+        verified: true,
+      });
+      expect(result.age).toBeNull();
+      expect(result.parent_user_id).toBeNull();
+    });
+
+    it('a team, like a coach, gets the guardian id outreach needs', async () => {
+      handler = athleteWorld;
+      const result: any = await service.getPublicProfile(
+        'ath-1',
+        'team-1',
+        'team',
+      );
+      expect(result.parent_user_id).toBe('parent-9');
+      expect(result.profile).not.toHaveProperty('date_of_birth');
+    });
+  });
+
+  describe('profile writes: one profile type per account type', () => {
+    const recruiterBody = { organization: 'Org', sport: 'Soccer' };
+    const noWrites = () =>
+      expect(supa.calls.filter((c) => c.op !== 'select')).toHaveLength(0);
+
+    it.each([
+      UserRole.COACH,
+      UserRole.RECRUITER,
+      UserRole.TEAM,
+      UserRole.PARENT,
+      UserRole.ADMIN,
+    ])(
+      'PUT /profiles/athlete is refused for a %s (403), nothing written',
+      async (role) => {
+        await expect(
+          service.upsertAthleteProfile('u-1', role, { sport: 'Soccer' }),
+        ).rejects.toThrow(
+          new ForbiddenException(WRONG_PROFILE_MESSAGES.athlete),
+        );
+        noWrites();
+      },
+    );
+
+    it.each([UserRole.ATHLETE, UserRole.PARENT, UserRole.ADMIN])(
+      'PUT /profiles/recruiter is refused for a %s (403), nothing written',
+      async (role) => {
+        await expect(
+          service.upsertRecruiterProfile('u-1', role, recruiterBody),
+        ).rejects.toThrow(
+          new ForbiddenException(WRONG_PROFILE_MESSAGES.recruiter),
+        );
+        noWrites();
+      },
+    );
+
+    it.each([
+      UserRole.ATHLETE,
+      UserRole.COACH,
+      UserRole.RECRUITER,
+      UserRole.TEAM,
+      UserRole.ADMIN,
+    ])(
+      'PUT /profiles/parent is refused for a %s (403), nothing written',
+      async (role) => {
+        await expect(
+          service.upsertParentProfile('u-1', role, { relationship: 'Mother' }),
+        ).rejects.toThrow(
+          new ForbiddenException(WRONG_PROFILE_MESSAGES.parent),
+        );
+        noWrites();
+      },
+    );
+
+    it('each account type can still write its own profile', async () => {
+      await service.upsertAthleteProfile('u-1', UserRole.ATHLETE, {
+        sport: 'Soccer',
+      });
+      await service.upsertRecruiterProfile(
+        'u-2',
+        UserRole.COACH,
+        recruiterBody,
+      );
+      await service.upsertRecruiterProfile(
+        'u-3',
+        UserRole.RECRUITER,
+        recruiterBody,
+      );
+      await service.upsertRecruiterProfile('u-4', UserRole.TEAM, recruiterBody);
+      await service.upsertParentProfile('u-5', UserRole.PARENT, {
+        relationship: 'Mother',
+      });
+      const inserts = supa.calls.filter((c) => c.op === 'insert');
+      expect(inserts.map((c) => c.table)).toEqual([
+        'athlete_profiles',
+        'recruiter_profiles',
+        'recruiter_profiles',
+        'recruiter_profiles',
+        'parent_profiles',
+      ]);
+    });
+  });
+
+  describe('upsertRecruiterProfile: coach, agent and team', () => {
+    const body = { organization: 'FC Montreal', sport: 'Soccer' };
+    const profileWrites = () =>
+      supa.calls.filter(
+        (c) => c.table === 'recruiter_profiles' && c.op !== 'select',
+      );
+    // No row yet -> insert; an existing row -> update. Either way the write
+    // comes back as the stored row.
+    const world =
+      (existing: boolean): Handler =>
+      (call) => {
+        if (call.table !== 'recruiter_profiles') return ok(null);
+        if (call.op === 'select') return ok(existing ? { id: 'rp-1' } : null);
+        return ok({ id: 'rp-1', ...call.payload });
+      };
+
+    it.each([
+      [UserRole.COACH, 'coach'],
+      [UserRole.RECRUITER, 'agent'],
+      [UserRole.TEAM, 'team'],
+    ])(
+      'role_type comes from the account type: %s -> %p (create)',
+      async (role, roleType) => {
+        handler = world(false);
+        const saved: any = await service.upsertRecruiterProfile(
+          'u-1',
+          role,
+          body,
+        );
+        const [insert] = profileWrites();
+        expect(insert.op).toBe('insert');
+        expect(insert.payload.role_type).toBe(roleType);
+        expect(insert.payload.user_id).toBe('u-1');
+        expect(saved.role_type).toBe(roleType);
+      },
+    );
+
+    it('the role_type in the request is ignored: a coach cannot label itself a team', async () => {
+      for (const existing of [false, true]) {
+        supa.calls.length = 0;
+        handler = world(existing);
+        await service.upsertRecruiterProfile('coach-1', UserRole.COACH, {
+          ...body,
+          role_type: RecruiterRoleType.TEAM,
+        });
+        const [write] = profileWrites();
+        expect(write.op).toBe(existing ? 'update' : 'insert');
+        expect(write.payload.role_type).toBe('coach');
+      }
+    });
+
+    it('...and a team stays a team whatever the app sends', async () => {
+      handler = world(true);
+      await service.upsertRecruiterProfile('team-1', UserRole.TEAM, {
+        ...body,
+        role_type: RecruiterRoleType.AGENT,
+      });
+      expect(profileWrites()[0].payload.role_type).toBe('team');
+    });
+
+    it('org_type and website are saved and returned (create, then update)', async () => {
+      handler = world(false);
+      const created: any = await service.upsertRecruiterProfile(
+        'team-1',
+        UserRole.TEAM,
+        {
+          ...body,
+          org_type: OrgType.CLUB,
+          website: 'https://fcmontreal.example',
+          tags: ['Ligue 1 Québec'],
+        },
+      );
+      expect(profileWrites()[0].payload).toMatchObject({
+        organization: 'FC Montreal',
+        sport: 'Soccer',
+        role_type: 'team',
+        org_type: 'club',
+        website: 'https://fcmontreal.example',
+        tags: ['Ligue 1 Québec'],
+      });
+      expect(created.org_type).toBe('club');
+      expect(created.website).toBe('https://fcmontreal.example');
+
+      supa.calls.length = 0;
+      handler = world(true);
+      const updated: any = await service.upsertRecruiterProfile(
+        'team-1',
+        UserRole.TEAM,
+        { ...body, org_type: OrgType.ACADEMY, website: null },
+      );
+      const [update] = profileWrites();
+      expect(update.op).toBe('update');
+      expect(update.filters).toContainEqual(['user_id', 'team-1']);
+      expect(update.payload.org_type).toBe('academy');
+      // null clears the website; it is written, not skipped.
+      expect(update.payload).toHaveProperty('website', null);
+      expect(updated.org_type).toBe('academy');
+    });
+
+    it('a save that does not mention org_type or website leaves them alone', async () => {
+      handler = world(true);
+      await service.upsertRecruiterProfile('coach-1', UserRole.COACH, body);
+      // undefined never reaches the database: supabase-js drops it from the
+      // JSON body, so the columns are not touched (and not required to exist).
+      const sent = JSON.parse(JSON.stringify(profileWrites()[0].payload));
+      expect(sent).toEqual({ ...body, role_type: 'coach' });
+    });
+  });
+
+  // The same options as the global ValidationPipe (main.ts).
+  describe('UpsertRecruiterProfileDto', () => {
+    const base = { organization: 'FC Montreal', sport: 'Soccer' };
+    const parse = (extra: Record<string, unknown>) =>
+      plainToInstance(
+        UpsertRecruiterProfileDto,
+        { ...base, ...extra },
+        { enableImplicitConversion: true },
+      );
+    const invalid = (extra: Record<string, unknown>) =>
+      validateSync(parse(extra), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }).map((e) => e.property);
+
+    it('role_type is optional now, and old builds that send it still pass', () => {
+      expect(invalid({})).toEqual([]);
+      expect(invalid({ role_type: 'coach' })).toEqual([]);
+      expect(invalid({ role_type: 'team' })).toEqual([]);
+    });
+
+    it.each(['club', 'school', 'college', 'academy', 'pro', 'other'])(
+      'accepts org_type %p',
+      (orgType) => {
+        expect(invalid({ org_type: orgType })).toEqual([]);
+      },
+    );
+
+    it('refuses an org_type outside the list', () => {
+      expect(invalid({ org_type: 'franchise' })).toEqual(['org_type']);
+    });
+
+    it('accepts an http(s) website and keeps it as sent', () => {
+      const dto = parse({ website: 'https://www.fcmontreal.example/academy' });
+      expect(validateSync(dto)).toHaveLength(0);
+      expect(dto.website).toBe('https://www.fcmontreal.example/academy');
+      expect(invalid({ website: 'http://fcmontreal.example' })).toEqual([]);
+    });
+
+    it('adds https:// to a website typed without it', () => {
+      const dto = parse({ website: '  www.fcmontreal.example ' });
+      expect(validateSync(dto)).toHaveLength(0);
+      expect(dto.website).toBe('https://www.fcmontreal.example');
+    });
+
+    it.each([
+      'javascript:alert(1)',
+      'ftp://fcmontreal.example',
+      'not a website',
+      'https://fcmontreal.example@elsewhere.example',
+    ])('refuses %p as a website', (website) => {
+      expect(invalid({ website })).toEqual(['website']);
+    });
+
+    it('refuses a website longer than the limit', () => {
+      const long = `https://fcmontreal.example/${'a'.repeat(WEBSITE_MAX_LENGTH)}`;
+      expect(invalid({ website: long })).toEqual(['website']);
+    });
+
+    it('an empty org_type or website means "not set": null, and valid', () => {
+      const dto = parse({ org_type: '', website: '   ' });
+      expect(validateSync(dto)).toHaveLength(0);
+      expect(dto.org_type).toBeNull();
+      expect(dto.website).toBeNull();
+      expect(invalid({ org_type: null, website: null })).toEqual([]);
+    });
   });
 
   describe('upsertAthleteProfile: date of birth lock', () => {
@@ -226,7 +543,7 @@ describe('ProfilesService', () => {
     it('after onboarding, a different date of birth is refused (400)', async () => {
       handler = world({ dob: '2010-05-01' });
       await expect(
-        service.upsertAthleteProfile('ath-1', { date_of_birth: '2000-05-01' }),
+        service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, { date_of_birth: '2000-05-01' }),
       ).rejects.toThrow(new BadRequestException(DOB_LOCKED_MESSAGE));
       expect(writes()).toHaveLength(0);
     });
@@ -234,7 +551,7 @@ describe('ProfilesService', () => {
     it('after onboarding, clearing the date of birth is refused too', async () => {
       handler = world({ dob: '2010-05-01' });
       await expect(
-        service.upsertAthleteProfile('ath-1', {
+        service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, {
           date_of_birth: null as unknown as string,
         }),
       ).rejects.toThrow(DOB_LOCKED_MESSAGE);
@@ -245,7 +562,7 @@ describe('ProfilesService', () => {
       for (const sent of ['2010-05-01', '2010-04-30', '2010-05-01T00:00:00.000Z']) {
         supa.calls.length = 0;
         handler = world({ dob: '2010-05-01' });
-        await service.upsertAthleteProfile('ath-1', {
+        await service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, {
           bio: 'New bio',
           date_of_birth: sent,
         });
@@ -258,7 +575,7 @@ describe('ProfilesService', () => {
 
     it('before onboarding it can still be corrected', async () => {
       handler = world({ dob: '2010-05-01', onboarded: false });
-      await service.upsertAthleteProfile('ath-1', {
+      await service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, {
         date_of_birth: '2009-01-01',
       });
       expect(writes()[0].payload.date_of_birth).toBe('2009-01-01');
@@ -266,7 +583,7 @@ describe('ProfilesService', () => {
 
     it('with no date of birth stored, one can be added after onboarding, and the guardian gate runs', async () => {
       handler = world({ dob: null, onboarded: true });
-      await service.upsertAthleteProfile('ath-1', {
+      await service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, {
         date_of_birth: '2011-02-03',
       });
       expect(writes()[0].payload.date_of_birth).toBe('2011-02-03');
@@ -278,7 +595,7 @@ describe('ProfilesService', () => {
 
     it('before onboarding, adding a date of birth leaves the gate to onboarding', async () => {
       handler = world({ dob: null, onboarded: false });
-      await service.upsertAthleteProfile('ath-1', {
+      await service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, {
         date_of_birth: '2011-02-03',
       });
       expect(reevaluateMinorActivation).not.toHaveBeenCalled();
@@ -290,7 +607,7 @@ describe('ProfilesService', () => {
       );
       handler = world({ dob: null, onboarded: true });
       await expect(
-        service.upsertAthleteProfile('ath-1', { date_of_birth: '2011-02-03' }),
+        service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, { date_of_birth: '2011-02-03' }),
       ).rejects.toThrow(BadRequestException);
       const [first, rollback] = writes();
       expect(first.payload.date_of_birth).toBe('2011-02-03');
@@ -299,7 +616,7 @@ describe('ProfilesService', () => {
 
     it('a save without a date of birth never looks at onboarding', async () => {
       handler = world({ dob: '2010-05-01' });
-      await service.upsertAthleteProfile('ath-1', { bio: 'Only a bio' });
+      await service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, { bio: 'Only a bio' });
       expect(
         supa.calls.some(
           (c) => c.table === 'users' && c.columns === 'is_onboarded',
@@ -316,7 +633,7 @@ describe('ProfilesService', () => {
           ? { data: null, error: { message: 'timeout' } }
           : world({ dob: '2010-05-01' })(call);
       await expect(
-        service.upsertAthleteProfile('ath-1', { date_of_birth: '2000-01-01' }),
+        service.upsertAthleteProfile('ath-1', UserRole.ATHLETE, { date_of_birth: '2000-01-01' }),
       ).rejects.toThrow(BadRequestException);
       expect(writes()).toHaveLength(0);
     });

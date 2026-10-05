@@ -3,11 +3,13 @@
  * Remove in production - use real auth
  */
 
+import type { UserRole } from "@/lib/roles";
+
 export interface MockUser {
   email: string;
   password: string;
   name: string;
-  role: "athlete" | "parent" | "coach" | "recruiter";
+  role: Exclude<UserRole, "admin">;
 }
 
 export const MOCK_USERS: MockUser[] = [

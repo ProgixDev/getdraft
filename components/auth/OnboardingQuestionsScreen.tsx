@@ -25,8 +25,10 @@ import { brand, neutral } from '@/config/colors';
 import { usersService } from '@/services/users';
 import { profilesService } from '@/services/profiles';
 import { SPORTS_WITH_POSITIONS, sportEmoji } from '@/constants/sportsData';
+import type { UserRole } from '@/lib/roles';
 
-type Role = 'athlete' | 'parent' | 'coach' | 'recruiter';
+// Everyone who signs up (admins are created by hand and never onboard).
+type Role = Exclude<UserRole, 'admin'>;
 
 interface OnboardingQuestionsScreenProps {
     role: Role;
@@ -121,6 +123,34 @@ const STATIC_QUESTIONS_BY_ROLE: Record<Exclude<Role, 'athlete'>, QuestionDef[]> 
             prompt: 'How many athletes do you actively track?',
             type: 'choice',
             options: ['< 25', '25–100', '100–500', '500+'],
+        },
+    ],
+    // A club, school or academy account: the coach questions, asked of the
+    // organisation rather than of one person.
+    team: [
+        {
+            id: 'sport',
+            prompt: 'What sport does your team play?',
+            type: 'choice',
+            options: ['Football', 'Basketball', 'Soccer', 'Baseball', 'Hockey', 'Track', 'Other'],
+        },
+        {
+            id: 'level',
+            prompt: 'At what level?',
+            type: 'choice',
+            options: ['Youth / academy', 'High school', 'Club / travel', 'College', 'Pro'],
+        },
+        {
+            id: 'recruiting_for',
+            prompt: 'What positions are you recruiting for? (comma-separated)',
+            type: 'text',
+            placeholder: 'e.g. Goalkeeper, Striker',
+        },
+        {
+            id: 'urgency',
+            prompt: 'How urgently are you recruiting?',
+            type: 'choice',
+            options: ['Open roster spots right now', 'Next season', 'Always scouting'],
         },
     ],
 };

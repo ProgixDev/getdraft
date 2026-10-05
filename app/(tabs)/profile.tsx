@@ -8,6 +8,7 @@ import {
   Dimensions,
   Alert,
   ActivityIndicator,
+  Linking,
   Modal,
   Platform,
 } from "react-native";
@@ -42,6 +43,17 @@ import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { usersService } from "@/services/users";
 import { matchesService } from "@/services/matches";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import {
+  isRecruiterRole,
+  MEMBER_ROLES,
+  orgTypeLabel,
+  recruiterTypeForRole,
+  roleBadgeLabel,
+  roleIcon,
+  websiteHref,
+  websiteLabel,
+  type RecruiterType,
+} from "@/lib/roles";
 import { postsService, type PostItem } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
 import {
@@ -128,7 +140,11 @@ type NormalizedAthleteProfile = {
 type NormalizedRecruiterProfile = {
   organization?: string;
   sport?: string;
-  roleType?: "agent" | "coach";
+  roleType?: RecruiterType;
+  /** Team accounts: club, school, college, academy, pro or other. */
+  orgType?: string | null;
+  /** Team accounts. */
+  website?: string | null;
   bio?: string;
   photos: MediaSource[];
   videos: MediaSource[];
@@ -182,19 +198,15 @@ export default function ProfileScreen() {
   });
 
   const isAthlete = user?.role === "athlete";
-  const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
+  // Coaches, agents and teams share the recruiter profile.
+  const isRecruiter = isRecruiterRole(user?.role);
   const isParent = user?.role === "parent";
 
   // Admins have no athletic/parent profile schema. Phase 3 of the role
   // experience leaves a minimal admin profile (see fix(admin) follow-up
   // commit); until then they bounce to their dashboard via the shared
   // role-redirect hook.
-  const redirecting = useRoleHomeRedirect([
-    "athlete",
-    "coach",
-    "recruiter",
-    "parent",
-  ]);
+  const redirecting = useRoleHomeRedirect(MEMBER_ROLES);
 
   const [me, setMe] = useState<any | null>(null);
   const { confirmDelete, deleting: deletingAccount } = useDeleteAccount();
@@ -458,7 +470,9 @@ export default function ProfileScreen() {
     return {
       organization: profileRaw.organization,
       sport: profileRaw.sport,
-      roleType: profileRaw.role_type as "agent" | "coach" | undefined,
+      roleType: profileRaw.role_type as RecruiterType | undefined,
+      orgType: profileRaw.org_type ?? null,
+      website: profileRaw.website ?? null,
       bio: profileRaw.bio,
       photos: (profileRaw.photos ?? []) as MediaSource[],
       videos: (profileRaw.videos ?? []) as MediaSource[],
@@ -571,16 +585,7 @@ export default function ProfileScreen() {
   const displayName = me?.name ?? user?.name ?? "User";
   const location: string | null = me?.location ?? null;
 
-  const roleLabel =
-    user?.role === "recruiter"
-      ? "Agent / Recruiter"
-      : user?.role === "coach"
-        ? "Coach"
-        : user?.role === "athlete"
-          ? "Athlete"
-          : user?.role === "parent"
-            ? "Parent"
-            : "User";
+  const roleLabel = roleBadgeLabel(user?.role);
 
   const richRoleLabel =
     isAthlete && athleteProfile?.position && athleteProfile.level
@@ -607,10 +612,12 @@ export default function ProfileScreen() {
         ? {
             role:
               recruiterProfile.roleType ??
-              (user?.role === "coach" ? "coach" : "agent"),
+              recruiterTypeForRole(user?.role) ??
+              "agent",
             name: displayName,
             sport: recruiterProfile.sport,
             organization: recruiterProfile.organization,
+            orgType: recruiterProfile.orgType,
             bio: recruiterProfile.bio,
             location,
             verified: !!recruiterProfile.verified,
@@ -677,13 +684,7 @@ export default function ProfileScreen() {
                 />
               ) : (
                 <Ionicons
-                  name={
-                    user?.role === "recruiter" || user?.role === "coach"
-                      ? "briefcase"
-                      : user?.role === "parent"
-                        ? "people"
-                        : "person"
-                  }
+                  name={roleIcon(user?.role)}
                   size={64}
                   color={theme.textMuted}
                 />
@@ -904,12 +905,47 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 )}
+                {orgTypeLabel(recruiterProfile.orgType) && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="shield" size={18} color={theme.textMuted} />
+                    <Text style={styles.infoText}>
+                      {orgTypeLabel(recruiterProfile.orgType)}
+                    </Text>
+                  </View>
+                )}
                 {recruiterProfile.sport && (
                   <View style={styles.infoRow}>
                     <Ionicons name="football" size={18} color={theme.textMuted} />
                     <Text style={styles.infoText}>{recruiterProfile.sport}</Text>
                   </View>
                 )}
+                {/* A team's website. Only a plain web address opens (see
+                    websiteHref); anything else is shown as text. */}
+                {recruiterProfile.website ? (
+                  <Pressable
+                    style={styles.infoRow}
+                    disabled={!websiteHref(recruiterProfile.website)}
+                    onPress={() => {
+                      const href = websiteHref(recruiterProfile.website);
+                      if (href) Linking.openURL(href).catch(() => {});
+                    }}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open website ${websiteLabel(recruiterProfile.website)}`}
+                  >
+                    <Ionicons name="globe-outline" size={18} color={theme.textMuted} />
+                    <Text
+                      style={[
+                        styles.infoText,
+                        websiteHref(recruiterProfile.website)
+                          ? styles.infoLink
+                          : null,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {websiteLabel(recruiterProfile.website)}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </>
             )}
             {parentProfile && childRaw && (
@@ -1682,6 +1718,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Poppins_400Regular",
     color: theme.text,
+  },
+  // A row that opens something (a team's website).
+  infoLink: {
+    flexShrink: 1,
+    color: semantic.info,
+    textDecorationLine: "underline",
   },
   bio: {
     fontSize: 14,

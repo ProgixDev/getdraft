@@ -15,6 +15,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { ActivationGuard } from './common/guards/activation.guard';
 import { Public } from './common/decorators/public.decorator';
+import { teamRoleEnabled } from './common/utils/team-role';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
@@ -35,8 +36,9 @@ import { RankingsModule } from './modules/rankings/rankings.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { StoreBillingModule } from './modules/store-billing/store-billing.module';
 
+// Exported for its unit test (app.module.spec.ts).
 @Controller()
-class HealthController {
+export class HealthController {
   private readonly logger = new Logger('Health');
 
   constructor(private readonly supabaseService: SupabaseService) {}
@@ -129,12 +131,17 @@ class HealthController {
    * matter who made it or where. Nothing here is secret: a Mapbox public
    * token already ships inside every binary and is readable by anyone who
    * unzips it. Never put a private key in this response.
+   *
+   * teamRoleEnabled tells the app whether to offer "Team / Club" at signup
+   * (TEAM_ROLE_ENABLED, off by default). The server refuses a team signup
+   * while it is off whatever the app shows; this only keeps the card hidden.
    */
   @Public()
   @Get('config')
   config() {
     return {
       mapboxToken: process.env.MAPBOX_PUBLIC_TOKEN ?? null,
+      teamRoleEnabled: teamRoleEnabled(),
     };
   }
 

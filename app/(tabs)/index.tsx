@@ -60,11 +60,15 @@ import type {
   AthleteProfile,
 } from "@/constants/discoverData";
 import { AthleteCard } from "@/components/discover/AthleteCard";
-import { MatchCelebration } from "@/components/match/MatchCelebration";
+import {
+  MatchCelebration,
+  type MatchCardType,
+} from "@/components/match/MatchCelebration";
 import { RootState } from "@/store";
 import {
   ageGroupLabel,
   discoverService,
+  isUnlimitedSwipes,
   type CommunityStatus,
   type DiscoverQuery,
 } from "@/services/discover";
@@ -80,6 +84,14 @@ import {
   type SwipeTrigger,
 } from "@/hooks/useCarouselGesture";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import {
+  isRecruiterRole,
+  MEMBER_ROLES,
+  orgTypeLabel,
+  roleIcon,
+  roleLabelOrUser,
+  rolePlural,
+} from "@/lib/roles";
 import {
   rankingsService,
   starsForRank,
@@ -246,13 +258,24 @@ function DiscoverCardImpl({
 }) {
   const reducedMotion = useReducedMotion();
   const sportAccent = getSportTheme(recruiter.sport).accent;
-  const roleLabel =
-    recruiter.role === "agent"
-      ? "Agent"
-      : recruiter.role === "parent"
-        ? "Parent"
-        : "Coach";
-  const accessibilityLabel = `${recruiter.name}, ${roleLabel}, ${recruiter.sport}, ${recruiter.location}`;
+  // Coach, Agent, Team or (in Community) Parent. A role this build doesn't
+  // know reads "User" -- it used to be called a Coach.
+  const roleLabel = roleLabelOrUser(recruiter.role);
+  // Teams say what kind of organisation they are: "Club · Soccer".
+  const orgType =
+    recruiter.role === "team" ? orgTypeLabel(recruiter.orgType) : null;
+  const orgTypeLine = orgType
+    ? [orgType, recruiter.sport].filter(Boolean).join(" · ")
+    : "";
+  const accessibilityLabel = [
+    recruiter.name,
+    roleLabel,
+    orgType,
+    recruiter.sport,
+    recruiter.location,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const {
     gesture,
@@ -338,13 +361,7 @@ function DiscoverCardImpl({
           ) : (
             <View style={styles.placeholderImage}>
               <Ionicons
-                name={
-                  recruiter.role === "agent"
-                    ? "briefcase"
-                    : recruiter.role === "parent"
-                      ? "people"
-                      : "school"
-                }
+                name={roleIcon(recruiter.role)}
                 size={72}
                 color={theme.textMuted}
               />
@@ -418,6 +435,11 @@ function DiscoverCardImpl({
               )}
             </View>
             <Text style={styles.overlayOrg}>{recruiter.organization}</Text>
+            {orgTypeLine ? (
+              <Text style={styles.overlayOrgType} numberOfLines={1}>
+                {orgTypeLine}
+              </Text>
+            ) : null}
             <View style={styles.tagRow}>
               {(recruiter.tags ?? []).slice(0, 3).map((tag) => (
                 <View key={tag} style={styles.tag}>
@@ -580,18 +602,15 @@ export default function DiscoverScreen() {
   const preferences = useSelector(
     (state: RootState) => state.discoverPreferences,
   );
-  const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
+  // Coaches, agents and teams: the scouting side of recruiting.
+  const isRecruiter = isRecruiterRole(user?.role);
   const isParent = user?.role === "parent";
   const isAdmin = user?.role === "admin";
-  // Focus-based redirect: admins → /(tabs)/dashboard. Athletes, coaches and
-  // recruiters stay — and so do parents, who draft coaches/agents on behalf of
-  // their linked athlete (the server proxies the swipe to that athlete).
-  const redirecting = useRoleHomeRedirect([
-    "athlete",
-    "coach",
-    "recruiter",
-    "parent",
-  ]);
+  // Focus-based redirect: admins → /(tabs)/dashboard. Athletes, coaches,
+  // agents and teams stay — and so do parents, who draft coaches/agents on
+  // behalf of their linked athlete (the server proxies the swipe to that
+  // athlete).
+  const redirecting = useRoleHomeRedirect(MEMBER_ROLES);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [swipeLock, setSwipeLock] = useState(false);
@@ -602,7 +621,7 @@ export default function DiscoverScreen() {
     name: string;
     matchId: string | null;
     avatar: string | null;
-    cardType?: "athlete" | "recruiter" | "parent";
+    cardType?: MatchCardType;
   }>({
     visible: false,
     name: "",
@@ -792,23 +811,18 @@ export default function DiscoverScreen() {
     : isRecruiter
       ? "Let's Start Scouting"
       : "Let's Get Drafted";
-  // What the Community pool is called for this viewer, for copy.
-  const peerNoun =
-    user?.role === "athlete"
-      ? "athletes"
-      : user?.role === "coach"
-        ? "coaches"
-        : user?.role === "recruiter"
-          ? "agents"
-          : user?.role === "parent"
-            ? "parents"
-            : "people";
+  // What the Community pool is called for this viewer, for copy: athletes,
+  // coaches, agents, teams, parents ("people" for a role we don't know).
+  const peerNoun = rolePlural(user?.role);
 
   // Athlete Community is limited to the same sport and age group, and the
   // server can keep an athlete out of it entirely (under 13, no date of birth
   // or sport, guardian approval pending, or switched off). Only a peer-mode
   // answer counts: recruiting is never blocked by it.
   const isAthleteViewer = user?.role === "athlete";
+  // A team's Community is other teams (clubs, schools, academies) and nobody
+  // else, so the line under the switch says so.
+  const isTeamViewer = user?.role === "team";
   const communityBlocked = isPeerMode && community?.eligible === false;
   const communityOpen = isPeerMode && community?.eligible === true;
   // "Your sport: Soccer · Ages 13-17", from what the server says it matched on.
@@ -820,11 +834,15 @@ export default function DiscoverScreen() {
         ]
           .filter(Boolean)
           .join(" · ")
-      : "";
+      : isPeerMode && isTeamViewer
+        ? `Connect with other ${peerNoun}`
+        : "";
   // Hold the line's space while the feed loads, so the deck doesn't jump
   // down a line when the answer lands.
   const showCommunityLine =
-    isPeerMode && isAthleteViewer && (apiCards === null || communityLine !== "");
+    isPeerMode &&
+    (isTeamViewer ||
+      (isAthleteViewer && (apiCards === null || communityLine !== "")));
 
   // One-time tip, the first time an athlete opens a Community they can use.
   // Shown only once the server confirms they're in: an athlete it keeps out
@@ -924,6 +942,18 @@ export default function DiscoverScreen() {
   // Reanimated 4 (correctly) warns when a SharedValue is written during render.
   // The ref is updated in a useEffect below.
   const currentIndexRef = useRef(0);
+  // The pool the deck shows right now, for a Draft answer that lands after
+  // the switch was flipped (see handleSwipeRight).
+  const modeRef = useRef(preferences.mode);
+  useEffect(() => {
+    modeRef.current = preferences.mode;
+  }, [preferences.mode]);
+  // Mirrors swipesRemaining for the same handler, which must not be rebuilt
+  // (and every card re-rendered) each time the count moves.
+  const swipesRemainingRef = useRef<number | null>(null);
+  useEffect(() => {
+    swipesRemainingRef.current = swipesRemaining;
+  }, [swipesRemaining]);
 
   const handleSwipeLeft = useCallback(() => {
     setSwipeLock(true);
@@ -975,11 +1005,7 @@ export default function DiscoverScreen() {
     // Best-effort avatar for the celebration: recruiter cards carry `imageUrl`,
     // athlete cards carry `photos[0]`. Only real (string URL) media is passed —
     // bundled require()'d fallbacks (numbers) resolve to initials instead.
-    const cardType = (current as any)?.cardType as
-      | "athlete"
-      | "recruiter"
-      | "parent"
-      | undefined;
+    const cardType = (current as any)?.cardType as MatchCardType | undefined;
     const rawAvatar =
       cardType === "athlete"
         ? (current as AthleteProfile)?.photos?.[0]
@@ -990,10 +1016,22 @@ export default function DiscoverScreen() {
     let draftPromise: Promise<unknown> | null = null;
     if (targetId) {
       swipedIdsRef.current.add(targetId);
+      const swipeMode = preferences.mode;
       draftPromise = discoverService
-        .swipe(targetId, "draft", isSuper, preferences.mode)
+        .swipe(targetId, "draft", isSuper, swipeMode)
         .then((res) => {
-          setSwipesRemaining(res.swipesRemaining);
+          // The answer carries the allowance of the pool the Draft was made
+          // in. If the deck has moved to the other pool since, that pool's
+          // own feed owns the count. And Community Drafts are unlimited:
+          // once the feed has said so, an answer that reports the recruiting
+          // allowance instead must not lock the Community deck.
+          if (modeRef.current === swipeMode) {
+            setSwipesRemaining((prev) =>
+              swipeMode === "peer" && isUnlimitedSwipes(prev)
+                ? prev
+                : res.swipesRemaining,
+            );
+          }
           if (typeof res.superDraftsRemaining === "number")
             setSuperDraftsRemaining(res.superDraftsRemaining);
           if (res.matched) {
@@ -1043,6 +1081,18 @@ export default function DiscoverScreen() {
               setSnackbar({
                 visible: true,
                 message: "Out of Super Drafts this month — upgrade for more",
+                canUndo: false,
+              });
+            } else if (
+              swipeMode === "peer" &&
+              isUnlimitedSwipes(swipesRemainingRef.current)
+            ) {
+              // Community Drafts are unlimited, so this 429 is the request
+              // limiter, not an empty allowance: nothing to upgrade, and the
+              // deck must not lock.
+              setSnackbar({
+                visible: true,
+                message: "Couldn't send Draft — try again in a moment",
                 canUndo: false,
               });
             } else {
@@ -1351,8 +1401,13 @@ export default function DiscoverScreen() {
     () => getSportTheme(topCard?.sport),
     [topCard?.sport],
   );
+  // Community Drafts are unlimited. Whichever way the server says "no limit"
+  // (see isUnlimitedSwipes; -1 is one of them, and is not "none left"), the
+  // deck never locks on it. Recruiting keeps its daily allowance.
   const outOfSwipes =
-    typeof swipesRemaining === "number" && swipesRemaining <= 0;
+    typeof swipesRemaining === "number" &&
+    !isUnlimitedSwipes(swipesRemaining) &&
+    swipesRemaining <= 0;
   const topCardName = (topCard as any)?.name ?? "this profile";
 
   // Rules-of-Hooks: every hook (useState/useEffect/useMemo/useCallback/useRef/
@@ -1868,8 +1923,10 @@ export default function DiscoverScreen() {
                 </Pressable>
                 {/* Super Draft — the GetDraft logo (client request). Shown only
                     when the backend reports a super allowance, so an older API
-                    never sees the button. Greyed + nudges to upgrade at 0. */}
-                {typeof superDraftsRemaining === "number" && (
+                    never sees the button. Greyed + nudges to upgrade at 0.
+                    Recruiting only: the server refuses a Super Draft in
+                    Community, so the button is not offered there. */}
+                {typeof superDraftsRemaining === "number" && !isPeerMode && (
                   <Pressable
                     style={({ pressed }) => [
                       styles.circleButton,
@@ -2448,6 +2505,13 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_500Medium",
     color: "rgba(255,255,255,0.85)",
     marginTop: 4,
+  },
+  // A team's "Club · Soccer" line, under its name.
+  overlayOrgType: {
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 2,
   },
   tagRow: {
     flexDirection: "row",

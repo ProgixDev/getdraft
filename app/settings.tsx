@@ -27,6 +27,7 @@ import { clearTokens } from "@/services/api";
 import { clearAuth } from "@/store/authStorage";
 import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { logout } from "@/store/slices/authSlice";
+import { isRecruiterRole } from "@/lib/roles";
 
 const PREF_DEFAULTS = {
   matchAlerts: true,
@@ -41,6 +42,10 @@ export default function SettingsScreen() {
   const router = useRouter();
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
+  // Coaches, agents and teams are on the other side of every match: the
+  // copy below was written for athletes ("when you match with a recruiter")
+  // and read backwards to them.
+  const isRecruiter = isRecruiterRole(user?.role);
 
   const [matchAlerts, setMatchAlerts] = useState(PREF_DEFAULTS.matchAlerts);
   const [messageNotifications, setMessageNotifications] = useState(
@@ -177,7 +182,9 @@ export default function SettingsScreen() {
             <View style={styles.switchCopy}>
               <Text style={styles.switchTitle}>Match Alerts</Text>
               <Text style={styles.switchSubtitle}>
-                Get notified when you match with a recruiter
+                {isRecruiter
+                  ? "Get notified when you match with an athlete"
+                  : "Get notified when you match with a recruiter"}
               </Text>
             </View>
             <Switch
@@ -205,9 +212,13 @@ export default function SettingsScreen() {
 
           <View style={[styles.switchRow, styles.switchRowLast]}>
             <View style={styles.switchCopy}>
-              <Text style={styles.switchTitle}>Recruiter Activity</Text>
+              <Text style={styles.switchTitle}>
+                {isRecruiter ? "Athlete Activity" : "Recruiter Activity"}
+              </Text>
               <Text style={styles.switchSubtitle}>
-                Get notified when a recruiter views your profile
+                {isRecruiter
+                  ? "Get notified when an athlete Super Drafts you"
+                  : "Get notified when a recruiter views your profile"}
               </Text>
             </View>
             <Switch
@@ -229,7 +240,9 @@ export default function SettingsScreen() {
           <View style={styles.switchRow}>
             <View style={styles.switchCopy}>
               <Text style={styles.switchTitle}>
-                Profile Visible to Recruiters
+                {isRecruiter
+                  ? "Profile Visible to Athletes"
+                  : "Profile Visible to Recruiters"}
               </Text>
               <Text style={styles.switchSubtitle}>
                 When off, your profile is hidden from search

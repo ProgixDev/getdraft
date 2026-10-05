@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { isRecruiterRole } from '../../common/types';
 
 @Injectable()
 export class MatchesService {
@@ -45,14 +46,18 @@ export class MatchesService {
         let recruiterRole: string = otherUser?.role ?? 'agent';
         let organization = '';
         let verified = false;
-        if (otherUser?.role === 'recruiter' || otherUser?.role === 'coach') {
+        // Coaches, agents and teams: the organisation and the verified badge
+        // come from their recruiter profile. A team keeps the label 'team'
+        // whatever the row says.
+        const otherIsTeam = otherUser?.role === 'team';
+        if (isRecruiterRole(otherUser?.role)) {
           const { data: rp } = await supabase
             .from('recruiter_profiles')
             .select('role_type, organization, verified')
             .eq('user_id', otherUserId)
             .single();
           if (rp) {
-            recruiterRole = rp.role_type;
+            recruiterRole = otherIsTeam ? 'team' : rp.role_type;
             organization = rp.organization;
             verified = rp.verified;
           }

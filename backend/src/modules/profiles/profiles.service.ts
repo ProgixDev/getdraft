@@ -3,9 +3,14 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
-import { UserRole } from '../../common/types';
+import {
+  UserRole,
+  isRecruiterRole,
+  recruiterRoleTypeFor,
+} from '../../common/types';
 import { ageFromDob } from '../../common/utils/age';
 import { reevaluateMinorActivation } from '../../common/utils/activation';
 import { UpsertAthleteProfileDto } from './dto/athlete-profile.dto';
@@ -14,6 +19,18 @@ import { UpsertParentProfileDto } from './dto/parent-profile.dto';
 
 export const DOB_LOCKED_MESSAGE =
   "Date of birth can't be changed. Contact support.";
+
+/**
+ * 403 when an account writes a profile that is not its own kind. Each role
+ * has exactly one profile table; before this check any role could create a
+ * row in any of them (a coach with an athlete profile shows on the globe as
+ * an athlete pin).
+ */
+export const WRONG_PROFILE_MESSAGES = {
+  athlete: 'Only athlete accounts have an athlete profile.',
+  recruiter: 'Only coach, agent and team accounts have this profile.',
+  parent: 'Only parent accounts have a parent profile.',
+} as const;
 
 /**
  * A date of birth as its 'YYYY-MM-DD' calendar date (how Postgres stores a
@@ -106,7 +123,14 @@ export class ProfilesService {
     }
   }
 
-  async upsertAthleteProfile(userId: string, dto: UpsertAthleteProfileDto) {
+  async upsertAthleteProfile(
+    userId: string,
+    role: UserRole,
+    dto: UpsertAthleteProfileDto,
+  ) {
+    if (role !== UserRole.ATHLETE) {
+      throw new ForbiddenException(WRONG_PROFILE_MESSAGES.athlete);
+    }
     const supabase = this.supabaseService.getAdminClient();
 
     // Pull the full existing row (not just the id) so a partial save can
@@ -261,8 +285,27 @@ export class ProfilesService {
     return data;
   }
 
-  async upsertRecruiterProfile(userId: string, dto: UpsertRecruiterProfileDto) {
+  /**
+   * The profile of a coach, an agent or a team: one table, told apart by
+   * role_type. role_type is NOT taken from the request. It follows the
+   * account type (coach -> 'coach', agent -> 'agent', team -> 'team') and is
+   * rewritten on every save, so a coach cannot label itself a team -- which
+   * the Community pool, the recruiter-type filter and every label read.
+   */
+  async upsertRecruiterProfile(
+    userId: string,
+    role: UserRole,
+    dto: UpsertRecruiterProfileDto,
+  ) {
+    const roleType = recruiterRoleTypeFor(role);
+    if (!roleType) {
+      throw new ForbiddenException(WRONG_PROFILE_MESSAGES.recruiter);
+    }
     const supabase = this.supabaseService.getAdminClient();
+
+    // Whatever role_type the client sent is dropped here.
+    const { role_type: _clientRoleType, ...fields } = dto;
+    const write = { ...fields, role_type: roleType };
 
     const { data: existing } = await supabase
       .from('recruiter_profiles')
@@ -273,7 +316,7 @@ export class ProfilesService {
     if (existing) {
       const { data, error } = await supabase
         .from('recruiter_profiles')
-        .update({ ...dto })
+        .update(write)
         .eq('user_id', userId)
         .select()
         .single();
@@ -284,7 +327,7 @@ export class ProfilesService {
 
     const { data, error } = await supabase
       .from('recruiter_profiles')
-      .insert({ user_id: userId, ...dto })
+      .insert({ user_id: userId, ...write })
       .select()
       .single();
     if (error) throw new BadRequestException(error.message);
@@ -308,7 +351,14 @@ export class ProfilesService {
     return data;
   }
 
-  async upsertParentProfile(userId: string, dto: UpsertParentProfileDto) {
+  async upsertParentProfile(
+    userId: string,
+    role: UserRole,
+    dto: UpsertParentProfileDto,
+  ) {
+    if (role !== UserRole.PARENT) {
+      throw new ForbiddenException(WRONG_PROFILE_MESSAGES.parent);
+    }
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: existing } = await supabase
@@ -346,10 +396,13 @@ export class ProfilesService {
    *     and inside an athlete's `profile`. Community now puts athletes in
    *     front of each other, and a birth date is an identifier;
    *   - guardian links: a parent profile's child_athlete_id is dropped, and
-   *     an athlete's parent_user_id is only given to coaches and agents,
-   *     who need it to address outreach to the guardian (POST /outreach
-   *     takes the parent's id). Other athletes and parents get null.
+   *     an athlete's parent_user_id is only given to coaches, agents and
+   *     teams, who need it to address outreach to the guardian (POST
+   *     /outreach takes the parent's id). Other athletes and parents get null.
    * The owner reading their own profile gets everything, as before.
+   *
+   * A team's `profile` is its recruiter_profiles row, like a coach's or an
+   * agent's, with org_type and website on it.
    */
   async getPublicProfile(
     userId: string,
@@ -358,8 +411,7 @@ export class ProfilesService {
   ) {
     const supabase = this.supabaseService.getAdminClient();
     const isOwner = !!viewerId && viewerId === userId;
-    const viewerSendsOutreach =
-      viewerRole === UserRole.COACH || viewerRole === UserRole.RECRUITER;
+    const viewerSendsOutreach = isRecruiterRole(viewerRole);
 
     const { data: user } = await supabase
       .from('users')
@@ -379,7 +431,7 @@ export class ProfilesService {
     // to address via POST /outreach. Picks the first approved guardian
     // link; non-athletes and athletes without an approved guardian get
     // null and the frontend hides the "Send outreach" affordance. Only
-    // looked up for the owner and for coaches/agents (see above).
+    // looked up for the owner and for coaches/agents/teams (see above).
     let parent_user_id: string | null = null;
 
     if (user.role === 'athlete') {
@@ -408,7 +460,7 @@ export class ProfilesService {
           .maybeSingle();
         parent_user_id = guardianLink?.guardian_user_id ?? null;
       }
-    } else if (user.role === 'coach' || user.role === 'recruiter') {
+    } else if (isRecruiterRole(user.role)) {
       const { data } = await supabase
         .from('recruiter_profiles')
         .select('*')

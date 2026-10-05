@@ -41,6 +41,13 @@ import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { fold } from "@/constants/countryData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import {
+  isRecruiterRole,
+  ORG_TYPE_OPTIONS,
+  orgTypeLabel,
+  websiteHref,
+  type UserRole,
+} from "@/lib/roles";
 import { RootState } from "@/store";
 import { login as setLoggedInUser } from "@/store/slices/authSlice";
 import { profilesService } from "@/services/profiles";
@@ -55,9 +62,17 @@ const GENDER_OPTIONS = ["Man", "Woman"];
 
 const AGENCY_OTHER = "__OTHER__";
 
-type SelectorKey = "sport" | "position" | "level" | "gender" | "agency" | null;
+type SelectorKey =
+  | "sport"
+  | "position"
+  | "level"
+  | "gender"
+  | "agency"
+  | "orgType"
+  | "league"
+  | null;
 
-type Role = "athlete" | "recruiter" | "coach" | "parent" | undefined;
+type Role = UserRole | undefined;
 
 interface PickerOption {
   label: string;
@@ -148,6 +163,20 @@ const RECRUITER_DTO_FIELDS = [
   "videos",
 ] as const;
 
+// A team account's round-trip list. No role_type: the server sets it from
+// the account type and a team never sends one. org_type and website are the
+// two columns only a team fills in.
+const TEAM_DTO_FIELDS = [
+  "organization",
+  "sport",
+  "org_type",
+  "website",
+  "tags",
+  "bio",
+  "photos",
+  "videos",
+] as const;
+
 function pickFields<T extends string>(
   src: any,
   keys: readonly T[],
@@ -176,8 +205,13 @@ export default function EditProfileScreen() {
 
   const role = authUser?.role as Role;
   const isAthlete = role === "athlete";
-  const isRecruiter = role === "recruiter" || role === "coach";
+  // Coaches, agents and teams all edit the recruiter profile.
+  const isRecruiter = isRecruiterRole(role);
+  // A club, school or academy account: the coach section, plus what kind of
+  // organisation it is, its league and its website.
+  const isTeam = role === "team";
   const isParent = role === "parent";
+  const recruiterDtoFields = isTeam ? TEAM_DTO_FIELDS : RECRUITER_DTO_FIELDS;
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -198,6 +232,11 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState("");
   const [sport, setSport] = useState("");
   const [organization, setOrganization] = useState("");
+  // Team accounts only. The league is the first profile tag, as it is for a
+  // coach's league / level at signup.
+  const [orgType, setOrgType] = useState("");
+  const [website, setWebsite] = useState("");
+  const [league, setLeague] = useState("");
   const [position, setPosition] = useState("");
   const [level, setLevel] = useState("");
   const [team, setTeam] = useState("");
@@ -255,6 +294,11 @@ export default function EditProfileScreen() {
         setBio(p.bio ?? "");
         if (!isParent) setSport(p.sport ?? "");
         if (isRecruiter) setOrganization(p.organization ?? "");
+        if (isTeam) {
+          setOrgType(p.org_type ?? "");
+          setWebsite(p.website ?? "");
+          setLeague(Array.isArray(p.tags) ? (p.tags[0] ?? "") : "");
+        }
         if (isAthlete) {
           setPosition(p.position ?? "");
           setLevel(p.level ?? "");
@@ -279,7 +323,7 @@ export default function EditProfileScreen() {
     return () => {
       cancelled = true;
     };
-  }, [isAthlete, isRecruiter, isParent]);
+  }, [isAthlete, isRecruiter, isTeam, isParent]);
 
   // Age decides who an athlete can meet in the Community (13-17 with 13-17,
   // 18+ with 18+), so once an onboarded athlete's date of birth is on file it
@@ -316,6 +360,11 @@ export default function EditProfileScreen() {
     [],
   );
 
+  const orgTypeOptions = useMemo<PickerOption[]>(
+    () => ORG_TYPE_OPTIONS.map((o) => ({ label: o.label, value: o.value })),
+    [],
+  );
+
   // Popular agencies + a "type your own" escape hatch, so a player whose
   // agency isn't listed is never stuck.
   const agencyOptions = useMemo<PickerOption[]>(
@@ -337,7 +386,11 @@ export default function EditProfileScreen() {
             ? "Select Gender"
             : activeModal === "agency"
               ? "Select Agency"
-              : "";
+              : activeModal === "orgType"
+                ? "Select Organization Type"
+                : activeModal === "league"
+                  ? "Select League / Level"
+                  : "";
 
   const modalOptions: PickerOption[] =
     activeModal === "sport"
@@ -350,7 +403,13 @@ export default function EditProfileScreen() {
             ? genderOptions
             : activeModal === "agency"
               ? agencyOptions
-              : [];
+              : activeModal === "orgType"
+                ? orgTypeOptions
+                : activeModal === "league"
+                  ? // A team's league comes from the same per-sport list an
+                    // athlete's level does.
+                    levelOptions
+                  : [];
 
   const modalSelected =
     activeModal === "sport"
@@ -365,7 +424,11 @@ export default function EditProfileScreen() {
               ? agencyCustom
                 ? AGENCY_OTHER
                 : agency
-              : "";
+              : activeModal === "orgType"
+                ? orgType
+                : activeModal === "league"
+                  ? league
+                  : "";
 
   const handleSelectFromModal = (value: string) => {
     if (activeModal === "sport") {
@@ -373,6 +436,8 @@ export default function EditProfileScreen() {
         setSport(value);
         setPosition("");
         setLevel("");
+        // Leagues are per sport too.
+        setLeague("");
       }
     } else if (activeModal === "position") {
       setPosition(value);
@@ -388,6 +453,10 @@ export default function EditProfileScreen() {
         setAgencyCustom(false);
         setAgency(value);
       }
+    } else if (activeModal === "orgType") {
+      setOrgType(value);
+    } else if (activeModal === "league") {
+      setLeague(value);
     }
     setActiveModal(null);
   };
@@ -506,11 +575,16 @@ export default function EditProfileScreen() {
       }
       if (
         isRecruiter &&
-        (!current?.organization || !current?.sport || !current?.role_type)
+        (!current?.organization ||
+          !current?.sport ||
+          // A team's role is set by the server from its account type.
+          (!isTeam && !current?.role_type))
       ) {
         Alert.alert(
           "Set up your profile first",
-          "Add your organization, sport, and role before uploading media.",
+          isTeam
+            ? "Add your team name and sport, then save, before uploading media."
+            : "Add your organization, sport, and role before uploading media.",
         );
         return;
       }
@@ -526,7 +600,7 @@ export default function EditProfileScreen() {
       if (newUrls.length === 0) return;
       const merged = pickFields(
         current,
-        isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+        isAthlete ? ATHLETE_DTO_FIELDS : recruiterDtoFields,
       );
       const existing: string[] = Array.isArray(current[kind])
         ? current[kind]
@@ -588,7 +662,7 @@ export default function EditProfileScreen() {
               // the upload-cleanup sweep can reclaim later.
               const merged = pickFields(
                 current,
-                isAthlete ? ATHLETE_DTO_FIELDS : RECRUITER_DTO_FIELDS,
+                isAthlete ? ATHLETE_DTO_FIELDS : recruiterDtoFields,
               );
               merged[kind] = next;
               if (isAthlete) {
@@ -631,7 +705,15 @@ export default function EditProfileScreen() {
       return;
     }
     if (isRecruiter && !organization.trim()) {
-      setErrorMsg("Organization is required.");
+      setErrorMsg(
+        isTeam ? "Team / club name is required." : "Organization is required.",
+      );
+      return;
+    }
+    // Other people tap this link, so only a plain web address is saved.
+    const websiteToSave = isTeam ? websiteHref(website) : null;
+    if (isTeam && website.trim() && !websiteToSave) {
+      setErrorMsg("Enter a valid website, like yourclub.com.");
       return;
     }
     setErrorMsg(null);
@@ -693,6 +775,20 @@ export default function EditProfileScreen() {
           // Never sent once it is locked (see dobLocked): the server would
           // reject the whole save with "Date of birth can't be changed".
           date_of_birth: !dobLocked && dob ? toIsoDate(dob) : undefined,
+        });
+      } else if (isTeam) {
+        const prev = livePrev ?? {};
+        const prevTags: string[] = Array.isArray(prev.tags) ? prev.tags : [];
+        await profilesService.upsertRecruiterProfile({
+          // No role_type: the server sets it from the account type.
+          organization: organization.trim(),
+          sport,
+          ...(orgType ? { org_type: orgType } : {}),
+          // null clears a website that was removed.
+          website: websiteToSave,
+          // The league is the first tag; any others are kept as they are.
+          tags: [league.trim(), ...prevTags.slice(1)].filter(Boolean),
+          bio: bio.trim(),
         });
       } else if (isRecruiter) {
         const prev = livePrev ?? {};
@@ -885,16 +981,26 @@ export default function EditProfileScreen() {
 
         {isRecruiter && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Organization</Text>
+            <Text style={styles.sectionTitle}>
+              {isTeam ? "Team" : "Organization"}
+            </Text>
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>
-                {role === "coach" ? "Organization" : "Agency Name"}
+                {isTeam
+                  ? "Team / club name"
+                  : role === "coach"
+                    ? "Organization"
+                    : "Agency Name"}
               </Text>
               <TextInput
                 value={organization}
                 onChangeText={setOrganization}
                 placeholder={
-                  role === "coach" ? "State University" : "Premier Sports Group"
+                  isTeam
+                    ? "Riverside FC"
+                    : role === "coach"
+                      ? "State University"
+                      : "Premier Sports Group"
                 }
                 placeholderTextColor={theme.inputPlaceholder}
                 style={styles.input}
@@ -902,6 +1008,32 @@ export default function EditProfileScreen() {
                 returnKeyType="next"
               />
             </View>
+            {isTeam && (
+              <>
+                <SelectorRow
+                  icon="shield-outline"
+                  label="Organization Type"
+                  value={orgTypeLabel(orgType) ?? "Select type"}
+                  placeholder={!orgTypeLabel(orgType)}
+                  onPress={() => setActiveModal("orgType")}
+                />
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Website</Text>
+                  <TextInput
+                    value={website}
+                    onChangeText={setWebsite}
+                    placeholder="yourclub.com"
+                    placeholderTextColor={theme.inputPlaceholder}
+                    style={styles.input}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    maxLength={255}
+                    returnKeyType="next"
+                  />
+                </View>
+              </>
+            )}
             {role === "coach" && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Team</Text>
@@ -930,6 +1062,17 @@ export default function EditProfileScreen() {
               placeholder={!sport}
               onPress={() => setActiveModal("sport")}
             />
+
+            {isTeam && (
+              <SelectorRow
+                icon="trending-up-outline"
+                label="League / Level"
+                value={league || (sport ? "Select league" : "Pick a sport first")}
+                placeholder={!league}
+                disabled={!sport}
+                onPress={() => sport && setActiveModal("league")}
+              />
+            )}
 
             {isAthlete && (
               <>
@@ -1193,7 +1336,7 @@ export default function EditProfileScreen() {
         onSelect={handleSelectFromModal}
         // Only the league/level list: a curated list of leagues can never be
         // complete, while positions and sports are finite and fixed.
-        allowCustom={activeModal === "level"}
+        allowCustom={activeModal === "level" || activeModal === "league"}
         customLabel={isRecruiter ? "My league isn't listed" : "Other"}
         customPlaceholder={
           isRecruiter ? "e.g. Amateur Junior Football" : "Your level"

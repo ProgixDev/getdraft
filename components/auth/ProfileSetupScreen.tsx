@@ -38,6 +38,7 @@ import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS, sportEmoji } from "@/constants/sportsData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { ORG_TYPE_OPTIONS, websiteHref, type OrgType } from "@/lib/roles";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
 import { useAppDispatch } from "@/store/hooks";
@@ -64,6 +65,18 @@ interface ProfileSetupScreenProps {
 
 const GENDER_OPTIONS = ["Man", "Woman"];
 const RELATIONSHIP_OPTIONS = ["Mother", "Father", "Guardian", "Other"];
+// The signup picker spells the organisation types out; cards and profiles
+// show the short labels from the role registry. Keyed by the registry's
+// values (the org_type CHECK list) so a new one cannot be missed here.
+const ORG_TYPE_PICKER_LABELS: Record<OrgType, string> = {
+  club: "Club",
+  school: "School",
+  college: "College / University",
+  academy: "Academy",
+  pro: "Pro team",
+  other: "Other",
+};
+const WEBSITE_MAX_LENGTH = 200;
 
 type StepField = {
   id: string;
@@ -173,6 +186,67 @@ function getStepsForRole(role: string): Step[] {
       orgStep,
     ];
   }
+  if (role === "team") {
+    // A team / club is an organisation, not a person: no first/last name,
+    // no date of birth, no physicals. The account goes by the club's name.
+    return [
+      {
+        id: 1,
+        title: "Your Organisation",
+        subtitle: "Tell athletes who you are",
+        tip: "Athletes look at club name and sport when deciding to engage",
+        fields: [
+          {
+            id: "organization",
+            label: "Team / Club Name",
+            placeholder: "Dallas Jesuit Rangers",
+            icon: "shield-outline",
+          },
+          {
+            id: "orgType",
+            label: "Organisation Type",
+            placeholder: "Select",
+            icon: "business-outline",
+          },
+          {
+            id: "sport",
+            label: "Sport",
+            placeholder: "Football",
+            icon: "football-outline",
+          },
+          {
+            id: "level",
+            label: "League / Level (optional)",
+            placeholder: "Pick or type your league",
+            icon: "trending-up-outline",
+            optional: true,
+          },
+          {
+            id: "website",
+            label: "Website (optional)",
+            placeholder: "www.yourclub.com",
+            icon: "globe-outline",
+            optional: true,
+          },
+        ],
+      },
+      {
+        id: 2,
+        title: "About Your Team",
+        subtitle: "Introduce your organisation",
+        tip: "A short intro helps athletes and parents know who they're talking to",
+        fields: [
+          {
+            id: "bio",
+            label: "Short Bio (optional)",
+            placeholder: "Brief introduction…",
+            icon: "information-circle-outline",
+            optional: true,
+          },
+        ],
+      },
+    ];
+  }
   if (role === "parent") {
     return [
       {
@@ -210,7 +284,34 @@ function getStepsForRole(role: string): Step[] {
       },
     ];
   }
-  // athlete (default) — unchanged 3-step flow.
+  if (role !== "athlete") {
+    // An account type this build does not know. Ask for the name only rather
+    // than walk it through the athlete questions below, which is what the
+    // old fall-through did.
+    return [
+      {
+        id: 1,
+        title: "Personal Info",
+        subtitle: "Tell us your name",
+        tip: "Use your real name to build trust",
+        fields: [
+          {
+            id: "firstName",
+            label: "First Name",
+            placeholder: "John",
+            icon: "person-outline",
+          },
+          {
+            id: "lastName",
+            label: "Last Name",
+            placeholder: "Doe",
+            icon: "person-outline",
+          },
+        ],
+      },
+    ];
+  }
+  // athlete — unchanged 3-step flow.
   return [
     {
       id: 1,
@@ -328,7 +429,10 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
   // Role-specific step set — recomputed only when the role prop changes.
   const steps = useMemo(() => getStepsForRole(role), [role]);
-  const isRecruiterRole = role === "coach" || role === "recruiter";
+  const isTeamRole = role === "team";
+  // Teams use the coaches' league picker and its wording.
+  const isRecruiterRole =
+    role === "coach" || role === "recruiter" || isTeamRole;
 
   const dispatch = useAppDispatch();
   const [currentStep, setCurrentStep] = useState(0);
@@ -348,6 +452,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [relationshipModalVisible, setRelationshipModalVisible] =
     useState(false);
+  const [orgTypeModalVisible, setOrgTypeModalVisible] = useState(false);
   const [dateOfBirth, setDateOfBirth] = useState<Date>(() => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 18);
@@ -539,6 +644,12 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     setRelationshipModalVisible(false);
   };
 
+  // Stored as the org_type value ("college"); the field shows its label.
+  const handleOrgTypeSelect = (orgType: string) => {
+    handleFieldChange("orgType", orgType);
+    setOrgTypeModalVisible(false);
+  };
+
   React.useEffect(() => {
     progress.value = withTiming(((currentStep + 1) / steps.length) * 100, {
       duration: 300,
@@ -556,14 +667,27 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   };
 
   const handleNext = async () => {
+    // The website is optional, but one that was typed has to be a web
+    // address. Checked on the step that asks for it, not at the end.
+    if (
+      steps[currentStep].fields.some((f) => f.id === "website") &&
+      formData.website?.trim() &&
+      !websiteHref(formData.website)
+    ) {
+      Alert.alert("Error", "Please enter a valid website, or leave it blank.");
+      return;
+    }
     if (currentStep < steps.length - 1) {
       setCurrentStep((prev) => prev + 1);
     } else {
       if (isSubmitting) return;
       setIsSubmitting(true);
       try {
-        const fullName =
-          `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
+        // A team account goes by its club name wherever a person's name is
+        // shown (cards, chats, the Draft Board); there is no first/last name.
+        const fullName = isTeamRole
+          ? (formData.organization ?? "").trim()
+          : `${formData.firstName ?? ""} ${formData.lastName ?? ""}`.trim();
         if (fullName) {
           // Reflect the real name in the store immediately so Discover (and
           // anywhere reading user.name) shows the actual first name instead of
@@ -614,6 +738,22 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             role_type: role === "coach" ? "coach" : "agent",
             // Coaches list a team; agents leave it blank (field hidden for them).
             team: formData.team?.trim() || undefined,
+            bio: formData.bio?.trim() || undefined,
+            tags,
+          });
+        } else if (isTeamRole) {
+          // Same table and endpoint as coaches and agents. The league rides
+          // in tags as it does for them. role_type is deliberately not sent:
+          // the server derives it from the account's role.
+          const tags: string[] = [];
+          const level = formData.level?.trim();
+          if (level) tags.push(level);
+          await profilesService.upsertRecruiterProfile({
+            organization: formData.organization?.trim() ?? "",
+            sport: formData.sport?.trim() ?? "",
+            org_type: formData.orgType || undefined,
+            // Saved as a full address: "www.club.com" gets https:// in front.
+            website: websiteHref(formData.website) ?? undefined,
             bio: formData.bio?.trim() || undefined,
             tags,
           });
@@ -787,6 +927,63 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                           color={neutral.gray400}
                         />
                       </Pressable>
+                    </>
+                  ) : field.id === "orgType" ? (
+                    <>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <Pressable
+                        style={styles.inputContainer}
+                        onPress={() => setOrgTypeModalVisible(true)}
+                      >
+                        <Ionicons
+                          name={field.icon as any}
+                          size={20}
+                          color={neutral.gray400}
+                          style={styles.inputIcon}
+                        />
+                        <Text
+                          style={[
+                            styles.input,
+                            !formData[field.id] && styles.inputPlaceholder,
+                          ]}
+                        >
+                          {ORG_TYPE_PICKER_LABELS[
+                            formData[field.id] as OrgType
+                          ] || field.placeholder}
+                        </Text>
+                        <Ionicons
+                          name="chevron-down"
+                          size={20}
+                          color={neutral.gray400}
+                        />
+                      </Pressable>
+                    </>
+                  ) : field.id === "website" ? (
+                    <>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <View style={styles.inputContainer}>
+                        <Ionicons
+                          name={field.icon as any}
+                          size={20}
+                          color={neutral.gray400}
+                          style={styles.inputIcon}
+                        />
+                        <TextInput
+                          style={styles.input}
+                          placeholder={field.placeholder}
+                          placeholderTextColor={neutral.gray400}
+                          value={formData[field.id] || ""}
+                          onChangeText={(value) =>
+                            handleFieldChange(field.id, value)
+                          }
+                          keyboardType="url"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          textContentType="URL"
+                          autoComplete="url"
+                          maxLength={WEBSITE_MAX_LENGTH}
+                        />
+                      </View>
                     </>
                   ) : field.id === "bio" ? (
                     <>
@@ -1308,6 +1505,70 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Pressable>
             </Modal>
 
+            {/* Organisation Type Modal (team only) */}
+            <Modal
+              visible={orgTypeModalVisible}
+              transparent
+              animationType="slide"
+            >
+              <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setOrgTypeModalVisible(false)}
+              >
+                <Pressable
+                  style={styles.modalContent}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Organisation Type</Text>
+                    <Pressable onPress={() => setOrgTypeModalVisible(false)}>
+                      <Ionicons
+                        name="close"
+                        size={24}
+                        color={neutral.gray600}
+                      />
+                    </Pressable>
+                  </View>
+                  <Text style={styles.modalSubtitle}>
+                    Select the one that fits you best
+                  </Text>
+                  <ScrollView
+                    style={styles.modalScroll}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {ORG_TYPE_OPTIONS.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        style={[
+                          styles.modalOption,
+                          formData.orgType === option.value &&
+                            styles.modalOptionSelected,
+                        ]}
+                        onPress={() => handleOrgTypeSelect(option.value)}
+                      >
+                        <Text
+                          style={[
+                            styles.modalOptionText,
+                            formData.orgType === option.value &&
+                              styles.modalOptionTextSelected,
+                          ]}
+                        >
+                          {ORG_TYPE_PICKER_LABELS[option.value]}
+                        </Text>
+                        {formData.orgType === option.value && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={22}
+                            color={brand.primary}
+                          />
+                        )}
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </Pressable>
+              </Pressable>
+            </Modal>
+
             {/* Sport Selection Modal */}
             <Modal
               visible={sportModalVisible}
@@ -1544,9 +1805,11 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     </Pressable>
                   </View>
                   <Text style={styles.modalSubtitle}>
-                    {isRecruiterRole
-                      ? "Pick the league you coach in, or add your own"
-                      : "Select your competition level"}
+                    {isTeamRole
+                      ? "Pick the league your team plays in, or add your own"
+                      : isRecruiterRole
+                        ? "Pick the league you coach in, or add your own"
+                        : "Select your competition level"}
                   </Text>
                   {levelOptions.length > 12 && (
                     <View style={styles.levelSearch}>

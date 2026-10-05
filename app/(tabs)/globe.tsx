@@ -44,6 +44,12 @@ import { useMapboxTokenStatus } from "@/lib/mapbox-token";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import {
+  DRAFTING_ROLES,
+  roleDisplayLabel,
+  roleLabelOrUser,
+  rolePlural,
+} from "@/lib/roles";
 import { discoverService, type MapPoint } from "@/services/discover";
 import { apiErrorMessage } from "@/services/api";
 import {
@@ -273,6 +279,24 @@ window.addEventListener('message',function(e){handleRnMessage(e.data)});
 <\/script></body></html>`;
 }
 
+/**
+ * What a pin is called when it has no name: its account type. Every pin used
+ * to fall back to "Athlete", including the coaches, agents and teams an
+ * athlete sees here. A server that predates `accountType` only says athlete
+ * or recruiter.
+ */
+function pinLabel(point: MapPoint): string {
+  if (point.accountType) return roleLabelOrUser(point.accountType);
+  return point.role === "athlete" ? "Athlete" : "Recruiter";
+}
+
+/** Sport · position for an athlete, organisation · sport for anyone else. */
+function pinSubtitle(point: MapPoint): string {
+  return point.role === "athlete"
+    ? [point.sport, point.position].filter(Boolean).join(" · ")
+    : [point.organization, point.sport].filter(Boolean).join(" · ");
+}
+
 /** One entry in the strip along the bottom of the map. */
 function TalentStripCard({
   point,
@@ -284,10 +308,7 @@ function TalentStripCard({
   // avatar_url is the profile picture; `photo` is the first gallery shot and
   // is often the only image an athlete has set.
   const image = point.avatar_url || point.photo;
-  const subtitle =
-    point.role === "athlete"
-      ? [point.sport, point.position].filter(Boolean).join(" · ")
-      : [point.organization, point.sport].filter(Boolean).join(" · ");
+  const subtitle = pinSubtitle(point);
 
   return (
     <Pressable
@@ -314,7 +335,7 @@ function TalentStripCard({
       <View style={styles.talentInfo}>
         <View style={styles.talentNameRow}>
           <Text style={styles.talentName} numberOfLines={1}>
-            {point.name ?? "Athlete"}
+            {point.name ?? pinLabel(point)}
           </Text>
           {point.verified && (
             <Ionicons name="checkmark-circle" size={13} color={semantic.success} />
@@ -421,10 +442,10 @@ export default function GlobeTab() {
   });
 
   // Globe is the map view of the discover feed for everyone who swipes —
-  // athletes see recruiters/coaches, recruiters/coaches see athletes (the
-  // role split is enforced on the backend). Parents and admins land on
+  // athletes see coaches/agents/teams, coaches/agents/teams see athletes
+  // (the role split is enforced on the backend). Parents and admins land on
   // their own role's home via useRoleHomeRedirect (focus-based).
-  const redirecting = useRoleHomeRedirect(["athlete", "coach", "recruiter"]);
+  const redirecting = useRoleHomeRedirect(DRAFTING_ROLES);
 
   const insets = useSafeAreaInsets();
   const [isActive, setIsActive] = useState(false);
@@ -704,7 +725,19 @@ export default function GlobeTab() {
         }
       } catch (err) {
         const status = (err as any)?.response?.status;
-        if (status === 429) {
+        if (status === 429 && mode === "peer") {
+          // Community Drafts are unlimited, so there is no allowance to run
+          // out of here and nothing to upgrade: on a current server a 429 is
+          // the request limiter. Pass on what the server said (an older one
+          // that still counts Community Drafts explains itself there too).
+          Alert.alert(
+            direction === "draft" ? "Couldn't draft" : "Couldn't pass",
+            apiErrorMessage(
+              err,
+              "That didn't go through. Try again in a moment.",
+            ),
+          );
+        } else if (status === 429) {
           // 429 is the only out-of-Drafts answer. Hide the card: they can't
           // act on it right now.
           dismissAll();
@@ -812,13 +845,7 @@ export default function GlobeTab() {
               ? // The server only maps athletes of your own sport and age
                 // group for you, so don't promise the whole world.
                 "Athletes in your sport and age group"
-              : `Other ${
-                  viewerRole === "coach"
-                    ? "coaches"
-                    : viewerRole === "recruiter"
-                      ? "agents"
-                      : "people"
-                } around the world`
+              : `Other ${rolePlural(viewerRole)} around the world`
             : "Talent distribution worldwide"}
         </Text>
         {/* Same switch as Discover, same slice, so the two never disagree. */}
@@ -1134,7 +1161,7 @@ export default function GlobeTab() {
           style={styles.miniCard}
           onPress={openBigCard}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${selected.name ?? "athlete"}`}
+          accessibilityLabel={`Open ${selected.name ?? "this profile"}`}
         >
           <View style={styles.miniAvatar}>
             {selected.avatar_url || selected.photo ? (
@@ -1153,7 +1180,7 @@ export default function GlobeTab() {
           <View style={styles.miniInfo}>
             <View style={styles.miniNameRow}>
               <Text style={styles.miniName} numberOfLines={1}>
-                {selected.name ?? "Athlete"}
+                {selected.name ?? pinLabel(selected)}
               </Text>
               {selected.verified && (
                 <Ionicons
@@ -1164,9 +1191,7 @@ export default function GlobeTab() {
               )}
             </View>
             <Text style={styles.miniMeta} numberOfLines={1}>
-              {[selected.sport, selected.position]
-                .filter(Boolean)
-                .join(" · ") || "Athlete"}
+              {pinSubtitle(selected) || pinLabel(selected)}
             </Text>
           </View>
           <Pressable
@@ -1214,7 +1239,7 @@ export default function GlobeTab() {
               <View style={styles.bigBody}>
                 <View style={styles.bigNameRow}>
                   <Text style={styles.bigName} numberOfLines={1}>
-                    {selected.name ?? "Athlete"}
+                    {selected.name ?? pinLabel(selected)}
                   </Text>
                   {selected.verified && (
                     <Ionicons
@@ -1226,6 +1251,17 @@ export default function GlobeTab() {
                 </View>
 
                 <View style={styles.bigDetails}>
+                  {/* Coach, Agent or Team, for the pins an athlete sees.
+                      Nothing on an athlete pin, or from a server that does
+                      not send the account type. */}
+                  <PlayerDetail
+                    label="Account"
+                    value={
+                      selected.role === "athlete"
+                        ? null
+                        : roleDisplayLabel(selected.accountType)
+                    }
+                  />
                   <PlayerDetail label="Sport" value={selected.sport} />
                   <PlayerDetail
                     label="Organization"
@@ -1257,7 +1293,7 @@ export default function GlobeTab() {
                     onPress={() => handleSwipe("pass")}
                     disabled={swiping}
                     accessibilityRole="button"
-                    accessibilityLabel={`Pass on ${selected.name ?? "athlete"}`}
+                    accessibilityLabel={`Pass on ${selected.name ?? "this profile"}`}
                   >
                     <Ionicons name="close" size={20} color="#FFFFFF" />
                     <Text style={styles.bigBtnText}>Pass</Text>
@@ -1272,7 +1308,7 @@ export default function GlobeTab() {
                     onPress={() => handleSwipe("draft")}
                     disabled={swiping}
                     accessibilityRole="button"
-                    accessibilityLabel={`Draft ${selected.name ?? "athlete"}`}
+                    accessibilityLabel={`Draft ${selected.name ?? "this profile"}`}
                   >
                     <Ionicons name="checkmark" size={20} color="#FFFFFF" />
                     <Text style={styles.bigBtnText}>Draft</Text>

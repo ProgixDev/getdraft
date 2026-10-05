@@ -2,18 +2,23 @@ import { useCallback } from "react";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSelector } from "react-redux";
 import { RootState } from "@/store";
+import {
+  initialTabForRole as registryInitialTab,
+  navRoleFor,
+  type UserRole,
+} from "@/lib/roles";
 
-export type Role = "athlete" | "coach" | "recruiter" | "parent" | "admin";
+/** users.role. The list itself lives in the role registry (@/lib/roles). */
+export type Role = UserRole;
 
 /**
  * Bare tab name (e.g. "dashboard"), used as Tabs.initialRouteName in
- * app/(tabs)/_layout.tsx. The single source of truth — both the layout
- * and the focus-redirect hook below read from here.
+ * app/(tabs)/_layout.tsx. The single source of truth is the role registry —
+ * both the layout and the focus-redirect hook below read from here. A role
+ * this build doesn't know lands on Discover with the recruiter tab set.
  */
 export function initialTabForRole(role: Role | undefined): string {
-  if (role === "admin") return "dashboard";
-  if (role === "parent") return "home";
-  return "index";
+  return registryInitialTab(role);
 }
 
 /**
@@ -35,18 +40,23 @@ export function homeRouteForRole(role: Role | undefined): string {
  *
  * Pass the list of roles ALLOWED on the calling screen. Examples:
  *   useRoleHomeRedirect(['athlete'])                 // post-create
- *   useRoleHomeRedirect(['athlete','coach','recruiter'])  // discover
+ *   useRoleHomeRedirect(['athlete','coach','recruiter','team'])  // globe
  *   useRoleHomeRedirect(['admin'])                   // dashboard
  *
  * Returns true while a redirect is being applied (or the role hasn't
  * loaded yet) so the screen can early-return null instead of flashing
  * its content for a frame.
+ *
+ * A role this build doesn't know is gated as a coach: it is given the
+ * recruiter tabs, and those screens must open for it. Without this its home
+ * (Discover) would refuse it and redirect to itself: a blank app.
  */
 export function useRoleHomeRedirect(allowed: Role[]): boolean {
   const router = useRouter();
-  const role = useSelector(
-    (s: RootState) => s.auth.user?.role as Role | undefined,
+  const rawRole = useSelector(
+    (s: RootState) => s.auth.user?.role as string | undefined,
   );
+  const role = rawRole ? navRoleFor(rawRole) : undefined;
 
   useFocusEffect(
     useCallback(() => {

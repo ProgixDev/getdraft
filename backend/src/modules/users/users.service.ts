@@ -11,9 +11,15 @@ import { SupabaseService } from '../../config/supabase.config';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { BlockUserDto } from './dto/block-user.dto';
-import { CurrentUserPayload, UserRole } from '../../common/types';
+import {
+  CurrentUserPayload,
+  UserRole,
+  isRecruiterRole,
+  recruiterRoleTypeFor,
+} from '../../common/types';
 import { isMinor } from '../../common/utils/age';
 import { writeAuthzClaims } from '../../common/utils/authz-claims';
+import { assertTeamRoleAvailable } from '../../common/utils/team-role';
 import {
   setActivationStatus,
   reevaluateMinorActivation,
@@ -53,10 +59,12 @@ export class UsersService {
     // profile is created at the profile step — so its existence is a reliable
     // signal. Replaces the old resume heuristic that checked a non-existent
     // users.bio column (which bounced avatar-less users back to the profile step).
+    // Coaches, agents and teams share recruiter_profiles. A team left out of
+    // this mapping would read as "profile done" and skip the profile step.
     const profileTable =
       data.role === 'athlete'
         ? 'athlete_profiles'
-        : data.role === 'coach' || data.role === 'recruiter'
+        : isRecruiterRole(data.role)
           ? 'recruiter_profiles'
           : data.role === 'parent'
             ? 'parent_profiles'
@@ -108,11 +116,12 @@ export class UsersService {
       };
     }
 
+    let roleChanged = false;
     if (dto.role) {
       // The admin role is provisioned out-of-band (DB only) and must never
       // be self-assignable through this self-service endpoint — otherwise any
       // authenticated user could promote themselves and reach the admin
-      // console. Onboarding only ever sets athlete/parent/coach/recruiter.
+      // console. Onboarding only ever sets athlete/parent/coach/recruiter/team.
       if (dto.role === UserRole.ADMIN) {
         throw new ForbiddenException('The admin role cannot be self-assigned.');
       }
@@ -131,11 +140,19 @@ export class UsersService {
       if (currentErr) {
         throw new BadRequestException(currentErr.message);
       }
+      // Nobody becomes a team while TEAM_ROLE_ENABLED is off (the same rule
+      // as signup and complete-signup; OAuth signups pick their role here).
+      // An account that already is a team may still resend its own role, so
+      // switching the flag off later does not break their profile saves.
+      if (current.role !== UserRole.TEAM) {
+        assertTeamRoleAvailable(dto.role);
+      }
       if (current.is_onboarded && current.role !== dto.role) {
         throw new ForbiddenException(
           "Your account type can't be changed. Contact support.",
         );
       }
+      roleChanged = current.role !== dto.role;
       // Mirror onto auth.users.app_metadata, NOT user_metadata. OAuth signup
       // hits this right after the provider returns, and onboarding hits it
       // when the user picks a role — JwtAuthGuard resolves `role` from
@@ -169,6 +186,25 @@ export class UsersService {
 
     if (error) {
       throw new BadRequestException(error.message);
+    }
+
+    // recruiter_profiles.role_type follows the account type: the server
+    // derives it on every profile save (profiles.service). Someone who goes
+    // back during signup and switches coach -> team after the profile step
+    // would otherwise keep a 'coach' row, and be listed and labelled as one.
+    // No row yet means nothing to update. Best-effort: the next profile save
+    // sets it again.
+    const roleType = roleChanged ? recruiterRoleTypeFor(dto.role) : null;
+    if (roleType) {
+      const { error: syncErr } = await supabase
+        .from('recruiter_profiles')
+        .update({ role_type: roleType })
+        .eq('user_id', user.id);
+      if (syncErr) {
+        this.logger.error(
+          `[role] recruiter profile role_type not updated for ${user.id}: ${syncErr.message}`,
+        );
+      }
     }
 
     return data;

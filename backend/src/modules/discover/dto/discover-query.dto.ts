@@ -25,7 +25,7 @@ const toBool = ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
 
 export class DiscoverQueryDto {
   /**
-   * recruit (default) = the original matrix, athletes ↔ coaches/agents.
+   * recruit (default) = the original matrix, athletes ↔ coaches/agents/teams.
    * peer = community: your own role. Optional so every client built before
    * this existed keeps getting exactly the feed it always got.
    */
@@ -72,7 +72,11 @@ export class DiscoverQueryDto {
   @IsString()
   sport?: string;
 
-  @ApiPropertyOptional({ enum: ['all', 'agent', 'coach'], example: 'all' })
+  /** Matched against recruiter_profiles.role_type; 'all' or absent = no filter. */
+  @ApiPropertyOptional({
+    enum: ['all', 'agent', 'coach', 'team'],
+    example: 'all',
+  })
   @IsOptional()
   @IsString()
   recruiterType?: string;

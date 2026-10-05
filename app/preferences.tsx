@@ -37,6 +37,7 @@ import {
 import { isFreePlan, usePlanId } from "@/hooks/use-plan";
 import { useCitySearch } from "@/hooks/use-region-search";
 import { profilesService } from "@/services/profiles";
+import { isRecruiterRole } from "@/lib/roles";
 
 // Cap the picker list so a long location list scrolls inside the sheet instead
 // of overflowing past the bottom edge (where it was previously cut off).
@@ -57,6 +58,7 @@ const RECRUITER_TYPE_OPTIONS = [
   { label: "All Recruiters", value: "all" as const },
   { label: "Agents", value: "agent" as const },
   { label: "Coaches", value: "coach" as const },
+  { label: "Teams", value: "team" as const },
 ];
 
 type SelectorKey =
@@ -286,11 +288,13 @@ export default function PreferencesScreen() {
     Poppins_700Bold,
   });
 
-  const isRecruiter = user?.role === "recruiter" || user?.role === "coach";
+  // Coaches, agents and teams: the scouting side of recruiting.
+  const isRecruiter = isRecruiterRole(user?.role);
   // Which role the deck is currently showing decides which filters make
   // sense. In recruit mode that is the opposite role; in Community (peer)
-  // mode it is the viewer's own role, so an athlete filters athletes and a
-  // coach filters coaches. Parents in Community have no role-specific filters.
+  // mode it is the viewer's own role, so an athlete filters athletes, a
+  // coach filters coaches and a team filters teams. Parents in Community
+  // have no role-specific filters.
   const peer = preferences.mode === "peer";
   const targetsAthletes = peer ? user?.role === "athlete" : isRecruiter;
   const targetsRecruiters = peer ? isRecruiter : !isRecruiter;
@@ -679,8 +683,9 @@ export default function PreferencesScreen() {
             </>
           ) : targetsRecruiters ? (
             <>
-              {/* In Community a coach only ever sees coaches (and an agent
-                  only agents), so the type picker has nothing to choose. */}
+              {/* In Community a coach only ever sees coaches (an agent only
+                  agents, a team only teams), so the type picker has nothing
+                  to choose. */}
               {!peer && (
                 <SelectorRow
                   icon="briefcase-outline"

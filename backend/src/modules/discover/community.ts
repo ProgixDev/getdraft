@@ -7,7 +7,7 @@ import {
 
 /**
  * Athlete Community rules (athlete <-> athlete peer mode only; recruiting and
- * the coach / agent / parent communities are not affected).
+ * the coach / agent / team / parent communities are not affected).
  *
  * Community lets athletes Draft each other, which means minors can reach
  * minors, and adults could reach minors. So an athlete only ever sees and
@@ -38,7 +38,7 @@ export interface CommunityStatus {
   ageGroup: AgeGroup | null;
 }
 
-/** What coaches, agents and parents get: their Community has no extra gate. */
+/** What coaches, agents, teams and parents get: their Community has no extra gate. */
 export function openCommunity(): CommunityStatus {
   return { eligible: true, reason: null, sport: null, ageGroup: null };
 }

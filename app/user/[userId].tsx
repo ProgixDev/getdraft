@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Linking,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -36,6 +37,18 @@ import {
 import { brand, semantic, theme } from '@/config/colors';
 import { PHONE_MAX_WIDTH } from '@/lib/responsive';
 import { ageFromDob } from '@/lib/age';
+import {
+  isRecruiterRole,
+  orgTypeLabel,
+  recruiterTypeForRole,
+  roleBadgeLabel,
+  roleDisplayLabel,
+  roleIcon,
+  websiteHref,
+  websiteLabel,
+  type RecruiterType,
+  type UserRole,
+} from '@/lib/roles';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
@@ -55,7 +68,7 @@ const PHOTO_SIZE = (SCREEN_WIDTH - 48) / 3 - 8;
 const VIDEO_HEIGHT = 180;
 const BANNER_HEIGHT = 140;
 
-type Role = 'athlete' | 'recruiter' | 'coach' | 'parent' | 'admin';
+type Role = UserRole;
 
 interface AthleteSubProfile {
   sport?: string;
@@ -78,7 +91,11 @@ interface RecruiterSubProfile {
   organization?: string;
   sport?: string;
   team?: string;
-  role_type?: 'agent' | 'coach';
+  role_type?: RecruiterType;
+  /** Team accounts: club, school, college, academy, pro or other. */
+  org_type?: string | null;
+  /** Team accounts. */
+  website?: string | null;
   verified?: boolean;
   tags?: string[];
   bio?: string;
@@ -101,7 +118,7 @@ interface PublicProfile {
   country?: string | null;
   profile?: AthleteSubProfile | RecruiterSubProfile | ParentSubProfile | null;
   // Server-resolved approved guardian of an athlete. Drives whether a
-  // recruiter/coach can see the "Send outreach" entry point on this screen
+  // coach, agent or team can see the "Send outreach" entry point on this screen
   // — the outreach DTO requires the parent's user id, not the athlete's.
   parent_user_id?: string | null;
   // True when the viewer and this user have a mutual match — powers the
@@ -140,11 +157,9 @@ function roleLabel(role: Role | undefined, sub: any): string {
   if (role === 'athlete' && sub?.position && sub?.level) {
     return `${sub.position} · ${sub.level}`;
   }
-  if (role === 'recruiter') return 'Agent / Recruiter';
-  if (role === 'coach') return 'Coach';
-  if (role === 'athlete') return 'Athlete';
-  if (role === 'parent') return 'Parent';
-  return 'User';
+  // "Team", "Coach", "Agent / Recruiter"... and "User" for a role this build
+  // doesn't know.
+  return roleBadgeLabel(role);
 }
 
 export default function PublicProfileScreen() {
@@ -290,9 +305,17 @@ export default function PublicProfileScreen() {
   const sub = (profile?.profile ?? {}) as any;
   const role = profile?.role;
   const isAthlete = role === 'athlete';
-  const isRecruiter = role === 'recruiter' || role === 'coach';
-  const viewerIsRecruiter = viewerRole === 'recruiter' || viewerRole === 'coach';
+  // Coaches, agents and teams share the recruiter profile, and all three may
+  // write to a minor's approved guardian (the server checks the link).
+  const isRecruiter = isRecruiterRole(role);
+  const viewerIsRecruiter = isRecruiterRole(viewerRole);
   const canSendOutreach = viewerIsRecruiter && isAthlete && !!profile?.parent_user_id;
+  // What kind of recruiter this is, from the profile row or else the account.
+  const recruiterType: RecruiterType | null = isRecruiter
+    ? (recruiterTypeForRole(sub.role_type) ?? recruiterTypeForRole(role))
+    : null;
+  const website: string = typeof sub.website === 'string' ? sub.website.trim() : '';
+  const websiteLink = websiteHref(website);
   const photos: string[] = Array.isArray(sub.photos) ? sub.photos : [];
   // What the avatar is actually showing, so tapping it opens that image.
   const heroPhoto: string | null =
@@ -381,7 +404,7 @@ export default function PublicProfileScreen() {
                   />
                 ) : (
                   <Ionicons
-                    name={isRecruiter ? 'briefcase' : role === 'parent' ? 'people' : 'person'}
+                    name={roleIcon(role)}
                     size={64}
                     color={theme.textMuted}
                   />
@@ -496,14 +519,44 @@ export default function PublicProfileScreen() {
               {isRecruiter && (
                 <>
                   {sub.organization && <InfoRow icon="briefcase" text={sub.organization} />}
-                  {sub.role_type === 'coach' && sub.team && (
+                  {recruiterType === 'coach' && sub.team && (
                     <InfoRow icon="shirt" text={sub.team} />
                   )}
                   {sub.sport && <InfoRow icon="football" text={sub.sport} />}
-                  {sub.role_type && (
+                  {/* "Coach", "Agent", or for a team its kind of
+                      organisation as well: "Team · Club". */}
+                  {recruiterType && (
                     <InfoRow
-                      icon={sub.role_type === 'agent' ? 'business' : 'clipboard'}
-                      text={sub.role_type === 'agent' ? 'Agent' : 'Coach'}
+                      icon={
+                        recruiterType === 'agent'
+                          ? 'business'
+                          : recruiterType === 'team'
+                            ? 'shield'
+                            : 'clipboard'
+                      }
+                      text={[
+                        roleDisplayLabel(recruiterType),
+                        recruiterType === 'team' ? orgTypeLabel(sub.org_type) : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    />
+                  )}
+                  {/* A team's website opens in the browser. Only a plain web
+                      address is a link (see websiteHref); anything else a
+                      team typed is shown as text and goes nowhere. */}
+                  {website.length > 0 && (
+                    <InfoRow
+                      icon="globe-outline"
+                      text={websiteLabel(website)}
+                      onPress={
+                        websiteLink
+                          ? () => {
+                              Linking.openURL(websiteLink).catch(() => {});
+                            }
+                          : undefined
+                      }
+                      accessibilityLabel={`Open website ${websiteLabel(website)}`}
                     />
                   )}
                   {Array.isArray(sub.tags) && sub.tags.length > 0 && (
@@ -677,7 +730,33 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function InfoRow({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+function InfoRow({
+  icon,
+  text,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+  /** Makes the row a link (a team's website). */
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
+  if (onPress) {
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.infoRow, pressed && styles.infoRowPressed]}
+        onPress={onPress}
+        accessibilityRole="link"
+        accessibilityLabel={accessibilityLabel}
+      >
+        <Ionicons name={icon} size={18} color={theme.textMuted} />
+        <Text style={[styles.infoText, styles.infoLink]} numberOfLines={1}>
+          {text}
+        </Text>
+      </Pressable>
+    );
+  }
   return (
     <View style={styles.infoRow}>
       <Ionicons name={icon} size={18} color={theme.textMuted} />
@@ -910,6 +989,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Poppins_400Regular',
     color: theme.text,
+  },
+  infoRowPressed: { opacity: 0.7 },
+  infoLink: {
+    flexShrink: 1,
+    color: semantic.info,
+    textDecorationLine: 'underline',
   },
   bio: {
     fontSize: 14,

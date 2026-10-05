@@ -30,9 +30,18 @@ export class SignupDto {
   // ADMIN is provisioned out-of-band (DB-only) and must never be assignable
   // through self-service signup. Mirrors the guard in users.service.ts
   // updateMe and the defensive throw in AuthService.
-  @ApiProperty({ enum: ['athlete', 'parent', 'coach', 'recruiter'] })
-  @IsIn([UserRole.ATHLETE, UserRole.PARENT, UserRole.COACH, UserRole.RECRUITER], {
-    message: 'role must be one of: athlete, parent, coach, recruiter',
-  })
+  // 'team' passes validation here; AuthService refuses it with a 400 while
+  // TEAM_ROLE_ENABLED is off (common/utils/team-role.ts).
+  @ApiProperty({ enum: ['athlete', 'parent', 'coach', 'recruiter', 'team'] })
+  @IsIn(
+    [
+      UserRole.ATHLETE,
+      UserRole.PARENT,
+      UserRole.COACH,
+      UserRole.RECRUITER,
+      UserRole.TEAM,
+    ],
+    { message: 'role must be one of: athlete, parent, coach, recruiter, team' },
+  )
   role: UserRole;
 }

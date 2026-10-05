@@ -30,7 +30,7 @@ export class AdminController {
   }
 
   @Put('users/:id/verify')
-  @ApiOperation({ summary: 'Verify a recruiter/coach' })
+  @ApiOperation({ summary: 'Verify a coach, agent or team' })
   verifyRecruiter(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.verifyRecruiter(id);
   }

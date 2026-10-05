@@ -32,7 +32,7 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { semantic } from "@/config/colors";
-import type { UserRole } from "@/store/slices/authSlice";
+import { isRecruiterRole, type UserRole } from "@/lib/roles";
 
 const ACCENT = semantic.infoDark; // #0984E3 brand blue
 const CONFETTI_COLORS = [
@@ -43,6 +43,12 @@ const CONFETTI_COLORS = [
   semantic.successLight,
 ];
 
+/**
+ * The shape of the card that was matched: an athlete, a recruiter-side card
+ * (coach, agent or team -- they share one card) or, in Community, a parent.
+ */
+export type MatchCardType = "athlete" | "recruiter" | "parent";
+
 export interface MatchCelebrationProps {
   visible: boolean;
   /** The match thread id — routes "Send a Message" to /chat/[threadId]. */
@@ -50,9 +56,9 @@ export interface MatchCelebrationProps {
   /** The user we matched with. */
   otherName: string;
   otherAvatar?: string | null;
-  /** Whether the matched profile is an athlete, a recruiter (coach/agent)
-   *  or -- in Community -- a parent. */
-  otherCardType?: "athlete" | "recruiter" | "parent";
+  /** Whether the matched profile is an athlete, a recruiter (coach, agent
+   *  or team) or -- in Community -- a parent. */
+  otherCardType?: MatchCardType;
   /** recruit = athlete ↔ coach/agent; peer = a Community connection between
    *  two people of the same role. Changes the copy: a peer match is two
    *  equals who can now talk, not a scout and a prospect. */
@@ -85,7 +91,7 @@ type UnlockRow = { icon: keyof typeof Ionicons.glyphMap; title: string; sub: str
 // Role-aware "what this match unlocks". Chat + full-profile are universal; the
 // third line reflects who the two parties are.
 function unlockRows(
-  otherCardType: "athlete" | "recruiter" | "parent" | undefined,
+  otherCardType: MatchCardType | undefined,
   myRole: UserRole | undefined,
   other: string,
   kind: "recruit" | "peer" = "recruit",
@@ -150,7 +156,8 @@ function unlockRows(
     },
   ];
 
-  const iAmRecruiter = myRole === "recruiter" || myRole === "coach";
+  // Coaches, agents and teams all scout: same copy for the three.
+  const iAmRecruiter = isRecruiterRole(myRole);
   if (otherCardType === "recruiter" && !iAmRecruiter) {
     rows.push({
       icon: "trophy",

@@ -26,28 +26,33 @@ export class ProfilesController {
     return this.profilesService.getAthleteProfile(userId);
   }
 
+  // The three PUTs pass the caller's role: each profile type can only be
+  // written by the account type it belongs to (403 otherwise), and the
+  // recruiter profile's role_type is derived from it. See the service.
   @Put('athlete')
-  @ApiOperation({ summary: 'Create/update my athlete profile' })
+  @ApiOperation({ summary: 'Create/update my athlete profile (athletes only)' })
   upsertAthleteProfile(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: UpsertAthleteProfileDto,
   ) {
-    return this.profilesService.upsertAthleteProfile(userId, dto);
+    return this.profilesService.upsertAthleteProfile(user.id, user.role, dto);
   }
 
   @Get('recruiter')
-  @ApiOperation({ summary: 'Get my recruiter/coach profile' })
+  @ApiOperation({ summary: 'Get my coach / agent / team profile' })
   getRecruiterProfile(@CurrentUser('id') userId: string) {
     return this.profilesService.getRecruiterProfile(userId);
   }
 
   @Put('recruiter')
-  @ApiOperation({ summary: 'Create/update my recruiter/coach profile' })
+  @ApiOperation({
+    summary: 'Create/update my coach / agent / team profile (those roles only)',
+  })
   upsertRecruiterProfile(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: UpsertRecruiterProfileDto,
   ) {
-    return this.profilesService.upsertRecruiterProfile(userId, dto);
+    return this.profilesService.upsertRecruiterProfile(user.id, user.role, dto);
   }
 
   @Get('parent')
@@ -57,12 +62,12 @@ export class ProfilesController {
   }
 
   @Put('parent')
-  @ApiOperation({ summary: 'Create/update my parent profile' })
+  @ApiOperation({ summary: 'Create/update my parent profile (parents only)' })
   upsertParentProfile(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: UpsertParentProfileDto,
   ) {
-    return this.profilesService.upsertParentProfile(userId, dto);
+    return this.profilesService.upsertParentProfile(user.id, user.role, dto);
   }
 
   @Get(':userId')
@@ -71,8 +76,8 @@ export class ProfilesController {
     @CurrentUser() viewer: CurrentUserPayload,
     @Param('userId', ParseUUIDPipe) userId: string,
   ) {
-    // The viewer's role decides what is shared (see the service): coaches
-    // and agents get the guardian id outreach needs, nobody else does.
+    // The viewer's role decides what is shared (see the service): coaches,
+    // agents and teams get the guardian id outreach needs, nobody else does.
     return this.profilesService.getPublicProfile(
       userId,
       viewer?.id,

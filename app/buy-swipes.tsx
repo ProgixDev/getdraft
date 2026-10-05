@@ -23,6 +23,7 @@ import {
 import { brand, semantic, theme } from '@/config/colors';
 import { subscriptionsService } from '@/services/subscriptions';
 import { useRoleHomeRedirect } from '@/lib/roleRoutes';
+import { DRAFTING_ROLES } from '@/lib/roles';
 import { PURCHASES_ENABLED, USES_STORE_BILLING } from '@/constants/purchases';
 import { purchaseProduct } from '@/services/billing';
 import { useStorePrices } from '@/hooks/use-store-prices';
@@ -49,10 +50,10 @@ export default function BuySwipesScreen() {
   const router = useRouter();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
-  // Billing is athlete/recruiter-side only. Parents and admins never buy
-  // Draft packs — deep links bounce them home (focus-based, same pattern
-  // as the role-gated tabs).
-  const redirecting = useRoleHomeRedirect(['athlete', 'coach', 'recruiter']);
+  // Billing is athlete/recruiter-side only (recruiter side = coaches, agents
+  // and teams). Parents and admins never buy Draft packs — deep links bounce
+  // them home (focus-based, same pattern as the role-gated tabs).
+  const redirecting = useRoleHomeRedirect(DRAFTING_ROLES);
 
   // Draft packs are digital goods, so on Android this screen must be
   // UNREACHABLE, not merely unlinked — a deep link or a stale back-stack

@@ -29,6 +29,7 @@ import { useAppDispatch } from "@/store/hooks";
 import { RootState } from "@/store";
 import { usersService } from "@/services/users";
 import { profilesService } from "@/services/profiles";
+import { roleBadgeLabel } from "@/lib/roles";
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
@@ -88,18 +89,12 @@ export default function MoreScreen() {
 
   if (!fontsLoaded) return null;
 
+  // Athletes read "Position · Level" once their profile has loaded; every
+  // other role (and a role this build doesn't know: "User") comes from the
+  // role registry.
   const roleLabel =
-    user?.role === "recruiter"
-      ? "Agent / Recruiter"
-      : user?.role === "coach"
-        ? "Coach"
-        : user?.role === "athlete"
-          ? (athleteRoleLine ?? "Athlete")
-          : user?.role === "parent"
-            ? "Parent"
-            : user?.role === "admin"
-              ? "Admin"
-              : "User";
+    (user?.role === "athlete" ? athleteRoleLine : null) ??
+    roleBadgeLabel(user?.role);
 
   const isAdmin = user?.role === "admin";
   const isParent = user?.role === "parent";
