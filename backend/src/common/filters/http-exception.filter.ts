@@ -4,13 +4,31 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
+
+    // Anything that is not an HttpException is a bug or a dependency failing.
+    // The client gets a bare 500, so the cause has to reach the logs: this
+    // filter replaces Nest's default one, and without this line such errors
+    // were returned to the app and recorded nowhere.
+    if (!(exception instanceof HttpException)) {
+      const request = ctx.getRequest();
+      this.logger.error(
+        `${request?.method ?? ''} ${request?.url ?? ''} failed: ${
+          exception instanceof Error
+            ? (exception.stack ?? exception.message)
+            : String(exception)
+        }`,
+      );
+    }
 
     const status =
       exception instanceof HttpException

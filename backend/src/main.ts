@@ -53,20 +53,25 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // Swagger
-  const config = new DocumentBuilder()
-    .setTitle('GetDraft API')
-    .setDescription('Sports recruitment platform API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  // Swagger, outside production only. On the live API /docs and /docs-json
+  // handed anyone the full route map and every request shape, the admin,
+  // guardian-approval and webhook routes included.
+  const serveDocs = process.env.NODE_ENV !== 'production';
+  if (serveDocs) {
+    const config = new DocumentBuilder()
+      .setTitle('GetDraft API')
+      .setDescription('Sports recruitment platform API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
   const logger = new Logger('Bootstrap');
   logger.log(`GetDraft API running on port ${port}`);
-  logger.log(`Swagger docs at http://localhost:${port}/docs`);
+  if (serveDocs) logger.log(`Swagger docs at http://localhost:${port}/docs`);
 }
 bootstrap();

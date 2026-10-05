@@ -122,6 +122,41 @@ export class MailService implements OnModuleInit {
     await this.deliver(to, subject, noticeEmailHtml(heading, sub), text);
   }
 
+  /**
+   * A user filed a report. Reports only land in a table that no screen reads
+   * yet, so this email is what puts one in front of a person. Everything the
+   * reporter typed is escaped, because it goes into HTML.
+   */
+  async sendReportAlert(
+    to: string,
+    report: {
+      id: string;
+      reason: string;
+      targetType: string;
+      targetId: string | null;
+      reportedUserId: string;
+      reporterId: string;
+      details: string | null;
+    },
+  ): Promise<void> {
+    const escape = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const lines = [
+      `Reason: ${report.reason}`,
+      `Reported: ${report.targetType}${report.targetId ? ` ${report.targetId}` : ''}`,
+      `Reported user: ${report.reportedUserId}`,
+      `Reported by: ${report.reporterId}`,
+      report.details ? `Details: ${report.details}` : null,
+      `Report id: ${report.id}`,
+    ].filter((line): line is string => line !== null);
+    await this.deliver(
+      to,
+      `GetDraft report: ${report.reason}`,
+      noticeEmailHtml('New report to review', lines.map(escape).join('<br>')),
+      lines.join('\n'),
+    );
+  }
+
   private async deliver(to: string, subject: string, html: string, text: string): Promise<void> {
     if (this.resendApiKey) {
       await this.sendViaResend(to, subject, html, text);

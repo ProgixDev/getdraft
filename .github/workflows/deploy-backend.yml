@@ -46,10 +46,35 @@ concurrency:
 
 jobs:
   deploy:
+    # Production only ever runs master. "Run workflow" offers a branch
+    # picker, and without this any branch could be shipped to the live API.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
+      # Node 20, the version the production image runs (backend/Dockerfile).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Typecheck and test the backend
+        # A push used to go straight to `railway up`. The suite takes about a
+        # minute and is what stands between a broken commit and the live API.
+        working-directory: backend
+        env:
+          # Prisma only needs these to exist to generate its client; nothing
+          # here connects to a database.
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+        run: |
+          npm ci
+          npx prisma generate
+          npx tsc --noEmit -p tsconfig.json
+          npm test -- --silent
 
       - name: Install the Railway CLI
         run: npm i -g @railway/cli

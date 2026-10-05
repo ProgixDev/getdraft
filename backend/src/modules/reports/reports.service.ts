@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { MailService } from '../mail/mail.service';
 import { CreateReportDto, ReportTargetType } from './dto/create-report.dto';
 
 /**
@@ -19,7 +20,10 @@ import { CreateReportDto, ReportTargetType } from './dto/create-report.dto';
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private mailService: MailService,
+  ) {}
 
   async create(reporterId: string, dto: CreateReportDto) {
     if (dto.reportedUserId === reporterId) {
@@ -76,6 +80,27 @@ export class ReportsService {
       `report filed: ${dto.targetType} ${dto.targetId ?? dto.reportedUserId} ` +
         `reason=${dto.reason} by=${reporterId}`,
     );
+
+    // Until now this log line was the end of the road: no screen reads the
+    // reports table, so a report reached nobody. Email it to the moderation
+    // address (REPORTS_ALERT_EMAIL, the support mailbox by default). Not
+    // awaited and never fatal: the report is filed whether or not mail works.
+    const alertTo = process.env.REPORTS_ALERT_EMAIL || 'support@getdraft.net';
+    void this.mailService
+      .sendReportAlert(alertTo, {
+        id: data.id,
+        reason: dto.reason,
+        targetType: dto.targetType,
+        targetId: dto.targetId ?? null,
+        reportedUserId: dto.reportedUserId,
+        reporterId,
+        details: dto.details ?? null,
+      })
+      .catch((err: any) =>
+        this.logger.error(
+          `report ${data.id}: alert email failed: ${err?.message ?? err}`,
+        ),
+      );
 
     return { reported: true, duplicate: false, id: data.id };
   }

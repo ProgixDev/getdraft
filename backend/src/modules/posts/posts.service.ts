@@ -14,13 +14,88 @@ interface AuthorRow {
   avatar_url: string | null;
 }
 
+/**
+ * True when `url` is a file `userId` uploaded to the posts bucket.
+ *
+ * /uploads/signed-url forces every upload under `<bucket>/<userId>/`, and the
+ * app posts the public URL it gets back, so anything else is not an upload.
+ * An outside host would be fetched by every viewer of the feed (handing that
+ * host their IP and the moment they looked) and would dodge the bucket's
+ * type and size limits; another user's folder would repost their media.
+ */
+function isOwnPostsUpload(url: string, userId: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const base = process.env.SUPABASE_URL;
+  if (base) {
+    try {
+      if (parsed.host !== new URL(base).host) return false;
+    } catch {
+      return false;
+    }
+  }
+  const match =
+    /^\/storage\/v1\/object\/(?:public|sign|authenticated)\/posts\/([^/]+)\/.+/.exec(
+      parsed.pathname,
+    );
+  return match !== null && decodeURIComponent(match[1]) === userId;
+}
+
 @Injectable()
 export class PostsService {
   constructor(private supabaseService: SupabaseService) {}
 
+  /**
+   * Everyone the viewer has blocked, or who has blocked the viewer. A block
+   * already hides the two from each other in Discover, matches and DMs; the
+   * feed is the one surface every role shares, so it has to honour it too.
+   */
+  private async blockedUserIds(userId: string): Promise<string[]> {
+    const { data } = await this.supabaseService
+      .getAdminClient()
+      .from('blocks')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+    return (data ?? []).map((b: any) =>
+      b.blocker_id === userId
+        ? (b.blocked_id as string)
+        : (b.blocker_id as string),
+    );
+  }
+
+  /** The post, or 404; 403 when its author and the caller are a blocked pair. */
+  private async assertCanInteract(userId: string, postId: string) {
+    const { data: post, error } = await this.supabaseService
+      .getAdminClient()
+      .from('posts')
+      .select('id, user_id')
+      .eq('id', postId)
+      .maybeSingle();
+    if (error) throw new BadRequestException(error.message);
+    if (!post) throw new NotFoundException('Post not found');
+    if (post.user_id !== userId) {
+      const blocked = await this.blockedUserIds(userId);
+      if (blocked.includes(post.user_id as string)) {
+        throw new ForbiddenException('You cannot interact with this post');
+      }
+    }
+    return post;
+  }
+
   // ---- Posts ----
 
   async create(userId: string, dto: CreatePostDto) {
+    if (
+      !isOwnPostsUpload(dto.mediaUrl, userId) ||
+      (dto.thumbnailUrl && !isOwnPostsUpload(dto.thumbnailUrl, userId))
+    ) {
+      throw new BadRequestException('Media must be a file you uploaded.');
+    }
+
     const supabase = this.supabaseService.getAdminClient();
     const { data, error } = await supabase
       .from('posts')
@@ -65,6 +140,11 @@ export class PostsService {
 
     if (kind) q = q.eq('kind', kind);
 
+    const blocked = await this.blockedUserIds(viewerId);
+    if (blocked.length > 0) {
+      q = q.not('user_id', 'in', `(${blocked.join(',')})`);
+    }
+
     const { data, error } = await q;
     if (error) throw new BadRequestException(error.message);
 
@@ -95,6 +175,13 @@ export class PostsService {
     targetUserId: string,
     kind?: 'post' | 'reel',
   ) {
+    if (
+      viewerId !== targetUserId &&
+      (await this.blockedUserIds(viewerId)).includes(targetUserId)
+    ) {
+      return { posts: [] };
+    }
+
     const supabase = this.supabaseService.getAdminClient();
     let q = supabase
       .from('posts')
@@ -145,6 +232,7 @@ export class PostsService {
   // ---- Likes ----
 
   async like(userId: string, postId: string) {
+    await this.assertCanInteract(userId, postId);
     const supabase = this.supabaseService.getAdminClient();
     const { error } = await supabase
       .from('post_likes')
@@ -181,7 +269,10 @@ export class PostsService {
       .order('created_at', { ascending: true });
     if (error) throw new BadRequestException(error.message);
 
-    const rows = data ?? [];
+    const blocked = new Set(await this.blockedUserIds(viewerId));
+    const rows = (data ?? []).filter(
+      (r: any) => !blocked.has((r.author as any)?.id),
+    );
     const likedSet = await this.fetchLikedCommentsByMe(
       viewerId,
       rows.map((r: any) => r.id as string),
@@ -203,6 +294,7 @@ export class PostsService {
   }
 
   async addComment(userId: string, postId: string, dto: CreateCommentDto) {
+    await this.assertCanInteract(userId, postId);
     const supabase = this.supabaseService.getAdminClient();
 
     if (dto.parentId) {
@@ -262,13 +354,24 @@ export class PostsService {
     const supabase = this.supabaseService.getAdminClient();
     const { data: row, error: fetchErr } = await supabase
       .from('post_comments')
-      .select('id, user_id')
+      .select('id, user_id, post_id')
       .eq('id', commentId)
       .maybeSingle();
     if (fetchErr) throw new BadRequestException(fetchErr.message);
     if (!row) throw new NotFoundException('Comment not found');
-    if (row.user_id !== userId)
-      throw new ForbiddenException('Not your comment');
+    if (row.user_id !== userId) {
+      // The author of the post may remove any comment under it. Without
+      // this, an abusive comment on someone's reel stayed until the person
+      // who wrote it chose to delete it.
+      const { data: post } = await supabase
+        .from('posts')
+        .select('user_id')
+        .eq('id', row.post_id)
+        .maybeSingle();
+      if (post?.user_id !== userId) {
+        throw new ForbiddenException('Not your comment');
+      }
+    }
 
     const { error } = await supabase
       .from('post_comments')

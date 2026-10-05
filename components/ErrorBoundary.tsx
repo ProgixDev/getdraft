@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -7,17 +8,18 @@ import {
   StatusBar,
   SafeAreaView,
 } from "react-native";
+import * as Updates from "expo-updates";
 
 // ---------------------------------------------------------------------------
 // Global JS-error handler (module scope, installed once at import time).
 // React Error Boundaries only catch errors thrown during render / lifecycle /
 // hook calls — async or event-handler errors slip past. This handler captures
-// those, stashes them on globalThis, and notifies any mounted ErrorBoundary
-// so a release APK still shows the message on screen with no debugger needed.
+// those, stashes them on globalThis, and notifies any mounted ErrorBoundary.
 // ---------------------------------------------------------------------------
-type GlobalErrorListener = (msg: string) => void;
+type GlobalErrorListener = (msg: string, isFatal: boolean) => void;
 const listeners = new Set<GlobalErrorListener>();
 let lastGlobalErrorMsg: string | null = null;
+let lastGlobalErrorFatal = false;
 
 const _eu: any = (globalThis as any).ErrorUtils;
 if (_eu?.getGlobalHandler && _eu?.setGlobalHandler) {
@@ -25,10 +27,11 @@ if (_eu?.getGlobalHandler && _eu?.setGlobalHandler) {
   _eu.setGlobalHandler((e: any, isFatal: boolean) => {
     const msg = `${e?.message || String(e)}\n${e?.stack || ""}`.trim();
     lastGlobalErrorMsg = msg;
+    lastGlobalErrorFatal = !!isFatal;
     (globalThis as any).__LAST_ERROR__ = msg;
     for (const l of listeners) {
       try {
-        l(msg);
+        l(msg, !!isFatal);
       } catch {
         /* never let a listener mask the original error */
       }
@@ -41,6 +44,7 @@ interface State {
   error: Error | null;
   info: { componentStack?: string } | null;
   globalError: string | null;
+  globalFatal: boolean;
 }
 
 export class ErrorBoundary extends React.Component<
@@ -51,6 +55,7 @@ export class ErrorBoundary extends React.Component<
     error: null,
     info: null,
     globalError: lastGlobalErrorMsg,
+    globalFatal: lastGlobalErrorFatal,
   };
   private unsubscribe?: () => void;
 
@@ -63,13 +68,16 @@ export class ErrorBoundary extends React.Component<
   }
 
   componentDidMount() {
-    const listener: GlobalErrorListener = (msg) =>
-      this.setState({ globalError: msg });
+    const listener: GlobalErrorListener = (msg, isFatal) =>
+      this.setState({ globalError: msg, globalFatal: isFatal });
     listeners.add(listener);
     this.unsubscribe = () => listeners.delete(listener);
     // Pick up anything that landed before this boundary mounted.
     if (lastGlobalErrorMsg && lastGlobalErrorMsg !== this.state.globalError) {
-      this.setState({ globalError: lastGlobalErrorMsg });
+      this.setState({
+        globalError: lastGlobalErrorMsg,
+        globalFatal: lastGlobalErrorFatal,
+      });
     }
   }
 
@@ -77,13 +85,79 @@ export class ErrorBoundary extends React.Component<
     this.unsubscribe?.();
   }
 
+  /** Clear the error and render the app again from the top. */
+  private retry = () => {
+    lastGlobalErrorMsg = null;
+    lastGlobalErrorFatal = false;
+    this.setState({
+      error: null,
+      info: null,
+      globalError: null,
+      globalFatal: false,
+    });
+  };
+
+  /** Reload the JS bundle; falls back to a plain retry where that is not possible. */
+  private restart = async () => {
+    try {
+      await Updates.reloadAsync();
+    } catch {
+      this.retry();
+    }
+  };
+
   render() {
-    const { error, info, globalError } = this.state;
+    const { error, info, globalError, globalFatal } = this.state;
     const hasRenderError = !!error;
     const hasGlobalError = !!globalError;
 
     if (!hasRenderError && !hasGlobalError) {
       return this.props.children as React.ReactElement;
+    }
+
+    // Release builds: people get a way back into the app, never a stack
+    // trace. A non-fatal error from a callback or a promise does not take the
+    // screen over at all -- the app is still usable, and replacing it with an
+    // error page for a failed background request was the worse outcome.
+    if (!__DEV__) {
+      if (!hasRenderError && !globalFatal) {
+        return this.props.children as React.ReactElement;
+      }
+      return (
+        <SafeAreaView style={styles.root}>
+          <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+          <View style={styles.fallback}>
+            <Text style={styles.fallbackTitle}>Something went wrong</Text>
+            <Text style={styles.fallbackText}>
+              GetDraft hit an unexpected problem. Try again, and if it keeps
+              happening, restart the app.
+            </Text>
+            <Pressable
+              onPress={this.retry}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+            >
+              <Text style={styles.primaryButtonText}>Try again</Text>
+            </Pressable>
+            <Pressable
+              onPress={this.restart}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Restart the app"
+            >
+              <Text style={styles.secondaryButtonText}>Restart the app</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      );
     }
 
     const title = hasRenderError ? "App error (debug)" : "Global error (debug)";
@@ -129,6 +203,13 @@ export class ErrorBoundary extends React.Component<
               </Text>
             </>
           ) : null}
+          <Pressable
+            onPress={this.retry}
+            style={styles.debugRetry}
+            accessibilityRole="button"
+          >
+            <Text style={styles.debugRetryText}>Dismiss and retry</Text>
+          </Pressable>
         </ScrollView>
       </SafeAreaView>
     );
@@ -164,6 +245,66 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontFamily: "monospace",
     lineHeight: 18,
+  },
+  debugRetry: {
+    marginTop: 28,
+    alignSelf: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  debugRetryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  fallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  fallbackTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  fallbackText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "rgba(255,255,255,0.72)",
+    textAlign: "center",
+    marginBottom: 28,
+  },
+  primaryButton: {
+    alignSelf: "stretch",
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0A0A0A",
+  },
+  secondaryButton: {
+    marginTop: 18,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.72)",
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
 
