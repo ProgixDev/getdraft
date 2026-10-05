@@ -28,6 +28,7 @@ import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
 import { matchesService } from "@/services/matches";
+import { roleDisplayLabel } from "@/lib/roles";
 import type { Socket } from "socket.io-client";
 
 type ChatMessage = {
@@ -75,6 +76,9 @@ export default function ChatScreen() {
   const [loadError, setLoadError] = useState(false);
   const [otherIsTyping, setOtherIsTyping] = useState(false);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  // recruit | peer, from the match row. A peer (Community) match is always
+  // between two people of the same role.
+  const [matchKind, setMatchKind] = useState<string | null>(null);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
 
   // Local typing-emit debouncer: emit(true) when user types,
@@ -146,6 +150,7 @@ export default function ChatScreen() {
         const other =
           match?.user_1_id === user.id ? match?.user_2_id : match?.user_1_id;
         if (other) setOtherUserId(String(other));
+        if (typeof match?.kind === "string") setMatchKind(match.kind);
       })
       .catch(() => {});
 
@@ -323,10 +328,17 @@ export default function ChatScreen() {
   }
 
   const headerTitle = header?.recruiterName || "Conversation";
-  const headerSubtitle =
-    header && (header.recruiterRole || header.organization)
-      ? [header.recruiterRole, header.organization].filter(Boolean).join(" • ")
-      : "";
+  // The other person's role, as a label. A Community match is always between
+  // two people of the same role, so it is the viewer's own role -- which also
+  // covers a server that still labels every non-recruiter "agent" (a peer
+  // athlete used to show as an Agent here). Otherwise the server's value.
+  const otherRoleLabel =
+    matchKind === "peer" && user?.role
+      ? roleDisplayLabel(user.role)
+      : roleDisplayLabel(header?.recruiterRole);
+  const headerSubtitle = header
+    ? [otherRoleLabel, header.organization].filter(Boolean).join(" • ")
+    : "";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

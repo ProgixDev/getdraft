@@ -28,6 +28,7 @@ import { brand, neutral, semantic, theme } from "@/config/colors";
 import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
 import { conversationsService } from "@/services/conversations";
+import { roleDisplayLabel } from "@/lib/roles";
 
 type DmMessage = {
   id: string;
@@ -249,7 +250,8 @@ export default function DmScreen() {
   }
 
   const headerTitle = otherName || "Conversation";
-  const headerSubtitle = otherRole || "";
+  // The raw role ("athlete", "recruiter") read as a label: Athlete, Agent...
+  const headerSubtitle = roleDisplayLabel(otherRole) ?? "";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

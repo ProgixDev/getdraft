@@ -24,6 +24,45 @@ export interface DiscoverQuery {
   cursor?: string;
 }
 
+/**
+ * Why an athlete can't use the Community right now. Athlete ↔ athlete
+ * Community is limited to the same sport and the same age group (13-17 or
+ * 18+), so an athlete with no date of birth or no sport cannot be placed,
+ * under-13s are never placed, and a minor still waiting on their guardian
+ * stays out. `disabled` means the server has athlete Community switched off.
+ */
+export type CommunityIneligibleReason =
+  | "under_13"
+  | "missing_dob"
+  | "missing_sport"
+  | "pending_guardian"
+  | "disabled";
+
+/** youth = 13-17, adult = 18+. Athletes only meet their own group. */
+export type CommunityAgeGroup = "youth" | "adult";
+
+/**
+ * The viewer's Community status, sent with a peer-mode feed. Coaches, agents
+ * and parents always get `{ eligible: true, reason: null, sport: null,
+ * ageGroup: null }`; for athletes `sport` is their own profile sport (the
+ * server ignores the `sport` filter for them) and `ageGroup` their group.
+ */
+export interface CommunityStatus {
+  eligible: boolean;
+  reason: CommunityIneligibleReason | null;
+  sport: string | null;
+  ageGroup: CommunityAgeGroup | null;
+}
+
+/** "Ages 13-17" / "Ages 18+", or null when the group is unknown. */
+export function ageGroupLabel(
+  group: CommunityAgeGroup | null | undefined,
+): string | null {
+  if (group === "youth") return "Ages 13-17";
+  if (group === "adult") return "Ages 18+";
+  return null;
+}
+
 export interface FeedResponse {
   cards: any[];
   hasMore: boolean;
@@ -34,6 +73,13 @@ export interface FeedResponse {
   // ISO created_at of the last card on this page, or null when there
   // are no more pages. Send back on the next call as `cursor`.
   nextCursor?: string | null;
+  /**
+   * Peer (Community) mode only; may be absent in recruit mode. Optional so
+   * an older backend that doesn't send it keeps working: absent means
+   * eligible, with no sport / age-group rule to describe. When `eligible` is
+   * false the page is empty and `reason` says why.
+   */
+  community?: CommunityStatus | null;
 }
 
 export interface SwipeResponse {
@@ -43,12 +89,38 @@ export interface SwipeResponse {
   superDraftsRemaining?: number;
 }
 
+/**
+ * The pool a Draft or Pass on someone you did NOT find in the Discover deck
+ * belongs to (Draft Board Accept/Refuse, Who Drafted You "Draft back"): the
+ * same role as yours is a Community connection, anything else is recruiting.
+ * Returns undefined when either role is unknown, so the request carries no
+ * mode and the server works it out from the two accounts.
+ *
+ * `agent` is how a recruiter profile names the `recruiter` role, so the two
+ * are the same role here.
+ */
+export function swipeModeFor(
+  myRole: string | null | undefined,
+  otherRole: string | null | undefined,
+): DiscoverMode | undefined {
+  const norm = (r: string | null | undefined) => {
+    const v = (r ?? "").trim().toLowerCase();
+    return v === "agent" ? "recruiter" : v;
+  };
+  const mine = norm(myRole);
+  const theirs = norm(otherRole);
+  if (!mine || !theirs) return undefined;
+  return mine === theirs ? "peer" : "recruit";
+}
+
 // Globe is a TALENT MAP of athletes — everyone sees athletes,
 // recruiters/coaches draft them. So role is narrowed and the per-card
 // athlete fields the new player card needs sit on the same object.
 export interface MapPoint {
   id: string;
   name: string | null;
+  // Rounded by the server to 2 decimals (about 1 km), so no pin gives away
+  // where someone lives. Treat as an area, never an address.
   lat: number;
   lng: number;
   avatar_url: string | null;
@@ -86,7 +158,7 @@ export const discoverService = {
     targetUserId: string,
     direction: "draft" | "pass",
     isSuper = false,
-    mode: DiscoverMode = "recruit",
+    mode?: DiscoverMode,
   ): Promise<SwipeResponse> {
     const { data } = await api.post("/discover/swipe", {
       targetUserId,
@@ -94,10 +166,13 @@ export const discoverService = {
       // Only send the flag for a Super Draft so a normal swipe payload is
       // unchanged. A Super Draft is always a draft under the hood.
       ...(isSuper ? { isSuper: true } : {}),
-      // Same idea for mode: only a Community swipe says so. The server
-      // treats an absent mode as recruit and re-checks the role pair per
-      // mode, so a card can never be drafted into the wrong kind of match.
-      ...(mode === "peer" ? { mode } : {}),
+      // Every caller that knows the pool says which one it is. The server
+      // re-checks the role pair (and, for athlete Community, the sport and
+      // age group) per mode, so a card can never be drafted into the wrong
+      // kind of match. Left out only when the caller can't tell; the server
+      // then treats a same-role pair as Community and anything else as
+      // recruiting.
+      ...(mode ? { mode } : {}),
     });
     return data.data;
   },

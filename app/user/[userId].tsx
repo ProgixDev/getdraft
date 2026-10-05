@@ -35,6 +35,7 @@ import {
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
 import { PHONE_MAX_WIDTH } from '@/lib/responsive';
+import { ageFromDob } from '@/lib/age';
 import { profilesService } from '@/services/profiles';
 import { statsService } from '@/services/stats';
 import { usersService } from '@/services/users';
@@ -107,6 +108,26 @@ interface PublicProfile {
   // "Matched" badge. Server-computed per viewer.
   is_matched?: boolean;
   match_id?: string | null;
+  /**
+   * Whole years, for an athlete. Someone else's profile carries this INSTEAD
+   * of their date of birth, which the server no longer hands out. Optional:
+   * an older server sends the date of birth on the athlete profile instead,
+   * and ageOf() falls back to it.
+   */
+  age?: number | null;
+}
+
+/**
+ * The athlete's age: the server's `age` when it sends one (top level, or on
+ * the profile row), else worked out from a date of birth an older server
+ * may still include.
+ */
+function ageOf(p: PublicProfile | null, sub: any): number | null {
+  const direct = p?.age ?? sub?.age;
+  if (typeof direct === 'number' && Number.isFinite(direct) && direct >= 0) {
+    return Math.floor(direct);
+  }
+  return ageFromDob(sub?.date_of_birth ?? (p as any)?.date_of_birth ?? null);
 }
 
 interface ProfileStats {
@@ -278,6 +299,7 @@ export default function PublicProfileScreen() {
     profile?.avatar_url ?? (photos.length > 0 ? photos[0] : null);
   const videos: string[] = Array.isArray(sub.videos) ? sub.videos : [];
   const displayLocation = profile?.location ?? null;
+  const age = isAthlete ? ageOf(profile, sub) : null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -453,6 +475,7 @@ export default function PublicProfileScreen() {
                   {sub.sport && (
                     <InfoRow icon="football" text={`${sub.sport}${sub.position ? ` · ${sub.position}` : ''}`} />
                   )}
+                  {age !== null && <InfoRow icon="calendar" text={`Age ${age}`} />}
                   {sub.level && <InfoRow icon="school" text={sub.level} />}
                   {sub.team && <InfoRow icon="shirt" text={sub.team} />}
                   {sub.agency && <InfoRow icon="briefcase" text={sub.agency} />}

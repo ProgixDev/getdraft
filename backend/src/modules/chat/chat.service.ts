@@ -6,6 +6,12 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
 
+/** The label for a user's role in a chat header; '' when unknown. */
+function roleLabel(role: string | null | undefined): string {
+  if (!role) return '';
+  return role === 'recruiter' ? 'agent' : role;
+}
+
 @Injectable()
 export class ChatService {
   constructor(private supabaseService: SupabaseService) {}
@@ -33,11 +39,22 @@ export class ChatService {
           .eq('id', otherUserId)
           .single();
 
-        const { data: rp } = await supabase
-          .from('recruiter_profiles')
-          .select('role_type, organization, verified')
-          .eq('user_id', otherUserId)
-          .single();
+        // Only coaches and agents have a recruiter profile. Everyone else
+        // (a Community athlete, a parent) is labelled by their real role
+        // below instead of the old blanket 'agent'.
+        let rp: {
+          role_type: string | null;
+          organization: string | null;
+          verified: boolean | null;
+        } | null = null;
+        if (otherUser?.role === 'coach' || otherUser?.role === 'recruiter') {
+          const { data } = await supabase
+            .from('recruiter_profiles')
+            .select('role_type, organization, verified')
+            .eq('user_id', otherUserId)
+            .single();
+          rp = data;
+        }
 
         const { count: unreadCount } = await supabase
           .from('messages')
@@ -57,7 +74,12 @@ export class ChatService {
         return {
           id: match.id,
           recruiterName: otherUser?.name || '',
-          recruiterRole: rp?.role_type || 'agent',
+          // Historically "the recruiter's role"; with Community the other
+          // side can be anyone, so this is the other person's role label:
+          // agent | coach (from their recruiter profile), else their real
+          // role -- athlete, parent, coach -- with 'recruiter' shown as
+          // 'agent', the word the app uses. The chat header prints it as-is.
+          recruiterRole: rp?.role_type || roleLabel(otherUser?.role),
           organization: rp?.organization || '',
           verified: rp?.verified || false,
           // The other person's face, for the chat header and the inbox row.

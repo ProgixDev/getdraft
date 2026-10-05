@@ -52,6 +52,59 @@ describe('ChatService', () => {
       const result = await service.getThreads('user-1');
       expect(result).toEqual([]);
     });
+
+    // The header label is the other person's real role: a Community
+    // athlete is an 'athlete', not the old blanket 'agent'.
+    const threadWith = async (other: any, recruiterProfile: any = null) => {
+      mockAdminClient.from.mockImplementation((table: string) => {
+        if (table === 'matches') {
+          return mockQueryBuilder({
+            data: [
+              {
+                id: 'match-1',
+                user_1_id: 'user-1',
+                user_2_id: other.id,
+                matched_at: '2026-09-01T00:00:00Z',
+              },
+            ],
+          });
+        }
+        if (table === 'users') return mockQueryBuilder({ data: other });
+        if (table === 'recruiter_profiles') {
+          return mockQueryBuilder({ data: recruiterProfile });
+        }
+        return mockQueryBuilder({ data: null, count: 0 });
+      });
+      const [thread] = await service.getThreads('user-1');
+      return thread;
+    };
+
+    it.each([
+      ['athlete', 'athlete'],
+      ['parent', 'parent'],
+      ['recruiter', 'agent'], // no recruiter profile: the app's word for it
+      ['coach', 'coach'],
+    ])('labels a %s without a recruiter profile as %p', async (role, label) => {
+      const thread = await threadWith({ id: 'u-2', name: 'Alex', role });
+      expect(thread.recruiterRole).toBe(label);
+    });
+
+    it('does not look up a recruiter profile for an athlete', async () => {
+      await threadWith({ id: 'ath-2', name: 'Alex', role: 'athlete' });
+      expect(mockAdminClient.from).not.toHaveBeenCalledWith(
+        'recruiter_profiles',
+      );
+    });
+
+    it('keeps the recruiter profile role for coaches and agents', async () => {
+      const thread = await threadWith(
+        { id: 'rec-2', name: 'Mike', role: 'recruiter' },
+        { role_type: 'agent', organization: 'Elite', verified: true },
+      );
+      expect(thread.recruiterRole).toBe('agent');
+      expect(thread.organization).toBe('Elite');
+      expect(thread.verified).toBe(true);
+    });
   });
 
   describe('sendMessage', () => {

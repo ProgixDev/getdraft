@@ -1,5 +1,6 @@
 import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { DiscoverMode, SwipeDirection } from '../../../common/types';
 
 export class SwipeDto {
@@ -14,18 +15,26 @@ export class SwipeDto {
   // Super Draft: only meaningful on a DRAFT. Optional + defaults to false so
   // an older client that never sends it keeps working (forbidNonWhitelisted
   // would otherwise 400 an unknown field).
+  // Read from the raw body (`obj`), not `value`: the global pipe converts
+  // implicitly first, and Boolean("false") is true, so a client sending the
+  // string "false" would have spent a Super Draft.
   @ApiPropertyOptional({ example: false })
   @IsOptional()
+  @Transform(({ obj }) => obj?.isSuper === true || obj?.isSuper === 'true')
   @IsBoolean()
   isSuper?: boolean;
 
   /**
    * Which pool this swipe came from. The server re-derives the allowed pairs
    * from it: recruit permits athlete ↔ coach/agent only, peer permits the
-   * same role only. Sent explicitly rather than inferred from the two roles so
-   * a client that never learned about peer mode (absent = recruit) cannot
-   * create a same-role match by accident, and a parent in peer mode acts as
-   * themselves instead of on behalf of their athlete.
+   * same role only (athlete pairs also need the Community rules: same sport,
+   * same age group, both active). A parent in peer mode acts as themselves
+   * instead of on behalf of their athlete.
+   *
+   * Optional. When absent the server infers it: peer when the swiper and the
+   * target have the same role, recruit otherwise. That keeps screens and
+   * older builds that never send a mode (Globe, Draft Board Accept / Refuse,
+   * "who drafted you" Draft back) working for Community Drafts.
    */
   @ApiPropertyOptional({ enum: DiscoverMode, example: 'recruit' })
   @IsOptional()

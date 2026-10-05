@@ -26,6 +26,7 @@ import {
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { useDiscoverModePersistence } from "@/hooks/use-discover-mode-persistence";
 import { theme } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { store, RootState } from "@/store";
@@ -81,6 +82,9 @@ function RootLayoutContent() {
   // user is authenticated. Physical device required.
   usePushNotifications(isAuthenticated && !!user, appState === "app");
 
+  // Restores the signed-in user's Recruiting | Community choice (read during
+  // the splash, so Discover opens on the right deck) and saves every change.
+  useDiscoverModePersistence();
 
   // Pick up anything paid for but never granted -- app killed mid-purchase,
   // network dropped, server briefly down. Those transactions stay in the

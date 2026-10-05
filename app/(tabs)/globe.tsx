@@ -45,6 +45,7 @@ import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 import { discoverService, type MapPoint } from "@/services/discover";
+import { apiErrorMessage } from "@/services/api";
 import {
   useRegionSearch,
   type RegionOption,
@@ -682,7 +683,15 @@ export default function GlobeTab() {
       const targetName = selected.name ?? "this profile";
       setSwiping(true);
       try {
-        const res = await discoverService.swipe(targetId, direction);
+        // The map shows the pool the switch is on, so the swipe says which
+        // one it came from. Without it the server took every globe swipe as
+        // recruiting and refused each Community Draft made here.
+        const res = await discoverService.swipe(
+          targetId,
+          direction,
+          false,
+          mode,
+        );
         // Whatever the outcome, remove the point from the globe so the
         // user can't act on it again without a refresh.
         setPoints((prev) => prev.filter((p) => p.id !== targetId));
@@ -695,12 +704,32 @@ export default function GlobeTab() {
         }
       } catch (err) {
         const status = (err as any)?.response?.status;
-        if (status === 429 || status === 403) {
-          // Out of Drafts — hide the card, they can't act on it right now.
+        if (status === 429) {
+          // 429 is the only out-of-Drafts answer. Hide the card: they can't
+          // act on it right now.
           dismissAll();
           Alert.alert(
             "Out of Drafts",
             "You're out of Drafts for today — upgrade, or come back tomorrow.",
+          );
+        } else if (
+          typeof status === "number" &&
+          status >= 400 &&
+          status < 500 &&
+          status !== 401 &&
+          status !== 408
+        ) {
+          // Any other 4xx is the server refusing THIS pair (403: blocked,
+          // wrong pool, or outside your Community sport / age group; 404:
+          // the account is gone; 409: already swiped). Retrying can't help,
+          // so drop the point and pass on the server's reason, instead of
+          // calling a refusal "Out of Drafts". (401 / 408 are about the
+          // session or the network, not the pair: they fall through.)
+          setPoints((prev) => prev.filter((p) => p.id !== targetId));
+          dismissAll();
+          Alert.alert(
+            direction === "draft" ? "Couldn't draft" : "Couldn't pass",
+            apiErrorMessage(err, "You can't connect with this profile."),
           );
         } else {
           // Network / server hiccup — keep the card open so they can retry.
@@ -713,7 +742,7 @@ export default function GlobeTab() {
         setSwiping(false);
       }
     },
-    [selected, swiping, dismissAll],
+    [selected, swiping, dismissAll, mode],
   );
 
   if (redirecting) return null;
@@ -779,15 +808,17 @@ export default function GlobeTab() {
         </Text>
         <Text style={styles.headerSubtitle}>
           {isPeerMode
-            ? `Other ${
-                viewerRole === "athlete"
-                  ? "athletes"
-                  : viewerRole === "coach"
+            ? viewerRole === "athlete"
+              ? // The server only maps athletes of your own sport and age
+                // group for you, so don't promise the whole world.
+                "Athletes in your sport and age group"
+              : `Other ${
+                  viewerRole === "coach"
                     ? "coaches"
                     : viewerRole === "recruiter"
                       ? "agents"
                       : "people"
-              } around the world`
+                } around the world`
             : "Talent distribution worldwide"}
         </Text>
         {/* Same switch as Discover, same slice, so the two never disagree. */}
@@ -890,7 +921,11 @@ export default function GlobeTab() {
             color="rgba(255,255,255,0.7)"
           />
           <Text style={styles.hintText}>
-            {filter ? `No one in ${filter.label}` : "No talent on the map yet"}
+            {filter
+              ? `No one in ${filter.label}`
+              : isPeerMode
+                ? "No one in your Community yet"
+                : "No talent on the map yet"}
           </Text>
           {filter && (
             <Pressable onPress={clearFilter} hitSlop={8}>

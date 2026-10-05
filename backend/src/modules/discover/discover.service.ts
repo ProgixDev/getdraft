@@ -7,6 +7,8 @@ import {
   HttpException,
   HttpStatus,
   Logger,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -22,16 +24,31 @@ import {
   SUPER_DRAFT_LIMITS,
   planFeatures,
 } from '../../common/types';
+import { dobBoundsForAgeGroup } from '../../common/utils/age';
+import { NotificationsService } from '../notifications/notifications.service';
+// Athlete ↔ athlete Community rules (same sport, same age group, active,
+// PEER_ATHLETES_ENABLED switch) live in community.ts; this service applies
+// them to the feed, the globe, the swipe and "who drafted you".
+import {
+  COMMUNITY_BLOCKED_MESSAGES,
+  COMMUNITY_MISMATCH_MESSAGE,
+  COMMUNITY_SELECT,
+  CommunityStatus,
+  athleteCommunityStatus,
+  escapeLikePattern,
+  isCommunityPeer,
+  openCommunity,
+  peerAthletesEnabled,
+} from './community';
 
 /**
- * Athlete ↔ athlete peer matching means minors can message minors, which is
- * the one part of Community that store reviewers and the client may want off
- * without waiting for a rebuild. Default ON, because the client asked for
- * players explicitly; set PEER_ATHLETES_ENABLED=false on the server to turn
- * only that pair off -- coaches, agents and parents keep their community.
+ * Globe pins are rounded to 2 decimals (~1 km). Signup stores the precise
+ * coordinates Mapbox returns for the address typed in, which for most people
+ * is their home; a pin must show the area, never the house.
  */
-const PEER_ATHLETES_ENABLED = process.env.PEER_ATHLETES_ENABLED !== 'false';
-import { NotificationsService } from '../notifications/notifications.service';
+function roundCoord(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 // ── Globe placement ────────────────────────────────────────────────
 // CA/US division mapping for the rankings view + anywhere else that
@@ -431,19 +448,108 @@ function placeByCountry(
   return { lat: base.lat + latOff, lng: base.lng + lngOff };
 }
 
+/**
+ * Closes athlete Community matches that break the sport / age-group rules.
+ * The same statement as migration 046 -- keep the two in step.
+ */
+const CLOSE_STALE_COMMUNITY_MATCHES_SQL = `
+WITH athlete_peer_matches AS (
+  SELECT
+    m.id,
+    ap1.date_of_birth       AS dob_1,
+    ap2.date_of_birth       AS dob_2,
+    lower(btrim(ap1.sport)) AS sport_1,
+    lower(btrim(ap2.sport)) AS sport_2
+  FROM public.matches m
+  JOIN public.users u1
+    ON u1.id = m.user_1_id AND u1.role = 'athlete'
+  JOIN public.users u2
+    ON u2.id = m.user_2_id AND u2.role = 'athlete'
+  LEFT JOIN public.athlete_profiles ap1 ON ap1.user_id = m.user_1_id
+  LEFT JOIN public.athlete_profiles ap2 ON ap2.user_id = m.user_2_id
+  WHERE m.kind = 'peer'
+    AND m.is_active IS DISTINCT FROM FALSE
+),
+breaking_the_rules AS (
+  SELECT id
+  FROM athlete_peer_matches
+  WHERE dob_1 IS NULL
+     OR dob_2 IS NULL
+     OR date_part('year', age(CURRENT_DATE, dob_1)) < 13
+     OR date_part('year', age(CURRENT_DATE, dob_2)) < 13
+     OR (date_part('year', age(CURRENT_DATE, dob_1)) >= 18)
+        <> (date_part('year', age(CURRENT_DATE, dob_2)) >= 18)
+     OR coalesce(sport_1, '') = ''
+     OR coalesce(sport_2, '') = ''
+     OR sport_1 <> sport_2
+)
+UPDATE public.matches AS m
+SET is_active = FALSE
+FROM breaking_the_rules b
+WHERE m.id = b.id`;
+
+/** How often the sweep above runs. */
+const COMMUNITY_SWEEP_MS = 60 * 60 * 1000;
+
 @Injectable()
-export class DiscoverService {
+export class DiscoverService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DiscoverService.name);
+  private communitySweep: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
   ) {}
 
+  /**
+   * The Community rules are checked when two athletes Draft each other, but
+   * they can stop holding afterwards: one of two 17-year-olds turns 18, or
+   * someone changes sport. An active match is what keeps chat and DMs open,
+   * so the pair is re-checked when the server starts and then every hour, and
+   * a match that no longer fits is closed the way an unmatch closes it.
+   * Running at boot also applies migration 046 to matches made before the
+   * rules existed, so nobody has to run that file by hand.
+   */
+  onModuleInit() {
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) return;
+    void this.closeStaleCommunityMatches();
+    this.communitySweep = setInterval(
+      () => void this.closeStaleCommunityMatches(),
+      COMMUNITY_SWEEP_MS,
+    );
+    // Housekeeping must never keep the process alive on shutdown.
+    this.communitySweep.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.communitySweep) clearInterval(this.communitySweep);
+  }
+
+  /** How many matches were closed. Never throws: it is housekeeping. */
+  async closeStaleCommunityMatches(): Promise<number> {
+    try {
+      const closed = await this.prisma.$executeRawUnsafe(
+        CLOSE_STALE_COMMUNITY_MATCHES_SQL,
+      );
+      if (closed > 0) {
+        this.logger.warn(
+          `[community] closed ${closed} athlete match(es) that no longer meet the sport / age-group rules`,
+        );
+      }
+      return closed;
+    } catch (err: any) {
+      this.logger.error(
+        `[community] stale-match sweep failed: ${err?.message ?? err}`,
+      );
+      return 0;
+    }
+  }
+
   async getFeed(user: CurrentUserPayload, query: DiscoverQueryDto) {
     const offset = ((query.page || 1) - 1) * (query.limit || 20);
     const limit = query.limit || 20;
     const mode = query.mode ?? DiscoverMode.RECRUIT;
+    const now = new Date();
 
     // Parents browse on behalf of their linked athlete (guardian proxy): the
     // feed excludes what the ATHLETE already acted on and reflects the
@@ -458,6 +564,28 @@ export class DiscoverService {
         : await this.resolveActorId(user, false);
     const swipesRemaining = await this.getSwipesRemaining(actorId);
     const superDraftsRemaining = await this.getSuperDraftsRemaining(actorId);
+
+    // Community status, reported on every peer-mode page so the app can say
+    // WHY an athlete's Community is empty (no date of birth, under 13, ...).
+    // Athletes have their own gate (community.ts); every other role's
+    // Community is open. Recruiting has no such rules: undefined there, which
+    // JSON drops from the response.
+    const community: CommunityStatus | undefined =
+      mode === DiscoverMode.PEER
+        ? user.role === UserRole.ATHLETE
+          ? await this.communityStatusOf(user.id, now)
+          : openCommunity()
+        : undefined;
+    if (community && !community.eligible) {
+      return {
+        cards: [],
+        hasMore: false,
+        swipesRemaining,
+        superDraftsRemaining,
+        nextCursor: null,
+        community,
+      };
+    }
 
     // Advanced filters are a paid feature. Enforced here, not only in the
     // app: the filters are plain query params, and a free user with a
@@ -475,7 +603,7 @@ export class DiscoverService {
     // Role-targeted feed (client matrix): athletes — and parents on their
     // athlete's behalf — see coaches/agents; coaches and agents see athletes.
     // In peer mode everyone sees their own role.
-    return this.getEveryoneFeed(
+    const page = await this.getEveryoneFeed(
       actorId,
       user.role,
       effectiveQuery,
@@ -484,7 +612,10 @@ export class DiscoverService {
       swipesRemaining,
       superDraftsRemaining,
       mode,
+      community,
+      now,
     );
+    return { ...page, community };
   }
 
   /** The user's plan id, defaulting to the free tier when there is no row. */
@@ -590,31 +721,81 @@ export class DiscoverService {
     };
   }
 
+  /** The athlete Community status of `userId` (rules in community.ts). */
+  private async communityStatusOf(
+    userId: string,
+    now: Date,
+  ): Promise<CommunityStatus> {
+    const facts = await this.prisma.public_users.findUnique({
+      where: { id: userId },
+      select: COMMUNITY_SELECT,
+    });
+    return athleteCommunityStatus(facts, {
+      enabled: peerAthletesEnabled(),
+      now,
+    });
+  }
+
+  /**
+   * The athletes an eligible athlete may see in Community: active accounts
+   * (guardian-approved when minors -- the same COPPA gate as the recruit
+   * feed) with a date of birth in the viewer's age group, playing the
+   * viewer's sport. The requested sport filter is ignored: an athlete's
+   * Community is always their own sport. Position / level still narrow it.
+   *
+   * Callers re-check every row in code with isCommunityPeer(), so the rules
+   * hold even where this SQL is approximate (a sport saved with stray spaces
+   * simply does not match here; it never matches wrongly).
+   *
+   * null when the viewer is not eligible: no Community, not a wider one.
+   */
+  private athletePeerWhere(
+    community: CommunityStatus,
+    athleteProfileFilter: Record<string, unknown>,
+    now: Date,
+  ): Prisma.public_usersWhereInput | null {
+    if (!community.eligible || !community.sport || !community.ageGroup) {
+      return null;
+    }
+    const narrowing = { ...athleteProfileFilter };
+    delete narrowing.sport;
+    return {
+      role: 'athlete',
+      activation_status: 'active',
+      athlete_profiles: {
+        is: {
+          ...narrowing,
+          sport: {
+            equals: escapeLikePattern(community.sport),
+            mode: 'insensitive',
+          },
+          date_of_birth: {
+            not: null,
+            ...dobBoundsForAgeGroup(community.ageGroup, now),
+          },
+        },
+      },
+    };
+  }
+
   /**
    * The WHERE branch for peer mode: the viewer's own role, with that role's
    * own filters applied. Returns null when the role has no community --
-   * admins, or athletes while PEER_ATHLETES_ENABLED is off -- so the caller
+   * admins, or athletes who are not eligible (PEER_ATHLETES_ENABLED off, no
+   * date of birth, under 13, awaiting a guardian, no sport) -- so the caller
    * returns an empty page instead of falling through to the recruit matrix.
    */
   private peerBranch(
     viewerRole: UserRole,
     athleteProfileFilter: Record<string, unknown>,
     recruiterProfileFilter: Record<string, unknown>,
+    community?: CommunityStatus,
+    now: Date = new Date(),
   ): Prisma.public_usersWhereInput | null {
     switch (viewerRole) {
       case UserRole.ATHLETE: {
-        if (!PEER_ATHLETES_ENABLED) return null;
-        // Same COPPA gate as the recruit feed: a minor is only discoverable
-        // once a guardian has approved them, and that holds for other minors
-        // too -- more so, if anything.
-        const branch: Prisma.public_usersWhereInput = {
-          role: 'athlete',
-          activation_status: 'active',
-        };
-        if (Object.keys(athleteProfileFilter).length) {
-          branch.athlete_profiles = { is: athleteProfileFilter };
-        }
-        return branch;
+        if (!community) return null;
+        return this.athletePeerWhere(community, athleteProfileFilter, now);
       }
       case UserRole.COACH:
       case UserRole.RECRUITER: {
@@ -643,6 +824,8 @@ export class DiscoverService {
     swipesRemaining: number,
     superDraftsRemaining: number,
     mode: DiscoverMode = DiscoverMode.RECRUIT,
+    community?: CommunityStatus,
+    now: Date = new Date(),
   ) {
     const excluded = await this.excludedUserIds(userId);
 
@@ -729,9 +912,12 @@ export class DiscoverService {
         viewerRole,
         athleteProfileFilter,
         recruiterProfileFilter,
+        community,
+        now,
       );
       if (!peerBranch) {
-        // Role has no community (admin), or athlete↔athlete is switched off.
+        // Role has no community (admin), or this athlete has none (not
+        // eligible, or athlete↔athlete is switched off).
         return {
           cards: [],
           hasMore: false,
@@ -773,6 +959,9 @@ export class DiscoverService {
         // Settings toggles: profileVisible (hidden from feed) and
         // showDistance (location hidden on the card).
         preferences: true,
+        // Athlete Community re-check (isCommunityPeer below). Never copied
+        // onto a card: the card builders pick their fields explicitly.
+        activation_status: true,
         athlete_profiles: {
           select: {
             sport: true,
@@ -787,6 +976,7 @@ export class DiscoverService {
             videos: true,
             forty_yard_dash: true,
             awards: true,
+            date_of_birth: true,
           },
         },
         recruiter_profiles: {
@@ -855,12 +1045,24 @@ export class DiscoverService {
       );
     });
 
+    // Athlete Community: every row is re-checked in code against the same
+    // rules the WHERE applied (sport, age group, active), so a query that
+    // drifts can never put an adult in front of a 15-year-old. Paging is
+    // unaffected: hasMore / nextCursor come from the unfiltered rows.
+    const athleteCommunity =
+      mode === DiscoverMode.PEER && viewerRole === UserRole.ATHLETE;
+
     const cards = boosted
       // Settings → Privacy → "Profile Visible": explicit false means the
       // user opted out of discovery. Filtered here (not in SQL) because a
       // JSONB path comparison silently drops rows with no preferences at
       // all — absence must default to visible.
       .filter((u) => (u.preferences as any)?.profileVisible !== false)
+      .filter(
+        (u) =>
+          !athleteCommunity ||
+          (community !== undefined && isCommunityPeer(community, u, now)),
+      )
       .map((u) => {
         if (u.role === 'athlete' && u.athlete_profiles) {
           return this.athleteCardFromUser(u);
@@ -904,8 +1106,19 @@ export class DiscoverService {
       throw new ForbiddenException('Parents do not have a discover feed');
     }
 
-    const excluded = await this.excludedUserIds(user.id);
     const mode = query.mode ?? DiscoverMode.RECRUIT;
+    const now = new Date();
+
+    // Athlete Community on the globe follows exactly the feed's rules (same
+    // sport, same age group, both active). An athlete who is not eligible
+    // gets no pins at all -- the globe is not a way around the feed.
+    let community: CommunityStatus | undefined;
+    if (mode === DiscoverMode.PEER && user.role === UserRole.ATHLETE) {
+      community = await this.communityStatusOf(user.id, now);
+      if (!community.eligible) return [];
+    }
+
+    const excluded = await this.excludedUserIds(user.id);
 
     // The map mirrors the Discover feed's role matrix: an athlete sees
     // coaches/agents, a coach/agent sees athletes. Without this the map showed
@@ -916,7 +1129,7 @@ export class DiscoverService {
 
     let roleWhere: Prisma.public_usersWhereInput;
     if (mode === DiscoverMode.PEER) {
-      const branch = this.peerBranch(user.role, {}, {});
+      const branch = this.peerBranch(user.role, {}, {}, community, now);
       if (!branch) return [];
       roleWhere = branch;
     } else if (targetsRecruiters) {
@@ -953,6 +1166,8 @@ export class DiscoverService {
         // Settings toggles — see getEveryoneFeed for why this is filtered
         // in JS rather than in SQL.
         preferences: true,
+        // Athlete Community re-check only; never copied onto a pin.
+        activation_status: true,
         athlete_profiles: {
           select: {
             sport: true,
@@ -962,6 +1177,7 @@ export class DiscoverService {
             height: true,
             gpa: true,
             photos: true,
+            date_of_birth: true,
           },
         },
         recruiter_profiles: {
@@ -993,6 +1209,8 @@ export class DiscoverService {
         if (prefs.profileVisible === false || prefs.showDistance === false) {
           return null;
         }
+        // Athlete Community: same in-code re-check as the feed.
+        if (community && !isCommunityPeer(community, u, now)) return null;
         // Precise coords win; otherwise place by country (+ deterministic
         // per-user offset). Signup saves country only today, so this is what
         // makes REAL athletes show on the globe until lat/lng is captured.
@@ -1015,8 +1233,9 @@ export class DiscoverService {
         return {
           id: u.id,
           name: u.name,
-          lat,
-          lng,
+          // Every pin, every mode: ~1 km, never a house (see roundCoord).
+          lat: roundCoord(lat),
+          lng: roundCoord(lng),
           avatar_url: u.avatar_url,
           // Athlete-only fields stay null on a recruiter pin; the globe card
           // renders only the rows it actually has, so it degrades cleanly.
@@ -1083,13 +1302,14 @@ export class DiscoverService {
    * canMatch(a,b,m) === canMatch(b,a,m).
    *
    *   recruit  athletes ↔ coaches/agents, nothing else
-   *   peer     the same role only -- athlete↔athlete (unless switched off),
+   *   peer     the same role only -- athlete↔athlete (unless switched off,
+   *            and then only under the Community rules, see swipe()),
    *            coach↔coach, agent↔agent, parent↔parent
    *
    * The two are checked per mode rather than OR'ed together: a swipe sent
-   * from the recruit deck must never create a peer match and vice versa, so a
-   * hand-crafted request cannot smuggle a same-role pair through a client
-   * that predates peer mode (those send no mode, which means recruit).
+   * from the recruit deck must never create a peer match and vice versa. A
+   * swipe with no mode (older clients) is peer for a same-role pair and
+   * recruit otherwise -- see swipe().
    */
   private canMatch(
     roleA: UserRole,
@@ -1100,7 +1320,7 @@ export class DiscoverService {
       if (roleA !== roleB) return false;
       switch (roleA) {
         case UserRole.ATHLETE:
-          return PEER_ATHLETES_ENABLED;
+          return peerAthletesEnabled();
         case UserRole.COACH:
         case UserRole.RECRUITER:
         case UserRole.PARENT:
@@ -1146,7 +1366,32 @@ export class DiscoverService {
   }
 
   async swipe(user: CurrentUserPayload, dto: SwipeDto) {
-    const mode = dto.mode ?? DiscoverMode.RECRUIT;
+    const now = new Date();
+
+    // The target is read first because the mode can depend on its role (see
+    // below), and the mode decides whether a parent acts as themselves.
+    //
+    // Mirror the feed filter: a banned target must never accept a swipe,
+    // otherwise a banned user can still be "matched" via a deep-linked id
+    // and end up in the swiper's matches/messages.
+    const target = await this.prisma.public_users.findUnique({
+      where: { id: dto.targetUserId },
+      select: { is_banned: true, role: true, ...COMMUNITY_SELECT },
+    });
+    if (!target || target.is_banned) {
+      throw new NotFoundException('User not found');
+    }
+    const targetRole = target.role as UserRole;
+
+    // No mode: a build that predates Community, or a screen that never sends
+    // one (the Globe, Draft Board Accept / Refuse, "who drafted you" Draft
+    // back). A same-role pair can only ever be a Community connection, so it
+    // is peer; any other pair is recruiting, as it always was. This opens no
+    // loophole: every rule below is checked for the resolved mode, and an
+    // athlete pair meets the full Community rules whichever way it arrives.
+    const mode =
+      dto.mode ??
+      (user.role === targetRole ? DiscoverMode.PEER : DiscoverMode.RECRUIT);
 
     // Parents draft on behalf of their linked minor: everything below runs as
     // that athlete (`actor`), so a parent's Draft on a coach produces a real
@@ -1180,22 +1425,35 @@ export class DiscoverService {
       throw new ForbiddenException('Cannot swipe a blocked user');
     }
 
-    // Mirror the feed filter: a banned target must never accept a swipe,
-    // otherwise a banned user can still be "matched" via a deep-linked id
-    // and end up in the swiper's matches/messages.
-    const target = await this.prisma.public_users.findUnique({
-      where: { id: dto.targetUserId },
-      select: { is_banned: true, role: true },
-    });
-    if (!target || target.is_banned) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Role-pair guard (client matrix). Belt-and-braces on top of the feed
-    // filter: a deep-linked / hand-crafted targetUserId must not be able to
-    // create an illegal match (coach↔agent, athlete↔athlete from the recruit
-    // deck, cross-role from the peer deck, etc.).
-    if (!this.canMatch(actor.role, target.role as UserRole, mode)) {
+    if (
+      mode === DiscoverMode.PEER &&
+      actor.role === UserRole.ATHLETE &&
+      targetRole === UserRole.ATHLETE
+    ) {
+      // Athlete Community (community.ts). A Pass is always allowed: it
+      // creates nothing, and it is how an athlete refuses a peer Draft --
+      // including one sent before these rules existed, or by someone they
+      // could no longer match. A Draft needs BOTH athletes eligible (date of
+      // birth, 13+, active, a sport), in the same age group and the same
+      // sport. The target's own status is never spelled out: one message for
+      // every mismatch, so a stranger cannot learn that someone is 12 or
+      // still waiting on a guardian.
+      if (dto.direction === SwipeDirection.DRAFT) {
+        const me = await this.communityStatusOf(actor.id, now);
+        if (!me.eligible) {
+          throw new ForbiddenException(
+            COMMUNITY_BLOCKED_MESSAGES[me.reason ?? 'disabled'],
+          );
+        }
+        if (!isCommunityPeer(me, target, now)) {
+          throw new ForbiddenException(COMMUNITY_MISMATCH_MESSAGE);
+        }
+      }
+    } else if (!this.canMatch(actor.role, targetRole, mode)) {
+      // Role-pair guard (client matrix). Belt-and-braces on top of the feed
+      // filter: a deep-linked / hand-crafted targetUserId must not be able to
+      // create an illegal match (coach↔agent, athlete↔athlete from the
+      // recruit deck, cross-role from the peer deck, etc.).
       throw new ForbiddenException('You cannot match with this user');
     }
 
@@ -1407,6 +1665,16 @@ export class DiscoverService {
     // withdraw) what they'd sent.
     const userId = await this.resolveActorId(user, false);
 
+    // An athlete's Sent list (the caller's, or the linked athlete's for a
+    // parent) follows the Community rules the way "who drafted you" does:
+    // a Draft on another athlete only shows while that athlete is still
+    // someone this one could match. That hides peer Drafts sent before the
+    // rules existed -- an adult's Draft on a 15-year-old, name and town
+    // included. Drafts on coaches and agents are untouched.
+    const isAthletesList = user.role === UserRole.ATHLETE || userId !== user.id;
+    const now = new Date();
+    const me = isAthletesList ? await this.communityStatusOf(userId, now) : null;
+
     const [outgoing, activeMatches] = await Promise.all([
       this.prisma.swipes.findMany({
         where: {
@@ -1423,6 +1691,8 @@ export class DiscoverService {
               avatar_url: true,
               role: true,
               location: true,
+              // For the Community re-check below; never returned.
+              ...COMMUNITY_SELECT,
             },
           },
         },
@@ -1444,12 +1714,29 @@ export class DiscoverService {
       ),
     );
 
-    return outgoing.map((r) => ({
-      swiped_id: r.swiped_id,
-      created_at: r.created_at,
-      swiped: r.users_swipes_swiped_idTousers,
-      matched: matchedSet.has(r.swiped_id),
-    }));
+    return outgoing
+      .filter((r) => {
+        const target = r.users_swipes_swiped_idTousers;
+        if (!me || target?.role !== 'athlete') return true;
+        return isCommunityPeer(me, target, now);
+      })
+      .map((r) => {
+        const target = r.users_swipes_swiped_idTousers;
+        return {
+          swiped_id: r.swiped_id,
+          created_at: r.created_at,
+          swiped: target
+            ? {
+                id: target.id,
+                name: target.name,
+                avatar_url: target.avatar_url,
+                role: target.role,
+                location: target.location,
+              }
+            : target,
+          matched: matchedSet.has(r.swiped_id),
+        };
+      });
   }
 
   async withdrawDraft(user: CurrentUserPayload, targetUserId: string) {
@@ -1506,15 +1793,35 @@ export class DiscoverService {
       ...blockedBy.map((b) => b.blocker_id),
     ];
 
+    // A banned swiper must not appear in the "who drafted me" list —
+    // mirrors the feed/match ban filters so a suspended account can't
+    // influence the recipient's discover funnel.
+    const swiperWhere: Prisma.public_usersWhereInput = { is_banned: false };
+
+    // The list is an athlete's when the caller is one, or is a parent acting
+    // for their linked athlete. It shows other athletes' names, faces and
+    // towns, so the athlete Community rules apply to it like to the feed:
+    // Drafts from athletes only show when that athlete is someone this one
+    // could match (same sport, same age group, both active). That also hides
+    // peer Drafts sent before the rules existed -- an adult's Draft on a
+    // 15-year-old. Drafts from coaches and agents are untouched.
+    const isAthletesList = user.role === UserRole.ATHLETE || userId !== user.id;
+    if (isAthletesList) {
+      const now = new Date();
+      const me = await this.communityStatusOf(userId, now);
+      const peers = this.athletePeerWhere(me, {}, now);
+      const notAnAthlete: Prisma.public_usersWhereInput = {
+        role: { not: 'athlete' },
+      };
+      swiperWhere.OR = peers ? [notAnAthlete, peers] : [notAnAthlete];
+    }
+
     const rows = await this.prisma.swipes.findMany({
       where: {
         swiped_id: userId,
         direction: SwipeDirection.DRAFT,
         swiper_id: { notIn: excludeSwiperIds },
-        // A banned swiper must not appear in the "who drafted me" list —
-        // mirrors the feed/match ban filters so a suspended account can't
-        // influence the recipient's discover funnel.
-        users_swipes_swiper_idTousers: { is_banned: false },
+        users_swipes_swiper_idTousers: swiperWhere,
       },
       select: {
         swiped_id: true,

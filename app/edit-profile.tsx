@@ -77,7 +77,14 @@ function extFromMime(mime: string | undefined) {
 }
 
 function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Local calendar date, the inverse of fromIsoDate() below. toISOString()
+  // converts to UTC first, which east of Greenwich turns a date picked at
+  // local midnight into the day before -- and a date of birth saved here is
+  // locked once stored, and decides the Community age group (and whether an
+  // athlete is a minor). ProfileSetupScreen already formats it this way.
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
 }
 
 function fromIsoDate(s: string | null | undefined): Date | null {
@@ -202,6 +209,8 @@ export default function EditProfileScreen() {
   const [gender, setGender] = useState("");
   const [dob, setDob] = useState<Date | null>(null);
   const [dobModalVisible, setDobModalVisible] = useState(false);
+  // Whether the server already holds a date of birth for this athlete.
+  const [dobOnServer, setDobOnServer] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarUploadedUrl, setAvatarUploadedUrl] = useState<string | null>(
     null,
@@ -253,6 +262,7 @@ export default function EditProfileScreen() {
           setWeight(p.weight ?? "");
           setGender(p.gender ?? "");
           setDob(fromIsoDate(p.date_of_birth));
+          setDobOnServer(Boolean(p.date_of_birth));
           const ag = p.agency ?? "";
           setAgency(ag);
           setAgencyCustom(!!ag && !POPULAR_AGENCIES.includes(ag));
@@ -270,6 +280,12 @@ export default function EditProfileScreen() {
       cancelled = true;
     };
   }, [isAthlete, isRecruiter, isParent]);
+
+  // Age decides who an athlete can meet in the Community (13-17 with 13-17,
+  // 18+ with 18+), so once an onboarded athlete's date of birth is on file it
+  // is fixed here: the server refuses the change, and only support can make
+  // it. An athlete with none on file can still add it.
+  const dobLocked = isAthlete && isOnboarded && dobOnServer;
 
   const selectedSport = useMemo(
     () => SPORTS_WITH_POSITIONS.find((s) => s.name === sport),
@@ -382,6 +398,7 @@ export default function EditProfileScreen() {
   };
 
   const handleOpenDob = () => {
+    if (dobLocked) return;
     const initial = dob ?? (() => {
       const d = new Date();
       d.setFullYear(d.getFullYear() - 18);
@@ -673,7 +690,9 @@ export default function EditProfileScreen() {
           height: height.trim(),
           weight: weight.trim(),
           gender: gender || undefined,
-          date_of_birth: dob ? toIsoDate(dob) : undefined,
+          // Never sent once it is locked (see dobLocked): the server would
+          // reject the whole save with "Date of birth can't be changed".
+          date_of_birth: !dobLocked && dob ? toIsoDate(dob) : undefined,
         });
       } else if (isRecruiter) {
         const prev = livePrev ?? {};
@@ -696,12 +715,32 @@ export default function EditProfileScreen() {
         });
       }
 
+      // A date of birth given for the first time after onboarding goes
+      // through the same guardian gate as signup, on the server: an under-18
+      // with no approved guardian is paused until one approves. Read the
+      // result now, so the app shows the guardian screen at once instead of
+      // failing request by request. Best-effort: the root layout re-checks
+      // on the next launch anyway.
+      let activationStatus = authUser?.activationStatus;
+      if (isAthlete && !dobOnServer && dob) {
+        try {
+          const me = await usersService.getMe();
+          activationStatus =
+            me?.activation_status === "pending_guardian"
+              ? "pending_guardian"
+              : "active";
+        } catch {
+          // keep the status we had
+        }
+      }
+
       if (authUser) {
         dispatch(
           setLoggedInUser({
             user: {
               ...authUser,
               name: updatedUser?.name ?? userUpdates.name,
+              ...(activationStatus ? { activationStatus } : {}),
             },
             isOnboarded,
           }),
@@ -968,6 +1007,12 @@ export default function EditProfileScreen() {
               label="Date of Birth"
               value={dob ? formatDobForDisplay(dob) : "Select date"}
               placeholder={!dob}
+              locked={dobLocked}
+              helperText={
+                dobLocked
+                  ? "Contact support to change your date of birth."
+                  : "Once saved, only support can change it."
+              }
               onPress={handleOpenDob}
             />
           </View>
@@ -1215,6 +1260,8 @@ function SelectorRow({
   value,
   placeholder,
   disabled,
+  locked = false,
+  helperText,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
@@ -1222,16 +1269,21 @@ function SelectorRow({
   value: string;
   placeholder?: boolean;
   disabled?: boolean;
+  /** Read-only: shown in full, not tappable, a lock instead of the chevron. */
+  locked?: boolean;
+  helperText?: string;
   onPress: () => void;
 }) {
+  const inactive = disabled || locked;
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={inactive}
+      accessibilityState={{ disabled: inactive }}
       style={({ pressed }) => [
         styles.selectorRow,
         disabled && styles.selectorRowDisabled,
-        pressed && !disabled && styles.pressed,
+        pressed && !inactive && styles.pressed,
       ]}
     >
       <View style={styles.selectorIconWrap}>
@@ -1247,8 +1299,15 @@ function SelectorRow({
         >
           {value}
         </Text>
+        {helperText ? (
+          <Text style={styles.selectorHelper}>{helperText}</Text>
+        ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+      <Ionicons
+        name={locked ? "lock-closed" : "chevron-forward"}
+        size={locked ? 16 : 18}
+        color={theme.textMuted}
+      />
     </Pressable>
   );
 }
@@ -1625,6 +1684,13 @@ const styles = StyleSheet.create({
   selectorValuePlaceholder: {
     color: theme.textMuted,
     fontFamily: "Poppins_400Regular",
+  },
+  selectorHelper: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 16,
+    fontFamily: "Poppins_400Regular",
+    color: theme.textMuted,
   },
   mediaHeader: {
     flexDirection: "row",

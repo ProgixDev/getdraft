@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsNumber,
   IsEnum,
+  Max,
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -13,8 +14,14 @@ import { DiscoverMode } from '../../../common/types';
 // Query params arrive as strings. `@Type(() => Boolean)` is WRONG for them:
 // Boolean('false') === true, so "?includeInternational=false" became true and
 // the toggle was silently ignored. Parse the string explicitly instead.
-const toBool = ({ value }: { value: unknown }) =>
-  value === true || value === 'true';
+//
+// And parse it from the RAW query (`obj[key]`), not from `value`: the global
+// ValidationPipe runs with enableImplicitConversion, which has already turned
+// the string into Boolean('false') === true by the time a @Transform sees
+// `value`. Reading `value` here left the original bug in place -- the country
+// filter never applied, and "verified only" could not be switched off.
+const toBool = ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
+  obj?.[key] === true || obj?.[key] === 'true';
 
 export class DiscoverQueryDto {
   /**
@@ -56,6 +63,10 @@ export class DiscoverQueryDto {
   @IsString()
   region?: string;
 
+  /**
+   * Ignored for athletes in peer mode: an athlete's Community is always the
+   * sport on their own profile (see discover/community.ts).
+   */
   @ApiPropertyOptional({ example: 'American Football' })
   @IsOptional()
   @IsString()
@@ -103,5 +114,8 @@ export class DiscoverQueryDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  // Capped: without a ceiling one request could page out the whole pool
+  // (names, photos, towns) instead of a deck at a time.
+  @Max(50)
   limit?: number = 20;
 }

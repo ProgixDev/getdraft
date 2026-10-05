@@ -12,6 +12,7 @@ import { UpsertAthleteProfileDto } from './dto/athlete-profile.dto';
 import { UpsertRecruiterProfileDto } from './dto/recruiter-profile.dto';
 import { UpsertParentProfileDto } from './dto/parent-profile.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUserPayload } from '../../common/types';
 
 @ApiTags('Profiles')
 @ApiBearerAuth()
@@ -67,9 +68,15 @@ export class ProfilesController {
   @Get(':userId')
   @ApiOperation({ summary: 'Get public profile by user ID' })
   getPublicProfile(
-    @CurrentUser('id') viewerId: string,
+    @CurrentUser() viewer: CurrentUserPayload,
     @Param('userId', ParseUUIDPipe) userId: string,
   ) {
-    return this.profilesService.getPublicProfile(userId, viewerId);
+    // The viewer's role decides what is shared (see the service): coaches
+    // and agents get the guardian id outreach needs, nobody else does.
+    return this.profilesService.getPublicProfile(
+      userId,
+      viewer?.id,
+      viewer?.role,
+    );
   }
 }

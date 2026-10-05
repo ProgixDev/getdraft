@@ -35,7 +35,9 @@ import {
   type ConversationItem,
 } from "@/services/conversations";
 import { chatService } from "@/services/chat";
-import { discoverService } from "@/services/discover";
+import { discoverService, swipeModeFor } from "@/services/discover";
+import { apiErrorMessage } from "@/services/api";
+import { roleDisplayLabel } from "@/lib/roles";
 
 type DraftBoardView = "received" | "sent" | "matches" | "messages";
 
@@ -133,6 +135,8 @@ export default function MatchesScreen() {
   const isParent = user?.role === "parent";
   const isRecruiter =
     user?.role === "recruiter" || user?.role === "coach";
+  // Tells a Community Draft (same role as mine) from a recruiting one.
+  const myRole = user?.role;
 
   const [view, setView] = useState<DraftBoardView>(
     isParent ? "matches" : "received",
@@ -386,12 +390,21 @@ export default function MatchesScreen() {
     };
   }, [view, user?.id, loadInbox]);
 
+  // Accept / Refuse answer a Draft that came from either pool: someone of
+  // your own role Drafted you from Community, anyone else from recruiting.
+  // Say which, so a Community Draft is answered as one -- sent without a
+  // mode, the server used to judge it as recruiting and refuse the pair.
   const handleAccept = useCallback(
-    async (swiperId: string, name: string) => {
+    async (swiperId: string, name: string, swiperRole?: string | null) => {
       if (inFlight) return;
       setInFlight(swiperId);
       try {
-        const res = await discoverService.swipe(swiperId, "draft");
+        const res = await discoverService.swipe(
+          swiperId,
+          "draft",
+          false,
+          swipeModeFor(myRole, swiperRole),
+        );
         setReceived((prev) => prev.filter((r) => r.swiper.id !== swiperId));
         if (res.matched) {
           Alert.alert("Game On!", `You matched with ${name}.`);
@@ -399,34 +412,33 @@ export default function MatchesScreen() {
           loadPrimary();
         }
       } catch (e: any) {
-        Alert.alert(
-          "Couldn't accept",
-          e?.response?.data?.message || "Please try again.",
-        );
+        Alert.alert("Couldn't accept", apiErrorMessage(e, "Please try again."));
       } finally {
         setInFlight(null);
       }
     },
-    [inFlight, loadPrimary],
+    [inFlight, loadPrimary, myRole],
   );
 
   const handleRefuse = useCallback(
-    async (swiperId: string) => {
+    async (swiperId: string, swiperRole?: string | null) => {
       if (inFlight) return;
       setInFlight(swiperId);
       try {
-        await discoverService.swipe(swiperId, "pass");
+        await discoverService.swipe(
+          swiperId,
+          "pass",
+          false,
+          swipeModeFor(myRole, swiperRole),
+        );
         setReceived((prev) => prev.filter((r) => r.swiper.id !== swiperId));
       } catch (e: any) {
-        Alert.alert(
-          "Couldn't refuse",
-          e?.response?.data?.message || "Please try again.",
-        );
+        Alert.alert("Couldn't refuse", apiErrorMessage(e, "Please try again."));
       } finally {
         setInFlight(null);
       }
     },
-    [inFlight],
+    [inFlight, myRole],
   );
 
   const handleWithdraw = useCallback(
@@ -614,6 +626,7 @@ export default function MatchesScreen() {
           onChat={handleChatWith}
           onDiscover={() => router.replace("/(tabs)")}
           matchCount={athleteMatches.length}
+          myRole={myRole}
         />
       ) : view === "sent" && !isParent ? (
         <SentList
@@ -845,7 +858,7 @@ export default function MatchesScreen() {
                         athlete I am recruiting" at a glance. */}
                     {match.kind === "peer" ? (
                       <View style={styles.peerBadge}>
-                        <Ionicons name="people" size={11} color={brand.primary} />
+                        <Ionicons name="people" size={11} color={semantic.success} />
                         <Text style={styles.peerBadgeText}>Community</Text>
                       </View>
                     ) : null}
@@ -855,14 +868,8 @@ export default function MatchesScreen() {
                         misleading default "Agent · " for athlete matches. */}
                     {match.organization ? (
                       <Text style={styles.matchRoleRow}>
-                        {match.recruiterRole === "agent"
-                          ? "Agent"
-                          : match.recruiterRole === "parent"
-                            ? "Parent"
-                            : match.recruiterRole === "athlete"
-                              ? "Athlete"
-                              : "Coach"}{" "}
-                        · {match.organization}
+                        {roleDisplayLabel(match.recruiterRole) ?? "Coach"} ·{" "}
+                        {match.organization}
                       </Text>
                     ) : null}
 
@@ -994,9 +1001,11 @@ function PeerCardHeader({
           <Text style={styles.peerTime}>{formatTimeAgo(timeIso)}</Text>
         </View>
         <View style={styles.peerMetaRow}>
-          {peer.role ? (
+          {roleDisplayLabel(peer.role) ? (
             <View style={styles.roleChip}>
-              <Text style={styles.roleChipText}>{peer.role}</Text>
+              <Text style={styles.roleChipText}>
+                {roleDisplayLabel(peer.role)}
+              </Text>
             </View>
           ) : null}
           {peer.location ? (
@@ -1031,6 +1040,7 @@ function ReceivedList({
   onChat,
   onDiscover,
   matchCount,
+  myRole,
 }: {
   rows: ReceivedRow[];
   /** Matches already made. Distinguishes "nobody drafted you" from "everyone
@@ -1042,10 +1052,12 @@ function ReceivedList({
   insetsBottom: number;
   inFlightId: string | null;
   onRefresh: () => void;
-  onAccept: (id: string, name: string) => void;
-  onRefuse: (id: string) => void;
+  onAccept: (id: string, name: string, role?: string | null) => void;
+  onRefuse: (id: string, role?: string | null) => void;
   onChat: (peer: PeerSummary) => void;
   onDiscover: () => void;
+  /** The viewer's role: a Draft from the same role came from Community. */
+  myRole?: string | null;
 }) {
   if (loading) {
     return (
@@ -1133,9 +1145,29 @@ function ReceivedList({
       <View style={styles.list}>
         {rows.map((r) => {
           const isPending = inFlightId === r.swiper.id;
+          const fromCommunity =
+            swipeModeFor(myRole, r.swiper.role) === "peer";
           return (
             <View key={r.swiper.id} style={styles.card}>
-              <PeerCardHeader peer={r.swiper} timeIso={r.created_at} />
+              <PeerCardHeader
+                peer={r.swiper}
+                timeIso={r.created_at}
+                rightExtra={
+                  // Same label the Matches list gives a Community
+                  // connection, so a peer Draft reads as one before it is
+                  // accepted too.
+                  fromCommunity ? (
+                    <View style={[styles.peerBadge, styles.peerBadgeInline]}>
+                      <Ionicons
+                        name="people"
+                        size={11}
+                        color={semantic.success}
+                      />
+                      <Text style={styles.peerBadgeText}>Community</Text>
+                    </View>
+                  ) : undefined
+                }
+              />
               <View style={styles.actionRow}>
                 <Pressable
                   style={({ pressed }) => [
@@ -1143,7 +1175,9 @@ function ReceivedList({
                     pressed && { opacity: 0.85 },
                     isPending && { opacity: 0.7 },
                   ]}
-                  onPress={() => onAccept(r.swiper.id, r.swiper.name)}
+                  onPress={() =>
+                    onAccept(r.swiper.id, r.swiper.name, r.swiper.role)
+                  }
                   disabled={isPending}
                 >
                   {isPending ? (
@@ -1168,7 +1202,7 @@ function ReceivedList({
                     pressed && { opacity: 0.85 },
                     isPending && { opacity: 0.7 },
                   ]}
-                  onPress={() => onRefuse(r.swiper.id)}
+                  onPress={() => onRefuse(r.swiper.id, r.swiper.role)}
                   disabled={isPending}
                 >
                   <Ionicons
@@ -1482,7 +1516,9 @@ function MessagesInbox({
                 </View>
               )}
             </View>
-            {c.role ? <Text style={styles.inboxRole}>{c.role}</Text> : null}
+            {roleDisplayLabel(c.role) ? (
+              <Text style={styles.inboxRole}>{roleDisplayLabel(c.role)}</Text>
+            ) : null}
           </View>
         </Pressable>
       ))}
@@ -1969,14 +2005,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "rgba(13,44,77,0.10)",
+    // Was brand.primary (#121212) on a 10% navy wash: near-black on the dark
+    // card, so the badge could not be read. Same green as the rest of the
+    // Community UI instead.
+    backgroundColor: "rgba(0,184,148,0.14)",
     marginBottom: 4,
   },
   peerBadgeText: {
     fontSize: 11,
     fontFamily: "Poppins_600SemiBold",
-    color: brand.primary,
+    color: semantic.success,
     letterSpacing: 0.2,
+  },
+  // Same badge inside a Received row's chip line rather than on its own line.
+  peerBadgeInline: {
+    marginBottom: 0,
   },
   matchLocationRow: {
     flexDirection: "row",

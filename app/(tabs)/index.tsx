@@ -20,7 +20,14 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
-import { setDiscoverMode } from "@/store/slices/discoverPreferencesSlice";
+import {
+  setDiscoverMode,
+  type DiscoverPreferences,
+} from "@/store/slices/discoverPreferencesSlice";
+import {
+  hasSeenCommunityHint,
+  markCommunityHintSeen,
+} from "@/store/discoverStorage";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
@@ -55,7 +62,12 @@ import type {
 import { AthleteCard } from "@/components/discover/AthleteCard";
 import { MatchCelebration } from "@/components/match/MatchCelebration";
 import { RootState } from "@/store";
-import { discoverService } from "@/services/discover";
+import {
+  ageGroupLabel,
+  discoverService,
+  type CommunityStatus,
+  type DiscoverQuery,
+} from "@/services/discover";
 import {
   getSportTheme,
   SportTheme,
@@ -78,6 +90,102 @@ import type { SharedValue } from "react-native-reanimated";
 
 type LastSwipe = { index: number; action: "draft" | "pass"; name: string } | null;
 type SnackbarState = { visible: boolean; message: string; canUndo: boolean };
+
+/**
+ * The feed request for the current preferences. An athlete in Community is
+ * matched on their OWN profile sport, which the server applies itself (and
+ * the Sport filter is hidden from them in Preferences), so the recruiting
+ * Sport filter is left out instead of being sent as a filter that would be
+ * ignored.
+ */
+function feedQueryFor(
+  preferences: DiscoverPreferences,
+  viewerRole: string | undefined,
+): DiscoverQuery {
+  const communityAthlete =
+    preferences.mode === "peer" && viewerRole === "athlete";
+  return {
+    mode: preferences.mode,
+    sport:
+      !communityAthlete && preferences.sport !== "all"
+        ? preferences.sport
+        : undefined,
+    distanceKm: preferences.distanceKm ?? undefined,
+    includeInternational: preferences.includeInternational,
+    country: preferences.country || undefined,
+    region: preferences.region || undefined,
+    city: preferences.city || undefined,
+    recruiterType:
+      preferences.recruiterType !== "all"
+        ? preferences.recruiterType
+        : undefined,
+    athletePosition:
+      preferences.athletePosition !== "all"
+        ? preferences.athletePosition
+        : undefined,
+    athleteLevel:
+      preferences.athleteLevel !== "all"
+        ? preferences.athleteLevel
+        : undefined,
+    verifiedRecruitersOnly: preferences.verifiedRecruitersOnly || undefined,
+  };
+}
+
+/**
+ * What to tell an athlete the server has kept out of the Community, by the
+ * reason it gave. `editProfile` offers the fix when the fix is theirs to make.
+ */
+function communityBlockedCopy(reason: string | null | undefined): {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  title: string;
+  message: string;
+  editProfile: boolean;
+} {
+  switch (reason) {
+    case "under_13":
+      return {
+        icon: "people-outline",
+        title: "Not available yet",
+        message: "Community is for athletes 13 and older.",
+        editProfile: false,
+      };
+    case "missing_dob":
+      return {
+        icon: "calendar-outline",
+        title: "Add your date of birth",
+        message: "Add your date of birth in Edit Profile to join the Community.",
+        editProfile: true,
+      };
+    case "missing_sport":
+      return {
+        icon: "football-outline",
+        title: "Add your sport",
+        message: "Add your sport in Edit Profile to join the Community.",
+        editProfile: true,
+      };
+    case "pending_guardian":
+      return {
+        icon: "shield-checkmark-outline",
+        title: "Waiting for your guardian",
+        message: "Available once your guardian approves your account.",
+        editProfile: false,
+      };
+    case "disabled":
+      return {
+        icon: "pause-circle-outline",
+        title: "Community is paused",
+        message: "Community isn't available right now.",
+        editProfile: false,
+      };
+    default:
+      return {
+        icon: "people-outline",
+        title: "Community is unavailable",
+        message: "Community isn't available for your account right now.",
+        editProfile: false,
+      };
+  }
+}
 
 const successNotify = () => {
   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
@@ -525,6 +633,14 @@ export default function DiscoverScreen() {
   // Network-failure flag for the initial feed fetch — renders a distinct
   // "Couldn't load" state (with Retry) instead of the terminal empty state.
   const [feedError, setFeedError] = useState(false);
+  // The viewer's Community status from the last feed response (peer mode):
+  // an athlete's own sport + age group, or why they can't join. null = not
+  // reported (recruit mode, or a server that predates it -- treated as open).
+  // Deliberately NOT cleared when a new fetch starts, so the "Your sport" line
+  // doesn't blink out and back on every filter change.
+  const [community, setCommunity] = useState<CommunityStatus | null>(null);
+  // One-time Community tip for athletes (see the effect below).
+  const [showCommunityHint, setShowCommunityHint] = useState(false);
   // Bumped by the Retry button to re-run the feed fetch effect.
   const [fetchNonce, setFetchNonce] = useState(0);
   const [lastSwipe, setLastSwipe] = useState<LastSwipe>(null);
@@ -579,39 +695,26 @@ export default function DiscoverScreen() {
   // Fetch the real discover feed from the backend (no mock fallback).
   // Parents included: the server returns them the coach/agent feed scoped to
   // their linked athlete (guardian proxy).
+  const viewerRole = user?.role;
+  // Bumped by every first-page fetch. A response (first page or next page)
+  // from an older generation is dropped: flip Recruiting -> Community and
+  // back quickly and the slower answer must not land on the other deck.
+  const feedGenRef = useRef(0);
   useEffect(() => {
+    const gen = ++feedGenRef.current;
     setApiCards(null); // null = loading
     setFeedError(false);
     discoverService
-      .getFeed({
-        mode: preferences.mode,
-        sport: preferences.sport !== "all" ? preferences.sport : undefined,
-        distanceKm: preferences.distanceKm ?? undefined,
-        includeInternational: preferences.includeInternational,
-        country: preferences.country || undefined,
-        region: preferences.region || undefined,
-        city: preferences.city || undefined,
-        recruiterType:
-          preferences.recruiterType !== "all"
-            ? preferences.recruiterType
-            : undefined,
-        athletePosition:
-          preferences.athletePosition !== "all"
-            ? preferences.athletePosition
-            : undefined,
-        athleteLevel:
-          preferences.athleteLevel !== "all"
-            ? preferences.athleteLevel
-            : undefined,
-        verifiedRecruitersOnly: preferences.verifiedRecruitersOnly || undefined,
-      })
+      .getFeed(feedQueryFor(preferences, viewerRole))
       .then((res) => {
+        if (gen !== feedGenRef.current) return;
         // Belt-and-braces: drop anything the user already actioned this
         // session so a refetch can never resurface a swiped profile.
         const cards = (res.cards || []).filter(
           (c: any) => !swipedIdsRef.current.has(c.id),
         );
         setApiCards(cards);
+        setCommunity(res.community ?? null);
         setSwipesRemaining(res.swipesRemaining);
         setSuperDraftsRemaining(res.superDraftsRemaining ?? null);
         setNextCursor(res.hasMore ? (res.nextCursor ?? null) : null);
@@ -623,6 +726,7 @@ export default function DiscoverScreen() {
         if (urls.length) ExpoImage.prefetch(urls);
       })
       .catch(() => {
+        if (gen !== feedGenRef.current) return;
         // No mock fallback — flag the failure so the UI shows a "Couldn't
         // load" + Retry state instead of the terminal empty state.
         setFeedError(true);
@@ -630,7 +734,7 @@ export default function DiscoverScreen() {
         setSwipesRemaining(null);
         setNextCursor(null);
       });
-  }, [preferences, fetchNonce]);
+  }, [preferences, viewerRole, fetchNonce]);
 
   // Fetch the next page. De-duped by id so a row that appears on two pages
   // (the boundary row is `<= cursor` on one side, never the other — but if
@@ -641,31 +745,16 @@ export default function DiscoverScreen() {
     if (isFetchingMoreRef.current) return;
     if (!nextCursor) return;
     isFetchingMoreRef.current = true;
+    const gen = feedGenRef.current;
     discoverService
       .getFeed({
-        mode: preferences.mode,
-        sport: preferences.sport !== "all" ? preferences.sport : undefined,
-        distanceKm: preferences.distanceKm ?? undefined,
-        includeInternational: preferences.includeInternational,
-        country: preferences.country || undefined,
-        region: preferences.region || undefined,
-        city: preferences.city || undefined,
-        recruiterType:
-          preferences.recruiterType !== "all"
-            ? preferences.recruiterType
-            : undefined,
-        athletePosition:
-          preferences.athletePosition !== "all"
-            ? preferences.athletePosition
-            : undefined,
-        athleteLevel:
-          preferences.athleteLevel !== "all"
-            ? preferences.athleteLevel
-            : undefined,
-        verifiedRecruitersOnly: preferences.verifiedRecruitersOnly || undefined,
+        ...feedQueryFor(preferences, viewerRole),
         cursor: nextCursor,
       })
       .then((res) => {
+        // The deck was refetched (mode or filters changed) while this page
+        // was in flight: it belongs to a deck that is gone.
+        if (gen !== feedGenRef.current) return;
         setApiCards((prev) => {
           const base = prev ?? [];
           const seen = new Set(base.map((c: any) => c.id));
@@ -674,6 +763,7 @@ export default function DiscoverScreen() {
           );
           return [...base, ...fresh];
         });
+        if (res.community) setCommunity(res.community);
         setSwipesRemaining(res.swipesRemaining);
         if (typeof res.superDraftsRemaining === "number")
           setSuperDraftsRemaining(res.superDraftsRemaining);
@@ -690,7 +780,7 @@ export default function DiscoverScreen() {
       .finally(() => {
         isFetchingMoreRef.current = false;
       });
-  }, [nextCursor, preferences]);
+  }, [nextCursor, preferences, viewerRole]);
 
   const displayName = user?.name?.split(" ")[0] || "Player";
   // Parents redirect to /matches before render, so this screen only shows for
@@ -713,6 +803,48 @@ export default function DiscoverScreen() {
           : user?.role === "parent"
             ? "parents"
             : "people";
+
+  // Athlete Community is limited to the same sport and age group, and the
+  // server can keep an athlete out of it entirely (under 13, no date of birth
+  // or sport, guardian approval pending, or switched off). Only a peer-mode
+  // answer counts: recruiting is never blocked by it.
+  const isAthleteViewer = user?.role === "athlete";
+  const communityBlocked = isPeerMode && community?.eligible === false;
+  const communityOpen = isPeerMode && community?.eligible === true;
+  // "Your sport: Soccer · Ages 13-17", from what the server says it matched on.
+  const communityLine =
+    communityOpen && isAthleteViewer && community
+      ? [
+          community.sport ? `Your sport: ${community.sport}` : null,
+          ageGroupLabel(community.ageGroup),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "";
+  // Hold the line's space while the feed loads, so the deck doesn't jump
+  // down a line when the answer lands.
+  const showCommunityLine =
+    isPeerMode && isAthleteViewer && (apiCards === null || communityLine !== "");
+
+  // One-time tip, the first time an athlete opens a Community they can use.
+  // Shown only once the server confirms they're in: an athlete it keeps out
+  // gets the reason instead, and sees the tip once they are let in. Marked as
+  // seen as soon as it shows.
+  const userId = user?.id;
+  useEffect(() => {
+    if (!isAthleteViewer || !communityOpen || !userId) return;
+    let cancelled = false;
+    hasSeenCommunityHint(userId).then((seen) => {
+      if (cancelled || seen) return;
+      setShowCommunityHint(true);
+      markCommunityHintSeen(userId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAthleteViewer, communityOpen, userId]);
+  const communityHintVisible =
+    showCommunityHint && isPeerMode && isAthleteViewer;
 
   // Real backend feed only — no static/mock fallback. Server already filters by
   // role/sport/country/etc.; here we just apply the local search query.
@@ -968,7 +1100,7 @@ export default function DiscoverScreen() {
     } else {
       setTimeout(() => setSwipeLock(false), 80);
     }
-  }, [discoverItems, focusedIndexSV, carouselTranslateX]);
+  }, [discoverItems, focusedIndexSV, carouselTranslateX, preferences.mode]);
 
   const handleMatchDismiss = useCallback(() => {
     setMatchOverlay({ visible: false, name: "", matchId: null, avatar: null });
@@ -1113,7 +1245,7 @@ export default function DiscoverScreen() {
     if (isParent) {
       Alert.alert(
         "Out of Drafts",
-        "Drafts come from your athlete's monthly allowance, so upgrading here wouldn't add any. Your athlete can upgrade from their own account for unlimited Drafts.",
+        "Drafts come from your athlete's daily allowance, so upgrading here wouldn't add any. Your athlete can upgrade from their own account for unlimited Drafts.",
       );
       return;
     }
@@ -1125,6 +1257,31 @@ export default function DiscoverScreen() {
     setFeedError(false);
     setFetchNonce((n) => n + 1);
   }, []);
+
+  // Kept out of the Community for a reason the athlete can fix (no date of
+  // birth, no sport)? The fix happens in Edit Profile, so ask the server again
+  // on the way back rather than leave the old reason on screen. A ref, so the
+  // check runs on focus only and never on the render that set the reason.
+  const communityBlockedRef = useRef(false);
+  useEffect(() => {
+    // Only the two reasons Edit Profile can fix. Under 13, a pending guardian
+    // or Community being switched off will not change by leaving and coming
+    // back, and asking again just flashes the spinner over the explanation.
+    communityBlockedRef.current =
+      communityBlocked &&
+      (community?.reason === "missing_dob" ||
+        community?.reason === "missing_sport");
+  }, [communityBlocked, community?.reason]);
+  useFocusEffect(
+    useCallback(() => {
+      if (communityBlockedRef.current) retryFeed();
+    }, [retryFeed]),
+  );
+
+  const leaveCommunity = useCallback(() => {
+    setShowCommunityHint(false);
+    dispatch(setDiscoverMode("recruit"));
+  }, [dispatch]);
 
   useEffect(() => {
     if (!matchOverlay.visible) return;
@@ -1311,7 +1468,10 @@ export default function DiscoverScreen() {
                 <Pressable
                   key={opt.id}
                   onPress={() => {
-                    if (!active) dispatch(setDiscoverMode(opt.id));
+                    if (active) return;
+                    // Leaving Community closes its one-time tip for good.
+                    if (opt.id !== "peer") setShowCommunityHint(false);
+                    dispatch(setDiscoverMode(opt.id));
                   }}
                   style={[styles.modeTab, active && styles.modeTabActive]}
                   accessibilityRole="tab"
@@ -1336,6 +1496,39 @@ export default function DiscoverScreen() {
               );
             })}
           </View>
+          {/* Athletes only meet athletes of their own sport and age group
+              in Community, so say which ones. The server decides both from
+              the profile; this repeats its answer. */}
+          {showCommunityLine && (
+            <Text
+              style={styles.communityLine}
+              numberOfLines={1}
+              accessibilityLiveRegion="polite"
+            >
+              {communityLine}
+            </Text>
+          )}
+          {communityHintVisible && (
+            <View style={styles.communityHint}>
+              <Ionicons name="people" size={16} color={semantic.success} />
+              <Text style={styles.communityHintText}>
+                Connect with athletes in your sport and age group to share
+                tips and train together.
+              </Text>
+              <Pressable
+                onPress={() => setShowCommunityHint(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss Community tip"
+              >
+                <Ionicons
+                  name="close"
+                  size={16}
+                  color="rgba(255,255,255,0.7)"
+                />
+              </Pressable>
+            </View>
+          )}
         </View>
       )}
 
@@ -1478,6 +1671,51 @@ export default function DiscoverScreen() {
                 <Text style={styles.emptyAdjustButtonText}>Retry</Text>
               </Pressable>
             </View>
+          ) : communityBlocked ? (
+            // The server kept this athlete out of the Community. Say why,
+            // and offer the fix when it is theirs to make -- "No athletes
+            // here yet" would send them hunting through filters that can't
+            // help.
+            (() => {
+              const copy = communityBlockedCopy(community?.reason);
+              return (
+                <View style={styles.emptyState}>
+                  <Ionicons
+                    name={copy.icon}
+                    size={64}
+                    color={sportTheme.accent}
+                  />
+                  <Text style={styles.emptyTitle}>{copy.title}</Text>
+                  <Text style={styles.emptySubtitle}>{copy.message}</Text>
+                  {copy.editProfile && (
+                    <Pressable
+                      style={styles.emptyAdjustButton}
+                      onPress={() => router.push("/edit-profile")}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name="create-outline"
+                        size={16}
+                        color={theme.accentText}
+                      />
+                      <Text style={styles.emptyAdjustButtonText}>
+                        Edit Profile
+                      </Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={styles.emptySecondaryButton}
+                    onPress={leaveCommunity}
+                    accessibilityRole="button"
+                    hitSlop={6}
+                  >
+                    <Text style={styles.emptySecondaryButtonText}>
+                      Back to {isRecruiter ? "Scouting" : "Recruiting"}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })()
           ) : (
             <View style={styles.emptyState}>
               <Ionicons
@@ -1489,9 +1727,11 @@ export default function DiscoverScreen() {
                 {isPeerMode ? `No ${peerNoun} here yet` : "You've seen everyone!"}
               </Text>
               <Text style={styles.emptySubtitle}>
-                {isPeerMode
-                  ? `Community grows as more ${peerNoun} join. Check back soon, or widen your search.`
-                  : "Check back later for new people, or widen your search."}
+                {communityOpen && isAthleteViewer
+                  ? "Community connects athletes in your sport and age group. It grows as more join, so check back soon, or widen your search."
+                  : isPeerMode
+                    ? `Community grows as more ${peerNoun} join. Check back soon, or widen your search.`
+                    : "Check back later for new people, or widen your search."}
               </Text>
               <Pressable
                 style={styles.emptyAdjustButton}
@@ -1855,6 +2095,35 @@ const styles = StyleSheet.create({
   },
   modeTabTextActive: {
     color: brand.primary,
+  },
+  // Fixed line height so the slot held open while the feed loads is exactly
+  // the height of the text that fills it.
+  communityLine: {
+    marginTop: 6,
+    height: 18,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Poppins_500Medium",
+    color: "rgba(255,255,255,0.8)",
+  },
+  communityHint: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  communityHintText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Poppins_500Medium",
+    color: theme.text,
   },
   searchBar: {
     flex: 1,
@@ -2240,6 +2509,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Poppins_600SemiBold",
     color: theme.accentText,
+  },
+  emptySecondaryButton: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  emptySecondaryButtonText: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    color: theme.textSecondary,
+    textDecorationLine: "underline",
   },
   actionsWrap: {
     paddingHorizontal: 20,

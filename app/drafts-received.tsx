@@ -20,9 +20,13 @@ import {
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
+import { useSelector } from "react-redux";
 import { brand, theme } from "@/config/colors";
-import { discoverService } from "@/services/discover";
+import type { RootState } from "@/store";
+import { discoverService, swipeModeFor } from "@/services/discover";
+import { apiErrorMessage } from "@/services/api";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
+import { roleDisplayLabel } from "@/lib/roles";
 
 interface DrafterSwiper {
   id: string;
@@ -65,6 +69,7 @@ export default function DraftsReceivedScreen() {
     Poppins_700Bold,
   });
 
+  const myRole = useSelector((state: RootState) => state.auth.user?.role);
   const [rows, setRows] = useState<DrafterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -90,12 +95,19 @@ export default function DraftsReceivedScreen() {
     load("initial");
   }, [load]);
 
+  // A Draft from someone of your own role came from Community; answer it in
+  // the same pool, or the server judges it as recruiting and refuses it.
   const handleDraftBack = useCallback(
-    async (swiperId: string, name: string) => {
+    async (swiperId: string, name: string, swiperRole?: string | null) => {
       if (pendingId) return;
       setPendingId(swiperId);
       try {
-        const res = await discoverService.swipe(swiperId, "draft");
+        const res = await discoverService.swipe(
+          swiperId,
+          "draft",
+          false,
+          swipeModeFor(myRole, swiperRole),
+        );
         setRows((prev) => prev.filter((r) => r.swiper.id !== swiperId));
         if (res.matched) {
           Alert.alert("Game On!", `You matched with ${name}.`);
@@ -103,13 +115,13 @@ export default function DraftsReceivedScreen() {
       } catch (e: any) {
         Alert.alert(
           "Couldn't draft back",
-          e?.response?.data?.message || "Please try again.",
+          apiErrorMessage(e, "Please try again."),
         );
       } finally {
         setPendingId(null);
       }
     },
-    [pendingId],
+    [pendingId, myRole],
   );
 
   if (redirecting || !fontsLoaded) return null;
@@ -243,9 +255,11 @@ export default function DraftsReceivedScreen() {
                             <Text style={styles.superChipText}>Super Draft</Text>
                           </View>
                         ) : null}
-                        {s.role ? (
+                        {roleDisplayLabel(s.role) ? (
                           <View style={styles.roleChip}>
-                            <Text style={styles.roleChipText}>{s.role}</Text>
+                            <Text style={styles.roleChipText}>
+                              {roleDisplayLabel(s.role)}
+                            </Text>
                           </View>
                         ) : null}
                         {s.location ? (
@@ -269,7 +283,9 @@ export default function DraftsReceivedScreen() {
                       pressed && { opacity: 0.85 },
                       isPending && { opacity: 0.7 },
                     ]}
-                    onPress={() => handleDraftBack(s.id, s.name || "them")}
+                    onPress={() =>
+                      handleDraftBack(s.id, s.name || "them", s.role)
+                    }
                     disabled={isPending}
                   >
                     {isPending ? (

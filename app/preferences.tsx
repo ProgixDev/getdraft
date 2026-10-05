@@ -36,6 +36,7 @@ import {
 } from "@/store/slices/discoverPreferencesSlice";
 import { isFreePlan, usePlanId } from "@/hooks/use-plan";
 import { useCitySearch } from "@/hooks/use-region-search";
+import { profilesService } from "@/services/profiles";
 
 // Cap the picker list so a long location list scrolls inside the sheet instead
 // of overflowing past the bottom edge (where it was previously cut off).
@@ -77,19 +78,25 @@ function SelectorRow({
   value,
   onPress,
   helperText,
+  locked = false,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
-  onPress: () => void;
+  onPress?: () => void;
   helperText?: string;
+  /** Shown but not changeable here: a lock instead of the chevron. */
+  locked?: boolean;
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={locked ? undefined : onPress}
+      disabled={locked}
+      accessibilityState={{ disabled: locked }}
       style={({ pressed }) => [
         styles.selectorRow,
-        pressed && styles.rowPressed,
+        locked && styles.selectorRowLocked,
+        pressed && !locked && styles.rowPressed,
       ]}
     >
       <View style={styles.selectorIconWrap}>
@@ -102,7 +109,11 @@ function SelectorRow({
           <Text style={styles.selectorHelper}>{helperText}</Text>
         ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+      <Ionicons
+        name={locked ? "lock-closed" : "chevron-forward"}
+        size={locked ? 16 : 18}
+        color={theme.textMuted}
+      />
     </Pressable>
   );
 }
@@ -283,6 +294,39 @@ export default function PreferencesScreen() {
   const peer = preferences.mode === "peer";
   const targetsAthletes = peer ? user?.role === "athlete" : isRecruiter;
   const targetsRecruiters = peer ? isRecruiter : !isRecruiter;
+  // An athlete's Community is their OWN sport (and age group): the server
+  // matches on the profile sport and ignores the Sport filter for them. So the
+  // filter is shown locked to that sport, and Position / Level offer that
+  // sport's positions rather than whichever sport the recruiting filter holds.
+  const communityAthlete = peer && user?.role === "athlete";
+  const modeName = peer ? "Community" : isRecruiter ? "Scouting" : "Recruiting";
+
+  // undefined = not known (loading, or couldn't load), null = no sport set.
+  const [profileSport, setProfileSport] = useState<string | null | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!communityAthlete) return;
+    let cancelled = false;
+    profilesService
+      .getAthleteProfile()
+      .then((p: any) => {
+        if (cancelled) return;
+        const s = typeof p?.sport === "string" ? p.sport.trim() : "";
+        setProfileSport(s || null);
+      })
+      .catch((err: any) => {
+        // 404 = no athlete profile yet, so genuinely no sport. Anything else
+        // (offline, server hiccup) says nothing about the profile.
+        if (!cancelled && err?.response?.status === 404) setProfileSport(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [communityAthlete]);
+
+  // The sport Position / Level are drawn from.
+  const filterSportName = communityAthlete ? profileSport : preferences.sport;
 
   // Position / level / verified-only are a paid feature (Starter and up).
   // The server strips them from a free user's request anyway; the lock here
@@ -305,14 +349,18 @@ export default function PreferencesScreen() {
     [],
   );
 
-  const selectedSport = useMemo(
-    () =>
-      SPORTS_WITH_POSITIONS.find((sport) => sport.name === preferences.sport),
-    [preferences.sport],
-  );
+  // Undefined for "all", an unknown sport, or a Community athlete whose
+  // profile sport hasn't loaded -- all of which offer "Any" only.
+  const selectedSport = useMemo(() => {
+    const name = (filterSportName ?? "").trim().toLowerCase();
+    if (!name || name === "all") return undefined;
+    return SPORTS_WITH_POSITIONS.find(
+      (sport) => sport.name.toLowerCase() === name,
+    );
+  }, [filterSportName]);
 
   const athletePositionOptions = useMemo<PickerOption[]>(() => {
-    if (!selectedSport || preferences.sport === "all") {
+    if (!selectedSport) {
       return [{ label: "Any Position", value: "all" }];
     }
 
@@ -323,10 +371,10 @@ export default function PreferencesScreen() {
         value: position,
       })),
     ];
-  }, [preferences.sport, selectedSport]);
+  }, [selectedSport]);
 
   const athleteLevelOptions = useMemo<PickerOption[]>(() => {
-    if (!selectedSport || preferences.sport === "all") {
+    if (!selectedSport) {
       return [{ label: "Any Athletic Level", value: "all" }];
     }
 
@@ -334,7 +382,20 @@ export default function PreferencesScreen() {
       { label: "Any Athletic Level", value: "all" },
       ...selectedSport.levels.map((level) => ({ label: level, value: level })),
     ];
-  }, [preferences.sport, selectedSport]);
+  }, [selectedSport]);
+
+  // Why Position / Level only offer "Any" (undefined = they don't).
+  const noSportHelp = (what: string): string | undefined => {
+    if (selectedSport) return undefined;
+    if (communityAthlete) {
+      return profileSport === null
+        ? "Add your sport in Edit Profile first"
+        : undefined;
+    }
+    return preferences.sport === "all"
+      ? `Pick a sport first for ${what}`
+      : undefined;
+  };
 
   const cityOptions = useMemo<PickerOption[]>(() => {
     const countryCode = findCountryByName(preferences.country)?.code ?? "";
@@ -447,7 +508,9 @@ export default function PreferencesScreen() {
   const handleReset = () => {
     Alert.alert(
       "Reset filters?",
-      "This restores every discovery filter to its default.",
+      // Reset leaves the Recruiting | Community choice alone (see the
+      // slice); say so, so nobody expects it to switch them back.
+      `This restores every discovery filter to its default. You'll stay in ${modeName}.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -563,12 +626,31 @@ export default function PreferencesScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sport & Role Filters</Text>
-          <SelectorRow
-            icon="football-outline"
-            label="Sport"
-            value={selectedSportLabel}
-            onPress={() => setActiveModal("sport")}
-          />
+          {communityAthlete ? (
+            <SelectorRow
+              icon="football-outline"
+              label="Sport"
+              value={
+                selectedSport
+                  ? `${selectedSport.emoji}  ${selectedSport.name}`
+                  : (profileSport ??
+                    (profileSport === null ? "Not set" : "Your profile sport"))
+              }
+              helperText={
+                profileSport === null
+                  ? "Add your sport in Edit Profile to join the Community."
+                  : "Community connects you with athletes in your own sport and age group. Change your sport in Edit Profile."
+              }
+              locked
+            />
+          ) : (
+            <SelectorRow
+              icon="football-outline"
+              label="Sport"
+              value={selectedSportLabel}
+              onPress={() => setActiveModal("sport")}
+            />
+          )}
 
           {targetsAthletes ? (
             <>
@@ -579,9 +661,7 @@ export default function PreferencesScreen() {
                 helperText={
                   filtersLocked
                     ? LOCKED_HELP
-                    : preferences.sport === "all"
-                      ? "Pick a sport first for specific positions"
-                      : undefined
+                    : noSportHelp("specific positions")
                 }
                 onPress={filtersLocked ? goUpgrade : () => setActiveModal("position")}
               />
@@ -592,9 +672,7 @@ export default function PreferencesScreen() {
                 helperText={
                   filtersLocked
                     ? LOCKED_HELP
-                    : preferences.sport === "all"
-                      ? "Pick a sport first for sport-specific levels"
-                      : undefined
+                    : noSportHelp("sport-specific levels")
                 }
                 onPress={filtersLocked ? goUpgrade : () => setActiveModal("level")}
               />
@@ -794,6 +872,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: theme.surface,
+  },
+  selectorRowLocked: {
+    opacity: 0.75,
   },
   selectorIconWrap: {
     width: 34,

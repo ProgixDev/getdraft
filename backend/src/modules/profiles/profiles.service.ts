@@ -1,15 +1,59 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
+import { UserRole } from '../../common/types';
+import { ageFromDob } from '../../common/utils/age';
+import { reevaluateMinorActivation } from '../../common/utils/activation';
 import { UpsertAthleteProfileDto } from './dto/athlete-profile.dto';
 import { UpsertRecruiterProfileDto } from './dto/recruiter-profile.dto';
 import { UpsertParentProfileDto } from './dto/parent-profile.dto';
 
+export const DOB_LOCKED_MESSAGE =
+  "Date of birth can't be changed. Contact support.";
+
+/**
+ * A date of birth as its 'YYYY-MM-DD' calendar date (how Postgres stores a
+ * DATE), or null when there is none. A value that is not a date comes back
+ * as-is, so it can never compare equal to a real one.
+ */
+function dobDay(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? null
+      : value.toISOString().slice(0, 10);
+  }
+  const raw = String(value).trim();
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(raw);
+  if (match) return match[1];
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime())
+    ? raw
+    : parsed.toISOString().slice(0, 10);
+}
+
+/** Whole days between two 'YYYY-MM-DD' dates (NaN if either is not one). */
+function daysApart(a: string, b: string): number {
+  return (
+    Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) /
+    86_400_000
+  );
+}
+
+/** Age shown on a profile: whole years, or null when unknown / in the future. */
+function publicAge(dateOfBirth: unknown): number | null {
+  const age = ageFromDob(dobDay(dateOfBirth));
+  return age !== null && age >= 0 ? age : null;
+}
+
 @Injectable()
 export class ProfilesService {
+  private readonly logger = new Logger(ProfilesService.name);
+
   constructor(private supabaseService: SupabaseService) {}
 
   // --- Athlete Profile ---
@@ -75,19 +119,54 @@ export class ProfilesService {
       .eq('user_id', userId)
       .single();
 
+    // Date of birth is locked once onboarding is done and one is stored. It
+    // decides the guardian gate (under 18), the KYC waiver (minors) and the
+    // Community age group (13-17 vs 18+), so changing it would let an adult
+    // move into the 13-17 Community, or a minor out from under their
+    // guardian. Before onboarding it can still be corrected, and an account
+    // that never gave one may add it once.
+    const write: UpsertAthleteProfileDto = { ...dto };
+    let onboarded: boolean | undefined;
+    const isOnboarded = async () =>
+      (onboarded ??= await this.isOnboarded(userId));
+    const storedDob = dobDay(existing?.date_of_birth);
+    let dobAddedNow = false;
+    if (dto.date_of_birth !== undefined) {
+      if (storedDob) {
+        if (await isOnboarded()) {
+          const incoming = dobDay(dto.date_of_birth);
+          // Edit Profile resends the stored date on every save, and the
+          // app's date picker shifts it back a day east of UTC (local
+          // midnight through toISOString). Same date, or that one-day shift:
+          // keep what is stored and carry on, so saving a bio still works.
+          // Anything else, including clearing it, is a change.
+          if (incoming !== null && daysApart(incoming, storedDob) <= 1) {
+            delete write.date_of_birth;
+          } else {
+            throw new BadRequestException(DOB_LOCKED_MESSAGE);
+          }
+        }
+      } else {
+        dobAddedNow = dobDay(dto.date_of_birth) !== null;
+      }
+    }
+
     if (existing) {
-      const merged = { ...existing, ...dto } as UpsertAthleteProfileDto;
+      const merged = { ...existing, ...write } as UpsertAthleteProfileDto;
       const profileCompletion = this.calculateAthleteCompletion(merged);
       const { data, error } = await supabase
         .from('athlete_profiles')
         .update({
-          ...dto,
+          ...write,
           profile_completion: profileCompletion,
         })
         .eq('user_id', userId)
         .select()
         .single();
       if (error) throw new BadRequestException(error.message);
+      if (dobAddedNow && (await isOnboarded())) {
+        await this.applyGuardianGateToLateDob(userId);
+      }
       await this.ensureAvatarFromPhotos(userId, data?.photos);
       return data;
     }
@@ -102,19 +181,68 @@ export class ProfilesService {
       );
     }
 
-    const profileCompletion = this.calculateAthleteCompletion(dto);
+    const profileCompletion = this.calculateAthleteCompletion(write);
     const { data, error } = await supabase
       .from('athlete_profiles')
       .insert({
         user_id: userId,
-        ...dto,
+        ...write,
         profile_completion: profileCompletion,
       })
       .select()
       .single();
     if (error) throw new BadRequestException(error.message);
+    if (dobAddedNow && (await isOnboarded())) {
+      await this.applyGuardianGateToLateDob(userId);
+    }
     await this.ensureAvatarFromPhotos(userId, data?.photos);
     return data;
+  }
+
+  /** users.is_onboarded, read fresh (it gates the date-of-birth lock). */
+  private async isOnboarded(userId: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAdminClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('is_onboarded')
+      .eq('id', userId)
+      .maybeSingle();
+    // Unknown is not "not onboarded": that would unlock the date of birth.
+    if (error) {
+      throw new BadRequestException(
+        `Could not read the account: ${error.message}`,
+      );
+    }
+    return data?.is_onboarded === true;
+  }
+
+  /**
+   * A date of birth given for the first time AFTER onboarding. The guardian
+   * gate runs at onboarding (users.service completeOnboarding), so an account
+   * that finished it without a DOB is 'active' as an adult. Saying now that
+   * they are 15 has to go through the same gate, or anyone could walk into
+   * the 13-17 Community without a guardian. reevaluateMinorActivation leaves
+   * adults alone and moves a minor with no approved guardian link to
+   * pending_guardian, exactly as onboarding would have.
+   */
+  private async applyGuardianGateToLateDob(userId: string): Promise<void> {
+    const supabase = this.supabaseService.getAdminClient();
+    try {
+      await reevaluateMinorActivation(supabase, userId);
+    } catch (err) {
+      // The gate could not be applied. Undo the date of birth rather than
+      // leave a minor's date on an ungated account; a retry runs this again.
+      this.logger.error(
+        `[activation] guardian gate after a late DOB failed for ${userId}: ${(err as Error).message}`,
+      );
+      await supabase
+        .from('athlete_profiles')
+        .update({ date_of_birth: null })
+        .eq('user_id', userId);
+      throw new BadRequestException(
+        'Could not save your date of birth right now. Try again.',
+      );
+    }
   }
 
   // --- Recruiter Profile ---
@@ -211,8 +339,27 @@ export class ProfilesService {
 
   // --- Public profile by user ID ---
 
-  async getPublicProfile(userId: string, viewerId?: string) {
+  /**
+   * Someone's profile as another user sees it. Two things never leave for a
+   * viewer who is not the owner:
+   *   - the exact date of birth: `age` (whole years) replaces it, top level
+   *     and inside an athlete's `profile`. Community now puts athletes in
+   *     front of each other, and a birth date is an identifier;
+   *   - guardian links: a parent profile's child_athlete_id is dropped, and
+   *     an athlete's parent_user_id is only given to coaches and agents,
+   *     who need it to address outreach to the guardian (POST /outreach
+   *     takes the parent's id). Other athletes and parents get null.
+   * The owner reading their own profile gets everything, as before.
+   */
+  async getPublicProfile(
+    userId: string,
+    viewerId?: string,
+    viewerRole?: UserRole | string,
+  ) {
     const supabase = this.supabaseService.getAdminClient();
+    const isOwner = !!viewerId && viewerId === userId;
+    const viewerSendsOutreach =
+      viewerRole === UserRole.COACH || viewerRole === UserRole.RECRUITER;
 
     const { data: user } = await supabase
       .from('users')
@@ -226,11 +373,13 @@ export class ProfilesService {
 
     if (!user) throw new NotFoundException('User not found');
 
-    let profile = null;
+    let profile: Record<string, any> | null = null;
+    let age: number | null = null;
     // Surfaced only for athletes so a recruiter/coach knows which parent
     // to address via POST /outreach. Picks the first approved guardian
     // link; non-athletes and athletes without an approved guardian get
-    // null and the frontend hides the "Send outreach" affordance.
+    // null and the frontend hides the "Send outreach" affordance. Only
+    // looked up for the owner and for coaches/agents (see above).
     let parent_user_id: string | null = null;
 
     if (user.role === 'athlete') {
@@ -239,16 +388,26 @@ export class ProfilesService {
         .select('*')
         .eq('user_id', userId)
         .single();
-      profile = data;
+      age = publicAge(data?.date_of_birth);
+      if (data) {
+        if (isOwner) {
+          profile = { ...data, age };
+        } else {
+          const { date_of_birth: _dateOfBirth, ...shared } = data;
+          profile = { ...shared, age };
+        }
+      }
 
-      const { data: guardianLink } = await supabase
-        .from('guardian_links')
-        .select('guardian_user_id')
-        .eq('athlete_user_id', userId)
-        .eq('status', 'approved')
-        .limit(1)
-        .maybeSingle();
-      parent_user_id = guardianLink?.guardian_user_id ?? null;
+      if (isOwner || viewerSendsOutreach) {
+        const { data: guardianLink } = await supabase
+          .from('guardian_links')
+          .select('guardian_user_id')
+          .eq('athlete_user_id', userId)
+          .eq('status', 'approved')
+          .limit(1)
+          .maybeSingle();
+        parent_user_id = guardianLink?.guardian_user_id ?? null;
+      }
     } else if (user.role === 'coach' || user.role === 'recruiter') {
       const { data } = await supabase
         .from('recruiter_profiles')
@@ -262,7 +421,13 @@ export class ProfilesService {
         .select('*')
         .eq('user_id', userId)
         .single();
-      profile = data;
+      if (data && !isOwner) {
+        // Which athlete this parent is guardian of is theirs to share.
+        const { child_athlete_id: _childAthleteId, ...shared } = data;
+        profile = shared;
+      } else {
+        profile = data;
+      }
     }
 
     // Match status for the viewer — powers the "Matched" badge + Message
@@ -278,6 +443,9 @@ export class ProfilesService {
         .or(
           `and(user_1_id.eq.${viewerId},user_2_id.eq.${userId}),and(user_1_id.eq.${userId},user_2_id.eq.${viewerId})`,
         )
+        // Only a live match. An unmatched pair, or a Community match closed
+        // for breaking the age / sport rules, must not keep its badge.
+        .eq('is_active', true)
         .limit(1)
         .maybeSingle();
       if (match) {
@@ -286,7 +454,7 @@ export class ProfilesService {
       }
     }
 
-    return { ...user, profile, parent_user_id, is_matched, match_id };
+    return { ...user, age, profile, parent_user_id, is_matched, match_id };
   }
 
   // --- Helpers ---

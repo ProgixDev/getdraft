@@ -15,6 +15,11 @@ import {
   DiscoverMode,
   CurrentUserPayload,
 } from '../../common/types';
+import { dobBoundsForAgeGroup } from '../../common/utils/age';
+import {
+  COMMUNITY_BLOCKED_MESSAGES,
+  COMMUNITY_MISMATCH_MESSAGE,
+} from './community';
 
 // The Discover module runs on Prisma (not the Supabase client), so the spec
 // mocks PrismaService + NotificationsService. Swipe limits are now MONTHLY
@@ -47,6 +52,87 @@ describe('DiscoverService', () => {
     swipes_used_today = 0,
     bonus_swipes = 0,
   ) => ({ plan_id, swipes_used_today, swipes_reset_at: new Date(), bonus_swipes });
+
+  // ---- Community fixtures ---------------------------------------------
+
+  // A date of birth `years` years and `days` days ago, the way Prisma returns
+  // a DATE column (UTC midnight). The day offset keeps it off the birthday.
+  const dobYearsAgo = (years: number, days = 30) => {
+    const t = new Date();
+    return new Date(
+      Date.UTC(
+        t.getUTCFullYear() - years,
+        t.getUTCMonth(),
+        t.getUTCDate() - days,
+      ),
+    );
+  };
+
+  // A public_users row as the swipe / community queries select it.
+  const athleteRow = (
+    sport: string | null = 'Soccer',
+    dob: Date | null = dobYearsAgo(15),
+    activation = 'active',
+  ) => ({
+    is_banned: false,
+    role: 'athlete',
+    activation_status: activation,
+    athlete_profiles: { sport, date_of_birth: dob },
+  });
+
+  // Route public_users.findUnique by id, so the swiper and the target each
+  // get their own row. Unknown ids fall back to the default coach target.
+  const usersById = (rows: Record<string, unknown>) =>
+    prisma.public_users.findUnique.mockImplementation(({ where }: any) =>
+      Promise.resolve(rows[where.id] ?? { is_banned: false, role: 'coach' }),
+    );
+
+  // A feed/map row: an athlete with a card-worthy profile.
+  const feedAthlete = (id: string, sport: string, dob: Date | null) => ({
+    id,
+    name: id,
+    role: 'athlete',
+    avatar_url: null,
+    location: 'Montreal, QC',
+    country: 'Canada',
+    latitude: 45.508888,
+    longitude: -73.561668,
+    created_at: new Date(),
+    kyc_status: 'none',
+    activation_status: 'active',
+    preferences: {},
+    email: `${id}@example.com`,
+    athlete_profiles: {
+      sport,
+      position: null,
+      level: null,
+      bio: null,
+      class_year: null,
+      gpa: null,
+      height: null,
+      weight: null,
+      photos: [],
+      videos: [],
+      forty_yard_dash: null,
+      awards: [],
+      date_of_birth: dob,
+    },
+    recruiter_profiles: null,
+  });
+
+  const likesCall = (id: string) => [
+    'select public.increment_likes_received($1::uuid)',
+    id,
+  ];
+
+  const originalPeerFlag = process.env.PEER_ATHLETES_ENABLED;
+  afterEach(() => {
+    if (originalPeerFlag === undefined) {
+      delete process.env.PEER_ATHLETES_ENABLED;
+    } else {
+      process.env.PEER_ATHLETES_ENABLED = originalPeerFlag;
+    }
+  });
 
   beforeEach(async () => {
     prisma = {
@@ -245,17 +331,15 @@ describe('DiscoverService', () => {
       expect(prisma.swipes.create).toHaveBeenCalled();
     });
 
-    it('blocks an illegal role pair (athlete cannot draft another athlete)', async () => {
-      prisma.public_users.findUnique.mockResolvedValueOnce({
-        is_banned: false,
-        role: 'athlete',
-      });
+    it('blocks an illegal role pair (athlete cannot recruit-draft another athlete)', async () => {
+      usersById({ 'athlete-1': athleteRow(), 'ath-2': athleteRow() });
       await expect(
         service.swipe(athleteUser, {
           targetUserId: 'ath-2',
           direction: SwipeDirection.DRAFT,
+          mode: DiscoverMode.RECRUIT,
         }),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow('You cannot match with this user');
       expect(prisma.swipes.create).not.toHaveBeenCalled();
     });
 
@@ -290,9 +374,10 @@ describe('DiscoverService', () => {
     // ---- Community (peer mode), migration 044 ---------------------------
 
     it('peer mode: an athlete can draft another athlete, and the match is kind=peer', async () => {
-      prisma.public_users.findUnique.mockResolvedValueOnce({
-        is_banned: false,
-        role: 'athlete',
+      // Both eligible: same sport (any case / spaces), both 13-17, active.
+      usersById({
+        'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+        'ath-2': athleteRow('  soccer ', dobYearsAgo(16)),
       });
       prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
       const result = await service.swipe(athleteUser, {
@@ -326,7 +411,7 @@ describe('DiscoverService', () => {
       expect(prisma.swipes.create).not.toHaveBeenCalled();
     });
 
-    it('recruit mode (or no mode) still rejects a same-role pair', async () => {
+    it('explicit recruit mode still rejects a same-role pair', async () => {
       prisma.public_users.findUnique.mockResolvedValue({
         is_banned: false,
         role: 'recruiter',
@@ -338,13 +423,63 @@ describe('DiscoverService', () => {
           mode: DiscoverMode.RECRUIT,
         }),
       ).rejects.toThrow(ForbiddenException);
-      await expect(
-        service.swipe(recruiterUser, {
-          targetUserId: 'rec-2',
-          direction: SwipeDirection.DRAFT,
-        }),
-      ).rejects.toThrow(ForbiddenException);
       expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('no mode + same role is inferred as peer (old builds: Globe, Draft Board, Draft back)', async () => {
+      prisma.public_users.findUnique.mockResolvedValue({
+        is_banned: false,
+        role: 'recruiter',
+      });
+      prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+      const result = await service.swipe(recruiterUser, {
+        targetUserId: 'rec-2',
+        direction: SwipeDirection.DRAFT,
+      });
+      expect(result.matched).toBe(true);
+      expect(prisma.matches.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ kind: 'peer' }),
+        }),
+      );
+      // Peer Drafts never feed the talent counter, inferred or not.
+      expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+        ...likesCall('rec-2'),
+      );
+    });
+
+    it('no mode + parent → parent is peer: the parent acts as themselves', async () => {
+      prisma.public_users.findUnique.mockResolvedValue({
+        is_banned: false,
+        role: 'parent',
+      });
+      await service.swipe(parentUser, {
+        targetUserId: 'parent-2',
+        direction: SwipeDirection.DRAFT,
+      });
+      expect(prisma.swipes.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ swiper_id: 'parent-1' }),
+        }),
+      );
+      expect(prisma.guardian_links.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('no mode + different roles stays recruit: likes count, match is kind=recruit', async () => {
+      prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+      const result = await service.swipe(athleteUser, {
+        targetUserId: 'rec-1', // default target: a coach
+        direction: SwipeDirection.DRAFT,
+      });
+      expect(result.matched).toBe(true);
+      expect(prisma.matches.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ kind: 'recruit' }),
+        }),
+      );
+      expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        ...likesCall('rec-1'),
+      );
     });
 
     it('peer mode: a parent acts as themselves, not as their athlete', async () => {
@@ -390,6 +525,447 @@ describe('DiscoverService', () => {
           direction: SwipeDirection.PASS,
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  // ---- Athlete Community: same sport, same age group, both active --------
+
+  describe('Community (athlete ↔ athlete)', () => {
+    const peerDraft = (targetUserId = 'ath-2') =>
+      service.swipe(athleteUser, {
+        targetUserId,
+        direction: SwipeDirection.DRAFT,
+        mode: DiscoverMode.PEER,
+      });
+
+    describe('swipe', () => {
+      it('same sport + same age group (adults too) is allowed and matches', async () => {
+        usersById({
+          'athlete-1': athleteRow('Hockey', dobYearsAgo(24)),
+          'ath-2': athleteRow('HOCKEY', dobYearsAgo(31)),
+        });
+        prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+        const result = await peerDraft();
+        expect(result.matched).toBe(true);
+        expect(prisma.matches.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ kind: 'peer' }),
+          }),
+        );
+      });
+
+      it('a different sport is refused with 403, nothing recorded', async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Basketball', dobYearsAgo(15)),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_MISMATCH_MESSAGE),
+        );
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+        expect(prisma.matches.create).not.toHaveBeenCalled();
+      });
+
+      it('youth vs adult is refused with 403, both ways', async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(25)),
+        });
+        await expect(peerDraft()).rejects.toThrow(ForbiddenException);
+
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(25)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(15)),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_MISMATCH_MESSAGE),
+        );
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+
+      it('the 18th birthday is the line: 17 and 364 days is still youth', async () => {
+        // Fixed clock (only Date is faked), so this never lands on a 29 Feb.
+        jest.useFakeTimers({
+          now: new Date(Date.UTC(2026, 8, 30, 12)),
+          doNotFake: [
+            'nextTick',
+            'setImmediate',
+            'clearImmediate',
+            'setInterval',
+            'clearInterval',
+            'setTimeout',
+            'clearTimeout',
+            'queueMicrotask',
+            'hrtime',
+            'performance',
+          ],
+        });
+        try {
+          usersById({
+            'athlete-1': athleteRow('Soccer', dobYearsAgo(16)),
+            // 18 tomorrow: youth today.
+            'ath-2': athleteRow('Soccer', dobYearsAgo(18, -1)),
+          });
+          await expect(peerDraft()).resolves.toMatchObject({ matched: false });
+
+          prisma.swipes.create.mockClear();
+          usersById({
+            'athlete-1': athleteRow('Soccer', dobYearsAgo(16)),
+            // 18 today: adult.
+            'ath-2': athleteRow('Soccer', dobYearsAgo(18, 0)),
+          });
+          await expect(peerDraft()).rejects.toThrow(ForbiddenException);
+          expect(prisma.swipes.create).not.toHaveBeenCalled();
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it('an under-13 swiper is refused with the under-13 message', async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(12)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(12)),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_BLOCKED_MESSAGES.under_13),
+        );
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+
+      it("an under-13 target is refused without saying why (no age leak)", async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(12)),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_MISMATCH_MESSAGE),
+        );
+      });
+
+      it('a missing date of birth, on either side, is refused', async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', null),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(15)),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_BLOCKED_MESSAGES.missing_dob),
+        );
+
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', null),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_MISMATCH_MESSAGE),
+        );
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+
+      it('a swiper with no sport is refused', async () => {
+        usersById({
+          'athlete-1': athleteRow('  ', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(15)),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_BLOCKED_MESSAGES.missing_sport),
+        );
+      });
+
+      it('a target still waiting on a guardian is refused with 403', async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(15), 'pending_guardian'),
+        });
+        await expect(peerDraft()).rejects.toThrow(
+          new ForbiddenException(COMMUNITY_MISMATCH_MESSAGE),
+        );
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+
+      it('a banned target is still a 404', async () => {
+        usersById({
+          'athlete-1': athleteRow(),
+          'ath-2': { ...athleteRow(), is_banned: true },
+        });
+        await expect(peerDraft()).rejects.toThrow('User not found');
+      });
+
+      it('no mode between two athletes is Community: full rules, kind=peer, no likes', async () => {
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(14)),
+        });
+        prisma.swipes.findFirst.mockResolvedValue({ id: 'mutual-1' });
+        const result = await service.swipe(athleteUser, {
+          targetUserId: 'ath-2',
+          direction: SwipeDirection.DRAFT,
+        });
+        expect(result.matched).toBe(true);
+        expect(prisma.matches.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ kind: 'peer' }),
+          }),
+        );
+        expect(prisma.$executeRawUnsafe).not.toHaveBeenCalledWith(
+          ...likesCall('ath-2'),
+        );
+
+        // ...and an old build cannot use the missing mode to skip the rules.
+        prisma.swipes.create.mockClear();
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Soccer', dobYearsAgo(30)),
+        });
+        await expect(
+          service.swipe(athleteUser, {
+            targetUserId: 'ath-2',
+            direction: SwipeDirection.DRAFT,
+          }),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
+
+      it('a Pass always works between athletes, so any peer Draft can be refused', async () => {
+        // Youth refusing an adult's Draft sent before the rules existed.
+        usersById({
+          'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+          'ath-2': athleteRow('Basketball', dobYearsAgo(30)),
+        });
+        const result = await service.swipe(athleteUser, {
+          targetUserId: 'ath-2',
+          direction: SwipeDirection.PASS,
+        });
+        expect(result.matched).toBe(false);
+        expect(prisma.swipes.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ direction: 'pass' }),
+          }),
+        );
+      });
+
+      it.each(['false', 'off', '0', 'No'])(
+        'PEER_ATHLETES_ENABLED=%p turns athlete Drafts off',
+        async (flag) => {
+          process.env.PEER_ATHLETES_ENABLED = flag;
+          usersById({
+            'athlete-1': athleteRow('Soccer', dobYearsAgo(15)),
+            'ath-2': athleteRow('Soccer', dobYearsAgo(15)),
+          });
+          await expect(peerDraft()).rejects.toThrow(
+            new ForbiddenException(COMMUNITY_BLOCKED_MESSAGES.disabled),
+          );
+        },
+      );
+    });
+
+    describe('feed (mode=peer)', () => {
+      it('an eligible athlete gets their own sport and age group; the sport param is ignored', async () => {
+        usersById({ 'athlete-1': athleteRow(' Soccer ', dobYearsAgo(15)) });
+        const result = await service.getFeed(athleteUser, {
+          mode: DiscoverMode.PEER,
+          sport: 'Basketball',
+        });
+
+        expect(result.community).toEqual({
+          eligible: true,
+          reason: null,
+          sport: 'Soccer',
+          ageGroup: 'youth',
+        });
+        const where = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+        expect(where.OR).toHaveLength(1);
+        const branch = where.OR[0];
+        expect(branch.role).toBe('athlete');
+        expect(branch.activation_status).toBe('active');
+        expect(branch.athlete_profiles.is.sport).toEqual({
+          equals: 'Soccer',
+          mode: 'insensitive',
+        });
+        const bounds = dobBoundsForAgeGroup('youth', new Date());
+        const dobFilter = branch.athlete_profiles.is.date_of_birth;
+        expect(dobFilter.not).toBeNull();
+        expect(dobFilter.lte.toISOString()).toBe(bounds.lte.toISOString());
+        expect(dobFilter.gt.toISOString()).toBe(bounds.gt!.toISOString());
+      });
+
+      it('adults get the adult bound only (no upper age)', async () => {
+        usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(30)) });
+        const result = await service.getFeed(athleteUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(result.community?.ageGroup).toBe('adult');
+        const dobFilter =
+          prisma.public_users.findMany.mock.calls.at(-1)[0].where.OR[0]
+            .athlete_profiles.is.date_of_birth;
+        expect(dobFilter.gt).toBeUndefined();
+        expect(dobFilter.lte.toISOString()).toBe(
+          dobBoundsForAgeGroup('adult', new Date()).lte.toISOString(),
+        );
+      });
+
+      it('rows that break the rules are dropped even if the query returned them', async () => {
+        usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(15)) });
+        prisma.public_users.findMany.mockResolvedValue([
+          feedAthlete('ok-youth', 'soccer', dobYearsAgo(16)),
+          feedAthlete('other-sport', 'Basketball', dobYearsAgo(16)),
+          feedAthlete('adult', 'Soccer', dobYearsAgo(22)),
+          feedAthlete('no-dob', 'Soccer', null),
+        ]);
+        const result = await service.getFeed(athleteUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(result.cards.map((c) => c.id)).toEqual(['ok-youth']);
+        // The card never carries the date of birth.
+        expect(JSON.stringify(result.cards)).not.toContain('date_of_birth');
+      });
+
+      it('escapes LIKE wildcards in the sport, so "%" does not match every sport', async () => {
+        usersById({ 'athlete-1': athleteRow('100%_Fit', dobYearsAgo(15)) });
+        await service.getFeed(athleteUser, { mode: DiscoverMode.PEER });
+        const sport =
+          prisma.public_users.findMany.mock.calls.at(-1)[0].where.OR[0]
+            .athlete_profiles.is.sport;
+        expect(sport.equals).toBe('100\\%\\_Fit');
+      });
+
+      it.each([
+        ['under_13', athleteRow('Soccer', dobYearsAgo(12))],
+        ['missing_dob', athleteRow('Soccer', null)],
+        ['missing_sport', athleteRow('', dobYearsAgo(15))],
+        ['pending_guardian', athleteRow('Soccer', dobYearsAgo(15), 'pending_guardian')],
+      ])('not eligible (%s): empty page, reason reported, no query', async (reason, row) => {
+        usersById({ 'athlete-1': row });
+        const result = await service.getFeed(athleteUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(result.cards).toEqual([]);
+        expect(result.hasMore).toBe(false);
+        expect(result.nextCursor).toBeNull();
+        expect(result.community).toMatchObject({ eligible: false, reason });
+        expect(prisma.public_users.findMany).not.toHaveBeenCalled();
+      });
+
+      it("PEER_ATHLETES_ENABLED=off: reason 'disabled'", async () => {
+        process.env.PEER_ATHLETES_ENABLED = 'OFF';
+        usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(15)) });
+        const result = await service.getFeed(athleteUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(result.community).toMatchObject({
+          eligible: false,
+          reason: 'disabled',
+        });
+        expect(result.cards).toEqual([]);
+      });
+
+      it('coaches, agents and parents get an open community', async () => {
+        const result = await service.getFeed(recruiterUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(result.community).toEqual({
+          eligible: true,
+          reason: null,
+          sport: null,
+          ageGroup: null,
+        });
+        const where = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+        expect(where.OR).toEqual([{ role: 'recruiter' }]);
+      });
+
+      it('recruit mode is unchanged and carries no community field', async () => {
+        const result = await service.getFeed(athleteUser, {});
+        expect(result.community).toBeUndefined();
+        expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty(
+          'community',
+        );
+        const where = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+        expect(where.OR).toEqual([{ role: { in: ['coach', 'recruiter'] } }]);
+      });
+    });
+
+    describe('globe (map)', () => {
+      it('rounds every pin to 2 decimals (~1 km), in every mode', async () => {
+        prisma.public_users.findMany.mockResolvedValue([
+          {
+            ...feedAthlete('rec-1', 'Soccer', null),
+            role: 'coach',
+            athlete_profiles: null,
+            recruiter_profiles: {
+              organization: 'McGill',
+              sport: 'Soccer',
+              role_type: 'coach',
+              verified: true,
+              photos: [],
+            },
+          },
+        ]);
+        const pins = await service.getMapPoints(athleteUser, {});
+        expect(pins).toHaveLength(1);
+        expect(pins[0].lat).toBe(45.51);
+        expect(pins[0].lng).toBe(-73.56);
+      });
+
+      it('an ineligible athlete gets no pins and no query', async () => {
+        usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(12)) });
+        const pins = await service.getMapPoints(athleteUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(pins).toEqual([]);
+        expect(prisma.public_users.findMany).not.toHaveBeenCalled();
+      });
+
+      it('an eligible athlete sees only same-sport, same-age-group pins', async () => {
+        usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(15)) });
+        prisma.public_users.findMany.mockResolvedValue([
+          feedAthlete('ok-youth', 'Soccer', dobYearsAgo(14)),
+          feedAthlete('adult', 'Soccer', dobYearsAgo(40)),
+          feedAthlete('other-sport', 'Tennis', dobYearsAgo(14)),
+        ]);
+        const pins = await service.getMapPoints(athleteUser, {
+          mode: DiscoverMode.PEER,
+        });
+        expect(pins.map((p) => p.id)).toEqual(['ok-youth']);
+        expect(JSON.stringify(pins)).not.toContain('date_of_birth');
+        const where = prisma.public_users.findMany.mock.calls.at(-1)[0].where;
+        expect(where.role).toBe('athlete');
+        expect(where.activation_status).toBe('active');
+        expect(where.athlete_profiles.is.sport).toEqual({
+          equals: 'Soccer',
+          mode: 'insensitive',
+        });
+        expect(where.athlete_profiles.is.date_of_birth.gt).toBeInstanceOf(Date);
+      });
+    });
+
+    describe('who drafted me', () => {
+      const swiperFilter = () =>
+        prisma.swipes.findMany.mock.calls
+          .map((c: any[]) => c[0]?.where)
+          .find((w: any) => w?.swiped_id)?.users_swipes_swiper_idTousers;
+
+      it("an athlete only sees athlete Drafts from their own Community", async () => {
+        usersById({ 'athlete-1': athleteRow('Soccer', dobYearsAgo(15)) });
+        await service.whoDraftedMe(athleteUser);
+        const filter = swiperFilter();
+        expect(filter.is_banned).toBe(false);
+        expect(filter.OR[0]).toEqual({ role: { not: 'athlete' } });
+        expect(filter.OR[1].athlete_profiles.is.sport).toEqual({
+          equals: 'Soccer',
+          mode: 'insensitive',
+        });
+        expect(filter.OR[1].activation_status).toBe('active');
+      });
+
+      it('an athlete outside Community sees no athlete Drafts at all', async () => {
+        usersById({ 'athlete-1': athleteRow('Soccer', null) });
+        await service.whoDraftedMe(athleteUser);
+        expect(swiperFilter().OR).toEqual([{ role: { not: 'athlete' } }]);
+      });
+
+      it("a coach's list is unchanged", async () => {
+        await service.whoDraftedMe(recruiterUser);
+        expect(swiperFilter()).toEqual({ is_banned: false });
+      });
     });
   });
 
