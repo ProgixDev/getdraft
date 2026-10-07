@@ -1519,6 +1519,22 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Cannot swipe a blocked user');
     }
 
+    // An athlete who is not active (a minor waiting for a guardian) is in no
+    // feed, so a Draft can only come from a hand-typed id -- and it used to
+    // land: the swipe was saved, their Draft count rose and they got a push
+    // from an adult they had never been shown. Same 404 as a missing user,
+    // so the id reveals nothing. Recruiting only: the Community branch below
+    // already requires an active peer and answers every mismatch with the
+    // same 403, which a 404 here would give away.
+    if (
+      mode !== DiscoverMode.PEER &&
+      dto.direction === SwipeDirection.DRAFT &&
+      targetRole === UserRole.ATHLETE &&
+      (target.activation_status ?? 'active') !== 'active'
+    ) {
+      throw new NotFoundException('User not found');
+    }
+
     if (
       mode === DiscoverMode.PEER &&
       actor.role === UserRole.ATHLETE &&

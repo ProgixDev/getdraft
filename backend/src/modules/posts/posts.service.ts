@@ -329,6 +329,21 @@ export class PostsService {
 
   async likeComment(userId: string, commentId: string) {
     const supabase = this.supabaseService.getAdminClient();
+    // Same block rule as liking a post: not on a blocked author's post, and
+    // not on a blocked person's comment.
+    const { data: comment } = await supabase
+      .from('post_comments')
+      .select('user_id, post_id')
+      .eq('id', commentId)
+      .maybeSingle();
+    if (!comment) throw new NotFoundException('Comment not found');
+    await this.assertCanInteract(userId, comment.post_id as string);
+    if (comment.user_id !== userId) {
+      const blocked = await this.blockedUserIds(userId);
+      if (blocked.includes(comment.user_id as string)) {
+        throw new ForbiddenException('You cannot interact with this comment');
+      }
+    }
     const { error } = await supabase
       .from('post_comment_likes')
       .insert({ comment_id: commentId, user_id: userId });
@@ -384,15 +399,9 @@ export class PostsService {
 
   async save(userId: string, postId: string) {
     const supabase = this.supabaseService.getAdminClient();
-    // Confirm the post exists so we return a clean 404 rather than a
-    // foreign-key error string back to the client.
-    const { data: post, error: pErr } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('id', postId)
-      .maybeSingle();
-    if (pErr) throw new BadRequestException(pErr.message);
-    if (!post) throw new NotFoundException('Post not found');
+    // A clean 404 for a missing post rather than a foreign-key error, and
+    // the block rule every other interaction follows.
+    await this.assertCanInteract(userId, postId);
 
     const { error } = await supabase
       .from('saved_posts')
@@ -435,9 +444,12 @@ export class PostsService {
       created_at: string;
       post: any | null;
     }>;
+    // A post saved before a block stays in saved_posts; it is not shown.
+    const blocked = new Set(await this.blockedUserIds(viewerId));
     const posts = rows
       .map((r) => r.post)
-      .filter((p): p is NonNullable<typeof p> => p !== null);
+      .filter((p): p is NonNullable<typeof p> => p !== null)
+      .filter((p: any) => !blocked.has(p.user_id as string));
 
     // viewer is also the owner here, so every row is liked-by-me-tracked
     // via the same fetchLikedByMe pass the feed uses. savedByMe is always

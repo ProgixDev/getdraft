@@ -51,7 +51,49 @@ export type PublicRankingRow = Omit<
   | 'profile_views'
   | 'likes_received'
   | 'profile_completion'
->;
+> & {
+  /**
+   * Only what the leaderboard's Verified badge shows publicly: approved or
+   * not. Pending / declined / in review stay private. Kept under the old
+   * name so installed builds keep drawing the badge.
+   */
+  kyc_status: 'approved' | 'none';
+};
+
+/** Allow-list, not a delete-list: a column added to the view stays private. */
+function toPublicRow(row: RankingRow): PublicRankingRow {
+  return {
+    user_id: row.user_id,
+    name: row.name,
+    avatar_url: row.avatar_url,
+    country: row.country,
+    kyc_status: row.kyc_status === 'approved' ? 'approved' : 'none',
+    sport: row.sport,
+    position: row.position,
+    level: row.level,
+    class_year: row.class_year,
+    division: row.division,
+    score: row.score,
+    division_rank: row.division_rank,
+    cohort_size: row.cohort_size,
+    // Same public standing, measured globally. Safe by the same reasoning
+    // as division_rank: it is a position, not personal data.
+    world_rank: row.world_rank,
+    world_cohort_size: row.world_cohort_size,
+  };
+}
+
+/**
+ * Not on any public board: opted out ("Profile Visible" off; the flag is
+ * free-form JSONB, so only an explicit false hides), or a minor still waiting
+ * for a guardian -- kept out of Discover and the map, and so out of here.
+ */
+function isUnlisted(u: { preferences?: any; activation_status?: string | null }) {
+  return (
+    u?.preferences?.profileVisible === false ||
+    (u?.activation_status ?? 'active') !== 'active'
+  );
+}
 
 const VIEW = 'athlete_ranking_scores';
 
@@ -72,22 +114,22 @@ export class RankingsService {
     const supabase = this.supabaseService.getAdminClient();
     const { data } = await supabase
       .from('users')
-      .select('id, preferences')
+      .select('id, preferences, activation_status')
       .eq('role', 'athlete');
     return (data ?? [])
-      .filter((u: any) => u?.preferences?.profileVisible === false)
+      .filter((u: any) => isUnlisted(u))
       .map((u: any) => u.id as string);
   }
 
-  /** Single-user form of {@link hiddenAthleteIds}, same absent-means-visible rule. */
+  /** Single-user form of {@link hiddenAthleteIds}, same rule. */
   private async isHiddenAthlete(userId: string): Promise<boolean> {
     const supabase = this.supabaseService.getAdminClient();
     const { data } = await supabase
       .from('users')
-      .select('preferences')
+      .select('preferences, activation_status')
       .eq('id', userId)
       .maybeSingle();
-    return (data as any)?.preferences?.profileVisible === false;
+    return !!data && isUnlisted(data as any);
   }
 
   /**
@@ -102,7 +144,7 @@ export class RankingsService {
     limit?: number;
     /** Who is asking. Free viewers see the top of a board only. */
     viewerId?: string;
-  }): Promise<RankingRow[]> {
+  }): Promise<PublicRankingRow[]> {
     const division = params.division ?? 'CA';
     let limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const supabase = this.supabaseService.getAdminClient();
@@ -148,7 +190,9 @@ export class RankingsService {
 
     const { data, error } = await query.limit(limit);
     if (error) throw new BadRequestException(error.message);
-    return (data ?? []) as RankingRow[];
+    // The board is public: each row gets the same allow-list as the profile
+    // chip. It used to ship the whole view row -- KYC state, every counter.
+    return ((data ?? []) as RankingRow[]).map(toPublicRow);
   }
 
   /** Distinct sports that have at least one ranked athlete in a division. */
@@ -203,26 +247,7 @@ export class RankingsService {
     // but themselves.
     if (await this.isHiddenAthlete(userId)) return null;
 
-    // Allow-list, not a delete-list — a future column added to the view is
-    // then private by default rather than leaking until someone notices.
-    return {
-      user_id: row.user_id,
-      name: row.name,
-      avatar_url: row.avatar_url,
-      country: row.country,
-      sport: row.sport,
-      position: row.position,
-      level: row.level,
-      class_year: row.class_year,
-      division: row.division,
-      score: row.score,
-      division_rank: row.division_rank,
-      cohort_size: row.cohort_size,
-      // Same public standing, measured globally. Safe by the same reasoning
-      // as division_rank: it is a position, not personal data.
-      world_rank: row.world_rank,
-      world_cohort_size: row.world_cohort_size,
-    };
+    return toPublicRow(row);
   }
 
   private async fetchRow(userId: string): Promise<RankingRow | null> {

@@ -13,6 +13,7 @@ import {
 } from '../../common/types';
 import { ageFromDob } from '../../common/utils/age';
 import { reevaluateMinorActivation } from '../../common/utils/activation';
+import { canViewProfile } from '../../common/utils/visibility';
 import { UpsertAthleteProfileDto } from './dto/athlete-profile.dto';
 import { UpsertRecruiterProfileDto } from './dto/recruiter-profile.dto';
 import { UpsertParentProfileDto } from './dto/parent-profile.dto';
@@ -413,9 +414,9 @@ export class ProfilesService {
     const isOwner = !!viewerId && viewerId === userId;
     const viewerSendsOutreach = isRecruiterRole(viewerRole);
 
-    const { data: user } = await supabase
+    const { data: found } = await supabase
       .from('users')
-      .select('id, name, role, avatar_url, location, country')
+      .select('id, name, role, avatar_url, location, country, activation_status')
       .eq('id', userId)
       // Banned users disappear from public lookups (matches users.service.ts
       // getPublicProfile + searchUsers). Returns 404 so the client can't
@@ -423,7 +424,16 @@ export class ProfilesService {
       .eq('is_banned', false)
       .single();
 
-    if (!user) throw new NotFoundException('User not found');
+    // Same 404 for a minor waiting on a guardian and for a blocked pair:
+    // this is the full profile, photos and videos included, and it was
+    // readable by anyone holding the id (see common/utils/visibility).
+    if (
+      !found ||
+      !(await canViewProfile(supabase, found, { id: viewerId, role: viewerRole }))
+    ) {
+      throw new NotFoundException('User not found');
+    }
+    const { activation_status: _activation, ...user } = found;
 
     let profile: Record<string, any> | null = null;
     let age: number | null = null;

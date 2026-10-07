@@ -81,8 +81,14 @@ export class UsersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get public user profile' })
-  getPublicProfile(@Param('id', ParseUUIDPipe) id: string) {
-    return this.usersService.getPublicProfile(id);
+  getPublicProfile(
+    @CurrentUser() viewer: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.usersService.getPublicProfile(id, {
+      id: viewer?.id,
+      role: viewer?.role,
+    });
   }
 
   @Post(':id/view')

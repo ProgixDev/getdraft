@@ -21,6 +21,11 @@ import { isMinor } from '../../common/utils/age';
 import { writeAuthzClaims } from '../../common/utils/authz-claims';
 import { assertTeamRoleAvailable } from '../../common/utils/team-role';
 import {
+  blockedPeerIds,
+  canViewProfile,
+  isBlockedPair,
+} from '../../common/utils/visibility';
+import {
   setActivationStatus,
   reevaluateMinorActivation,
 } from '../../common/utils/activation';
@@ -292,27 +297,40 @@ export class UsersService {
     };
   }
 
-  async getPublicProfile(userId: string) {
+  async getPublicProfile(
+    userId: string,
+    viewer: { id?: string; role?: string } = {},
+  ) {
     const supabase = this.supabaseService.getAdminClient();
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, name, role, avatar_url, location, country, created_at')
+      .select(
+        'id, name, role, avatar_url, location, country, created_at, activation_status',
+      )
       .eq('id', userId)
       .eq('is_banned', false)
       .single();
 
-    if (error || !user) {
+    // A pending minor or a blocked pair reads as "not found", the same as
+    // a banned account (see common/utils/visibility).
+    if (error || !user || !(await canViewProfile(supabase, user, viewer))) {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    const { activation_status: _activation, ...shared } = user;
+    return shared;
   }
 
   async trackProfileView(viewerId: string, viewedId: string) {
     if (viewerId === viewedId) return { tracked: false };
 
     const supabase = this.supabaseService.getAdminClient();
+
+    // Someone the user blocked must not keep turning up in their viewers.
+    if (await isBlockedPair(supabase, viewerId, viewedId)) {
+      return { tracked: false };
+    }
 
     // Dedupe: athlete_profiles.profile_views must count UNIQUE viewers, so a
     // repeat open by the same viewer must NOT call increment_profile_views.
@@ -356,7 +374,9 @@ export class UsersService {
       .order('created_at', { ascending: false })
       .limit(100);
 
-    return data || [];
+    // Views from before a block stay in the table; leave them out of the list.
+    const blocked = await blockedPeerIds(supabase, userId);
+    return (data || []).filter((v: any) => !blocked.has(v?.viewer?.id));
   }
 
   async listMyBlocks(userId: string) {
@@ -377,19 +397,32 @@ export class UsersService {
   async searchUsers(meId: string, q: string, limit: number) {
     const supabase = this.supabaseService.getAdminClient();
     const term = (q ?? '').trim();
+    // Search follows the feed's rules: no athlete who is not active (a minor
+    // waiting for a guardian), no one with "Profile Visible" off, no one on
+    // either side of a block. It used to list every account by name.
+    // Over-fetch so the page is still full after the JSONB and block filters,
+    // which can't be expressed as one PostgREST query.
+    const blocked = await blockedPeerIds(supabase, meId);
     let query = supabase
       .from('users')
-      .select('id, name, avatar_url, role')
+      .select('id, name, avatar_url, role, preferences')
       .neq('id', meId)
       .eq('is_banned', false)
+      .or('role.neq.athlete,activation_status.eq.active')
       .order('name', { ascending: true })
-      .limit(limit);
+      .limit(limit + 50);
     if (term.length > 0) {
       const escaped = term.replace(/[%_\\]/g, (m) => `\\${m}`);
       query = query.ilike('name', `%${escaped}%`);
     }
     const { data } = await query;
-    return (data ?? []).map((u: any) => ({
+    return (data ?? [])
+      .filter(
+        (u: any) =>
+          !blocked.has(u.id) && u?.preferences?.profileVisible !== false,
+      )
+      .slice(0, limit)
+      .map((u: any) => ({
       id: u.id as string,
       name: (u.name as string) ?? '',
       avatarUrl: (u.avatar_url as string) ?? null,

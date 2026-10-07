@@ -322,8 +322,16 @@ export class GuardianLinksService {
     if (link.guardian_user_id !== guardianUserId) {
       throw new ForbiddenException('Not your link.');
     }
-    if (!dto.storagePath?.startsWith(`${guardianUserId}/`)) {
-      throw new BadRequestException('Video path does not belong to this guardian.');
+    // Only a link still waiting for its video (or a re-record before the
+    // decision). A declined link used to go straight back into the admin
+    // queue, as often as the parent liked, with any old video.
+    if (link.status !== 'pending_video' && link.status !== 'pending_admin') {
+      throw new BadRequestException('This link is no longer accepting videos.');
+    }
+    // The upload URL puts the file under <guardian>/<link>/; anything else is
+    // a video recorded for some other link.
+    if (!dto.storagePath?.startsWith(`${guardianUserId}/${dto.linkId}/`)) {
+      throw new BadRequestException('Video path does not belong to this link.');
     }
     const { data, error } = await supabase
       .from('guardian_links')

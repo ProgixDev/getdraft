@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   ForbiddenException,
+  NotFoundException,
   BadRequestException,
   ConflictException,
   HttpException,
@@ -1254,6 +1255,22 @@ describe('DiscoverService', () => {
           expect(prisma.matches.create).not.toHaveBeenCalled();
         },
       );
+
+      it('a coach cannot Draft an athlete still waiting on a guardian (404, nothing saved)', async () => {
+        prisma.public_users.findUnique.mockResolvedValue({
+          is_banned: false,
+          role: 'athlete',
+          activation_status: 'pending_guardian',
+        });
+        await expect(
+          service.swipe(coachUser, {
+            targetUserId: 'minor-1',
+            direction: SwipeDirection.DRAFT,
+            isSuper: true,
+          }),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.swipes.create).not.toHaveBeenCalled();
+      });
 
       it('...and a coach can never match a team, in any mode', async () => {
         targetIs('team');
