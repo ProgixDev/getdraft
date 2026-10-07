@@ -2,7 +2,7 @@
   "expo": {
     "name": "GetDraft",
     "slug": "getdraft",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "runtimeVersion": {
       "policy": "fingerprint"
     },
@@ -148,7 +148,7 @@
     },
     "android": {
       "package": "com.getdraft.app",
-      "versionCode": 46,
+      "versionCode": 47,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#121212",
