@@ -192,6 +192,14 @@ export class AuthService {
     });
 
     if (error) {
+      // AdminService.banUser bans in Supabase Auth too; without this the
+      // banned user was told their password was wrong.
+      if (
+        (error as { code?: string }).code === 'user_banned' ||
+        /banned/i.test(error.message ?? '')
+      ) {
+        throw new ForbiddenException('This account has been suspended.');
+      }
       // Product decision (client, 14 Aug): tell someone plainly when no
       // account exists for the address they typed, instead of the generic
       // "invalid email or password" they cannot act on.

@@ -81,8 +81,37 @@ export class ChatGateway
         return next(new Error('unauthorized'));
       }
       socket.data.userId = user.id;
+      this.closeAtTokenExpiry(socket, token);
       next();
     });
+  }
+
+  /**
+   * The token is checked once, at the handshake, so a socket used to outlive
+   * it: a stolen token kept receiving every thread long after it expired or
+   * its owner logged out. At expiry the TRANSPORT is closed, not the socket:
+   * the app then reconnects on its own and its auth callback hands over the
+   * refreshed token, which the handshake checks again. A server-side
+   * socket.disconnect() would stop the app from reconnecting at all.
+   */
+  private closeAtTokenExpiry(socket: Socket, token: string) {
+    let exp: number | null = null;
+    try {
+      const payload = JSON.parse(
+        Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
+      );
+      if (typeof payload?.exp === 'number') exp = payload.exp;
+    } catch {
+      // getUser accepted it, so it is a JWT; an unreadable exp just means
+      // no timer, which is the old behaviour.
+    }
+    if (exp === null) return;
+    const ms = Math.max(0, exp * 1000 - Date.now());
+    const timer = setTimeout(
+      () => socket.conn?.close(),
+      Math.min(ms, 2_147_483_647),
+    );
+    socket.on('disconnect', () => clearTimeout(timer));
   }
 
   handleConnection(client: Socket) {
@@ -505,10 +534,11 @@ export class ChatGateway
       (client.handshake.headers?.authorization as string) || '';
     if (authHeader.startsWith('Bearer ')) return authHeader.slice(7);
 
-    const queryToken =
-      client.handshake.auth?.token || client.handshake.query?.token;
-    if (typeof queryToken === 'string' && queryToken.length > 0)
-      return queryToken;
+    // Not from the query string: a URL ends up in proxy and access logs. The
+    // app sends it in the handshake `auth` payload.
+    const authToken = client.handshake.auth?.token;
+    if (typeof authToken === 'string' && authToken.length > 0)
+      return authToken;
 
     return null;
   }

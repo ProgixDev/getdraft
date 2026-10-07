@@ -1,6 +1,8 @@
 import {
   Injectable,
   BadRequestException,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../../config/supabase.config';
@@ -9,6 +11,8 @@ import { ChatGateway } from '../chat/chat.gateway';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private supabaseService: SupabaseService,
     private chatGateway: ChatGateway,
@@ -89,17 +93,30 @@ export class AdminService {
     }
 
     // Flipping the column alone left a banned user with full API access:
-    // no guard read is_banned, and their existing JWT stayed valid. Mirror
-    // the flag into auth.users.app_metadata so JwtAuthGuard rejects it on
-    // the next request, AND revoke every active session so the current
-    // token dies immediately (a banned user can't keep using a live token).
-    // app_metadata, not user_metadata — the user can write the latter
-    // themselves and would just un-ban themselves (authz-claims.ts).
-    try {
-      await writeAuthzClaims(supabase, userId, { is_banned: true });
-      await supabase.auth.admin.signOut(userId, 'global');
-    } catch {
-      // Best-effort: the DB flag + guard check still apply on next login.
+    // JwtAuthGuard reads the flag from auth.users.app_metadata (it asks
+    // GoTrue on every request, so the change applies to tokens already
+    // issued). app_metadata, not user_metadata -- the user can write the
+    // latter themselves and would just un-ban themselves (authz-claims.ts).
+    // writeAuthzClaims returns its error instead of throwing, and that
+    // error used to be dropped: the admin saw "User banned" while the guard
+    // still let the user in. It is the step that matters, so it must work.
+    const { error: claimErr } = await writeAuthzClaims(supabase, userId, {
+      is_banned: true,
+    });
+    if (claimErr) {
+      throw new InternalServerErrorException(
+        'The ban was saved but is not enforced yet. Try again.',
+      );
+    }
+    // Also ban in Supabase Auth itself, so no new session can be started and
+    // no refresh token can be used. (The old signOut(userId, 'global') did
+    // nothing: signOut takes an access token, not a user id.)
+    const { error: authBanErr } = await supabase.auth.admin.updateUserById(
+      userId,
+      { ban_duration: '876000h' },
+    );
+    if (authBanErr) {
+      this.logger.warn(`auth ban failed for ${userId}: ${authBanErr.message}`);
     }
 
     // Revoking sessions does not close a chat socket that is already open.
@@ -126,16 +143,21 @@ export class AdminService {
       throw new NotFoundException('User not found');
     }
 
-    // Mirror of banUser: clear the JWT-side flag so JwtAuthGuard accepts
-    // the next request again. We don't sign existing sessions in — the
-    // user has to log in again to get a fresh token (banUser revoked
-    // every session, so they have none). Write `false` rather than
-    // deleting the key: an absent claim sends the guard down its
-    // legacy-account DB fallback on every request until it repairs itself.
-    try {
-      await writeAuthzClaims(supabase, userId, { is_banned: false });
-    } catch {
-      // DB flag is authoritative; metadata mirror is a refresh on next login.
+    // Mirror of banUser: clear the guard's flag and the Supabase Auth ban,
+    // so the user can sign in again. Write `false` rather than deleting the
+    // key: an absent claim sends the guard down its legacy-account DB
+    // fallback on every request until it repairs itself.
+    const { error: claimErr } = await writeAuthzClaims(supabase, userId, {
+      is_banned: false,
+    });
+    const { error: authBanErr } = await supabase.auth.admin.updateUserById(
+      userId,
+      { ban_duration: 'none' },
+    );
+    if (claimErr || authBanErr) {
+      throw new InternalServerErrorException(
+        'The unban was saved but the account is still locked. Try again.',
+      );
     }
 
     return { message: 'User unbanned' };

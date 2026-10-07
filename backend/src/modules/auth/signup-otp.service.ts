@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { SupabaseService } from '../../config/supabase.config';
 
 export type ContactType = 'email' | 'phone';
@@ -15,8 +16,10 @@ export class SignupOtpService {
   constructor(private supabaseService: SupabaseService) {}
 
   generateCode(): string {
-    // 6-digit, zero-padded.
-    return Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0');
+    // 6-digit, zero-padded, from the CSPRNG. Math.random is not: its state
+    // can be rebuilt from a few codes an attacker receives for their own
+    // address, and the next code -- a victim's password reset -- predicted.
+    return randomInt(0, 1_000_000).toString().padStart(6, '0');
   }
 
   /**
@@ -85,12 +88,23 @@ export class SignupOtpService {
       throw new BadRequestException('Too many failed attempts. Request a new code.');
     }
 
+    // Spend the attempt BEFORE comparing, and only if nobody else spent it
+    // first (compare-and-set on the count we read). Counting after the
+    // compare let N parallel requests all read the same count and get N
+    // guesses past the limit.
+    const { data: claimed } = await supabase
+      .from('signup_otps')
+      .update({ attempts: row.attempts + 1 })
+      .eq('id', row.id)
+      .eq('attempts', row.attempts)
+      .eq('verified', false)
+      .select('id');
+    if (!claimed || claimed.length === 0) {
+      throw new BadRequestException('Please try again.');
+    }
+
     const match = await bcrypt.compare(code, row.code_hash);
     if (!match) {
-      await supabase
-        .from('signup_otps')
-        .update({ attempts: row.attempts + 1 })
-        .eq('id', row.id);
       throw new BadRequestException('Incorrect code.');
     }
 
@@ -98,7 +112,7 @@ export class SignupOtpService {
     // verification_token immediately after this returns.
     const { error: updateErr } = await supabase
       .from('signup_otps')
-      .update({ verified: true, attempts: row.attempts + 1 })
+      .update({ verified: true })
       .eq('id', row.id);
     if (updateErr) {
       this.logger.warn(`mark verified failed (${contact}): ${updateErr.message}`);
