@@ -25,6 +25,10 @@ import {
   canViewProfile,
   isBlockedPair,
 } from '../../common/utils/visibility';
+import { isOwnUpload } from '../../common/utils/own-upload';
+
+/** Where an avatar may live: its own bucket, or a profile photo reused. */
+const AVATAR_BUCKETS = ['avatars', 'photos'] as const;
 import {
   setActivationStatus,
   reevaluateMinorActivation,
@@ -94,6 +98,16 @@ export class UsersService {
 
   async updateMe(user: CurrentUserPayload, dto: UpdateUserDto) {
     const supabase = this.supabaseService.getAdminClient();
+
+    // The avatar is drawn on every card, chat row, comment and leaderboard
+    // line, so it must be a file this user uploaded (common/utils/own-upload).
+    // An empty string clears it.
+    if (
+      dto.avatar_url &&
+      !isOwnUpload(dto.avatar_url, user.id, AVATAR_BUCKETS)
+    ) {
+      throw new BadRequestException('The photo must be one you uploaded.');
+    }
 
     // preferences is a SHARED jsonb blob written by independent writers:
     // settings.tsx (5 toggle keys), OnboardingQuestionsScreen

@@ -307,3 +307,61 @@ describe('ReceiptVerifierService (Apple)', () => {
     });
   });
 });
+
+describe('ReceiptVerifierService.verifyGoogle', () => {
+  class FakeTokenVerifier extends ReceiptVerifierService {
+    protected async googleAccessToken(): Promise<string> {
+      return 'access-token';
+    }
+  }
+  const google = () =>
+    new FakeTokenVerifier(
+      config({ GOOGLE_SERVICE_ACCOUNT_JSON: '{"client_email":"x"}' }),
+    );
+  let fetchMock: jest.Mock;
+  beforeEach(() => {
+    fetchMock = jest.fn();
+    (global as any).fetch = fetchMock;
+  });
+
+  const reply = (body: object) =>
+    fetchMock.mockResolvedValue({ ok: true, json: async () => body });
+
+  it('refuses a token that would walk the URL to another product', async () => {
+    const res = await google().verifyGoogle(
+      'drafts_100',
+      '../../drafts_10/tokens/real-token',
+      false,
+    );
+    expect(res.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a pack when Google names a different product', async () => {
+    reply({ purchaseState: 0, productId: 'drafts_10', orderId: 'GPA.1' });
+    const res = await google().verifyGoogle('drafts_100', 'tok.en-1', false);
+    expect(res.ok).toBe(false);
+  });
+
+  it('accepts a pack Google confirms, under the encoded URL', async () => {
+    reply({ purchaseState: 0, productId: 'drafts_10', orderId: 'GPA.1' });
+    const res = await google().verifyGoogle('drafts_10', 'tok.en-1', false);
+    expect(res).toMatchObject({ ok: true, productId: 'drafts_10' });
+    expect(fetchMock.mock.calls[0][0]).toMatch(
+      /\/purchases\/products\/drafts_10\/tokens\/tok\.en-1$/,
+    );
+  });
+
+  it('takes the subscription product from Google, never from the client', async () => {
+    reply({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{ productId: 'starter_monthly', expiryTime: null }],
+    });
+    const res = await google().verifyGoogle('elite_monthly', 'tok', true);
+    expect(res).toMatchObject({ ok: true, productId: 'starter_monthly' });
+
+    reply({ subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE', lineItems: [{}] });
+    const missing = await google().verifyGoogle('elite_monthly', 'tok', true);
+    expect(missing.ok).toBe(false);
+  });
+});

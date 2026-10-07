@@ -24,7 +24,9 @@ export class RankingsController {
     return this.rankings.getRankings({
       division,
       sport,
-      limit: limit ? Number(limit) : undefined,
+      // A non-number ("abc") used to reach .limit(NaN) and come back as a
+      // raw database error; it now falls back to the default page.
+      limit: limit && Number.isFinite(Number(limit)) ? Number(limit) : undefined,
       viewerId,
     });
   }

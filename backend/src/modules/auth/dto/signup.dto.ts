@@ -4,7 +4,9 @@ import {
   IsNotEmpty,
   IsString,
   MinLength,
+  MaxLength,
 } from 'class-validator';
+import { LIMITS } from '../../../common/validators/limits';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../../common/types';
 
@@ -25,6 +27,7 @@ export class SignupDto {
   @ApiProperty({ example: 'Marcus Johnson' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(LIMITS.name)
   name: string;
 
   // ADMIN is provisioned out-of-band (DB-only) and must never be assignable

@@ -5,7 +5,9 @@ import {
   IsEnum,
   IsUrl,
   MaxLength,
+  ArrayMaxSize,
 } from 'class-validator';
+import { LIMITS } from '../../../common/validators/limits';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { OrgType, RecruiterRoleType } from '../../../common/types';
@@ -40,10 +42,12 @@ export class UpsertRecruiterProfileDto {
     description: 'Organization, agency or -- for a team -- the club name.',
   })
   @IsString()
+  @MaxLength(LIMITS.short)
   organization: string;
 
   @ApiProperty({ example: 'American Football' })
   @IsString()
+  @MaxLength(LIMITS.short)
   sport: string;
 
   // Ignored. The server sets role_type from the account type (coach ->
@@ -65,6 +69,7 @@ export class UpsertRecruiterProfileDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   team?: string;
 
   @ApiPropertyOptional({
@@ -99,22 +104,29 @@ export class UpsertRecruiterProfileDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(LIMITS.listItems)
+  @MaxLength(LIMITS.listItem, { each: true })
   tags?: string[];
 
   @ApiPropertyOptional({ example: 'NFL Certified Agent with 10+ years...' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.bio)
   bio?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(LIMITS.media)
+  @MaxLength(LIMITS.url, { each: true })
   photos?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(LIMITS.media)
+  @MaxLength(LIMITS.url, { each: true })
   videos?: string[];
 }

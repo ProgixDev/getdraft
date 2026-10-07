@@ -5,7 +5,13 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowPending } from '../../common/decorators/allow-pending.decorator';
 import { UserRole } from '../../common/types';
 import { GuardianLinksService } from './guardian-links.service';
-import type { GuardianLinkStatus, GuardianRelationship } from './guardian-links.service';
+import type { GuardianLinkStatus } from './guardian-links.service';
+import {
+  AdminDecisionDto,
+  ScanQrDto,
+  SubmitVideoDto,
+  VideoUploadUrlDto,
+} from './dto/guardian-link.dto';
 
 @ApiTags('Guardian Links')
 @ApiBearerAuth()
@@ -48,12 +54,7 @@ export class GuardianLinksController {
   scan(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') callerRole: UserRole,
-    @Body()
-    body: {
-      qrToken: string;
-      relationship: GuardianRelationship;
-      questionnaire: Record<string, unknown>;
-    },
+    @Body() body: ScanQrDto,
   ) {
     // Parents only: the service refuses every other role with a 403.
     return this.service.submitScan(userId, callerRole, body);
@@ -63,7 +64,7 @@ export class GuardianLinksController {
   @ApiOperation({ summary: 'Guardian: get a signed URL for the declaration video upload.' })
   videoUploadUrl(
     @CurrentUser('id') userId: string,
-    @Body() body: { linkId: string; fileName: string },
+    @Body() body: VideoUploadUrlDto,
   ) {
     return this.service.getVideoUploadUrl(userId, body);
   }
@@ -72,7 +73,7 @@ export class GuardianLinksController {
   @ApiOperation({ summary: 'Guardian: confirm the video upload finished; flips status to pending_admin.' })
   submitVideo(
     @CurrentUser('id') userId: string,
-    @Body() body: { linkId: string; storagePath: string },
+    @Body() body: SubmitVideoDto,
   ) {
     return this.service.submitVideo(userId, body);
   }
@@ -105,7 +106,7 @@ export class GuardianLinksController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') callerRole: UserRole,
     @Param('id') id: string,
-    @Body() body: { notes?: string },
+    @Body() body: AdminDecisionDto,
   ) {
     return this.service.adminDecide(callerRole, userId, id, 'approved', body?.notes);
   }
@@ -117,7 +118,7 @@ export class GuardianLinksController {
     @CurrentUser('id') userId: string,
     @CurrentUser('role') callerRole: UserRole,
     @Param('id') id: string,
-    @Body() body: { notes?: string },
+    @Body() body: AdminDecisionDto,
   ) {
     return this.service.adminDecide(callerRole, userId, id, 'declined', body?.notes);
   }

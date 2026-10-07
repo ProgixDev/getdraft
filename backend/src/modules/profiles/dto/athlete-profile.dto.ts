@@ -6,7 +6,10 @@ import {
   IsDateString,
   Min,
   Max,
+  MaxLength,
+  ArrayMaxSize,
 } from 'class-validator';
+import { LIMITS } from '../../../common/validators/limits';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpsertAthleteProfileDto {
@@ -24,21 +27,25 @@ export class UpsertAthleteProfileDto {
   @ApiPropertyOptional({ example: 'American Football' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   sport?: string;
 
   @ApiPropertyOptional({ example: 'Quarterback' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   position?: string;
 
   @ApiPropertyOptional({ example: 'NCAA Div I' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   level?: string;
 
   @ApiPropertyOptional({ example: 'Dallas Jesuit Rangers' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   team?: string;
 
   @ApiPropertyOptional({
@@ -47,16 +54,19 @@ export class UpsertAthleteProfileDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   agency?: string;
 
   @ApiPropertyOptional({ example: 'Class of 2025 QB prospect...' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.bio)
   bio?: string;
 
   @ApiPropertyOptional({ example: '2025' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   class_year?: string;
 
   @ApiPropertyOptional({ example: 3.7 })
@@ -69,34 +79,43 @@ export class UpsertAthleteProfileDto {
   @ApiPropertyOptional({ example: '6\'2"' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   height?: string;
 
   @ApiPropertyOptional({ example: '215 lbs' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   weight?: string;
 
   @ApiPropertyOptional({ example: '4.65s' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   forty_yard_dash?: string;
 
   @ApiPropertyOptional({ example: ['State Championship MVP 2024'] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(LIMITS.listItems)
+  @MaxLength(LIMITS.listItem, { each: true })
   awards?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(LIMITS.media)
+  @MaxLength(LIMITS.url, { each: true })
   photos?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(LIMITS.media)
+  @MaxLength(LIMITS.url, { each: true })
   videos?: string[];
 
   @ApiPropertyOptional({ example: '2008-03-14', description: 'ISO YYYY-MM-DD' })
@@ -107,15 +126,18 @@ export class UpsertAthleteProfileDto {
   @ApiPropertyOptional({ example: 'Man' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   gender?: string;
 
   @ApiPropertyOptional({ example: '5' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   experience?: string;
 
   @ApiPropertyOptional({ example: '10' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.short)
   jersey_number?: string;
 }

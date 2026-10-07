@@ -200,7 +200,7 @@ export class GuardianLinksService {
     dto: {
       qrToken: string;
       relationship: GuardianRelationship;
-      questionnaire: Record<string, unknown>;
+      questionnaire?: Record<string, unknown>;
     },
   ) {
     if (guardianRole !== 'parent') {

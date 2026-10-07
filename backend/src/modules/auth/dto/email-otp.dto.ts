@@ -1,4 +1,5 @@
-import { IsEmail, IsNotEmpty, IsString, IsIn, IsOptional, MinLength, Length } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsIn, IsOptional, MinLength, Length, MaxLength } from 'class-validator';
+import { LIMITS } from '../../../common/validators/limits';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../../common/types';
 
@@ -60,5 +61,6 @@ export class CompleteSignupDto {
   @ApiPropertyOptional({ example: 'Marcus Johnson' })
   @IsOptional()
   @IsString()
+  @MaxLength(LIMITS.name)
   name?: string;
 }

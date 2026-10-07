@@ -46,6 +46,9 @@ export const APPLE_ROOT_CA_G3_SHA256 =
 /** GetDraft's numeric App Store id (Apple requires it for production data). */
 const DEFAULT_APPLE_APP_ID = 6802070784;
 
+/** A Play purchase token or product id: no slashes, dots-only segments or '%'. */
+const GOOGLE_ID = /^(?!\.+$)[A-Za-z0-9._-]{1,4096}$/;
+
 /** Errors where the other App Store environment may still accept the data. */
 const WRONG_ENVIRONMENT = new Set<VerificationStatus>([
   VerificationStatus.INVALID_ENVIRONMENT,
@@ -300,14 +303,24 @@ export class ReceiptVerifierService {
       return { ok: false, reason: 'Play verification is not configured' };
     }
 
+    // Both values come from the client and go into the URL path. Unchecked,
+    // a token of "../../drafts_10/tokens/<real token>" made fetch resolve the
+    // path to a cheap product's purchase while the claim was for a big one.
+    // Play tokens and product ids are plain [A-Za-z0-9._-]; anything else is
+    // refused, and both are encoded besides.
+    if (!GOOGLE_ID.test(purchaseToken) || !GOOGLE_ID.test(productId)) {
+      return { ok: false, reason: 'Malformed purchase token' };
+    }
+
     try {
       const account = JSON.parse(raw);
       const token = await this.googleAccessToken(account);
 
       const kind = isSubscription ? 'subscriptionsv2' : 'products';
+      const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(packageName)}/purchases`;
       const url = isSubscription
-        ? `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptionsv2/tokens/${purchaseToken}`
-        : `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/products/${productId}/tokens/${purchaseToken}`;
+        ? `${base}/subscriptionsv2/tokens/${encodeURIComponent(purchaseToken)}`
+        : `${base}/products/${encodeURIComponent(productId)}/tokens/${encodeURIComponent(purchaseToken)}`;
 
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -330,9 +343,13 @@ export class ReceiptVerifierService {
         const active =
           data.subscriptionState === 'SUBSCRIPTION_STATE_ACTIVE' ||
           data.subscriptionState === 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD';
+        // What was bought is Google's answer, never the client's claim.
+        if (!line?.productId) {
+          return { ok: false, reason: 'Google did not name the product' };
+        }
         return {
           ok: true,
-          productId: line?.productId ?? productId,
+          productId: line.productId,
           transactionId: data.latestOrderId ?? purchaseToken,
           purchasedAt: data.startTime ?? null,
           expiresAt: expiry,
@@ -343,6 +360,11 @@ export class ReceiptVerifierService {
       // One-off product. purchaseState 0 = purchased, 1 = cancelled, 2 = pending.
       if (data.purchaseState !== 0) {
         return { ok: false, reason: 'Purchase is not in a completed state' };
+      }
+      // The URL already names the product; when Google names it too, the two
+      // must agree.
+      if (data.productId && data.productId !== productId) {
+        return { ok: false, reason: 'Purchase is for a different product' };
       }
       return {
         ok: true,
@@ -367,7 +389,7 @@ export class ReceiptVerifierService {
    * flow. Done inline rather than pulling in googleapis, which is a large
    * dependency for one call.
    */
-  private async googleAccessToken(account: {
+  protected async googleAccessToken(account: {
     client_email: string;
     private_key: string;
   }): Promise<string> {

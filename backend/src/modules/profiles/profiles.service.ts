@@ -14,6 +14,26 @@ import {
 import { ageFromDob } from '../../common/utils/age';
 import { reevaluateMinorActivation } from '../../common/utils/activation';
 import { canViewProfile } from '../../common/utils/visibility';
+import { allOwnUploads } from '../../common/utils/own-upload';
+
+/**
+ * Profile photos and videos must be files this user uploaded to our storage
+ * (common/utils/own-upload). They were any string: an outside URL was then
+ * fetched by every phone the card was shown on, and photos[0] also becomes
+ * the avatar. Checked against live data first: every stored photo is in the
+ * photos bucket and every video in the videos bucket, under its owner.
+ */
+function assertOwnMedia(
+  userId: string,
+  dto: { photos?: string[]; videos?: string[] },
+) {
+  if (
+    !allOwnUploads(dto.photos, userId, ['photos', 'avatars']) ||
+    !allOwnUploads(dto.videos, userId, ['videos'])
+  ) {
+    throw new BadRequestException('Photos and videos must be ones you uploaded.');
+  }
+}
 import { UpsertAthleteProfileDto } from './dto/athlete-profile.dto';
 import { UpsertRecruiterProfileDto } from './dto/recruiter-profile.dto';
 import { UpsertParentProfileDto } from './dto/parent-profile.dto';
@@ -132,6 +152,7 @@ export class ProfilesService {
     if (role !== UserRole.ATHLETE) {
       throw new ForbiddenException(WRONG_PROFILE_MESSAGES.athlete);
     }
+    assertOwnMedia(userId, dto);
     const supabase = this.supabaseService.getAdminClient();
 
     // Pull the full existing row (not just the id) so a partial save can
@@ -302,6 +323,7 @@ export class ProfilesService {
     if (!roleType) {
       throw new ForbiddenException(WRONG_PROFILE_MESSAGES.recruiter);
     }
+    assertOwnMedia(userId, dto);
     const supabase = this.supabaseService.getAdminClient();
 
     // Whatever role_type the client sent is dropped here.

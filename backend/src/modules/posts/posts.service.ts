@@ -7,6 +7,7 @@ import {
 import { SupabaseService } from '../../config/supabase.config';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
+import { isOwnUpload } from '../../common/utils/own-upload';
 
 interface AuthorRow {
   id: string;
@@ -14,36 +15,9 @@ interface AuthorRow {
   avatar_url: string | null;
 }
 
-/**
- * True when `url` is a file `userId` uploaded to the posts bucket.
- *
- * /uploads/signed-url forces every upload under `<bucket>/<userId>/`, and the
- * app posts the public URL it gets back, so anything else is not an upload.
- * An outside host would be fetched by every viewer of the feed (handing that
- * host their IP and the moment they looked) and would dodge the bucket's
- * type and size limits; another user's folder would repost their media.
- */
-function isOwnPostsUpload(url: string, userId: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  const base = process.env.SUPABASE_URL;
-  if (base) {
-    try {
-      if (parsed.host !== new URL(base).host) return false;
-    } catch {
-      return false;
-    }
-  }
-  const match =
-    /^\/storage\/v1\/object\/(?:public|sign|authenticated)\/posts\/([^/]+)\/.+/.exec(
-      parsed.pathname,
-    );
-  return match !== null && decodeURIComponent(match[1]) === userId;
-}
+/** True when `url` is a file `userId` uploaded to the posts bucket. */
+const isOwnPostsUpload = (url: string, userId: string) =>
+  isOwnUpload(url, userId, ['posts']);
 
 @Injectable()
 export class PostsService {
