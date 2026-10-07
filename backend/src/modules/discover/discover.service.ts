@@ -1586,81 +1586,56 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     // Block when the relevant quota is exhausted — the 429 lets the client show
     // the upgrade CTA (distinct from the 403 role/block paths). The two messages
     // differ so the client can tell "out of Drafts" from "out of Super Drafts".
-    if (isPeer) {
+    if (isPeer && isSuper) {
       // A Super Draft is a scout's standout signal, with its own scarce
       // monthly allowance. It has no meaning between peers.
+      throw new BadRequestException(SUPER_DRAFT_RECRUIT_ONLY_MESSAGE);
+    }
+
+    // Metering used to read the allowance, save the swipe, then spend: N
+    // Drafts sent at once all read the same allowance and all got through,
+    // and the unguarded bonus decrement could drive bonus_swipes negative --
+    // after which the "=== 0" check never fired again: unlimited Drafts. Now
+    // a normal Draft is spent BEFORE the swipe is saved, by conditional
+    // updates that check and spend in one statement (see spendDraft), and
+    // refunded if saving fails. Super Drafts are counted from swipe rows, so
+    // they are checked and saved one at a time per user (withUserLock).
+    await this.withUserLock(actor.id, async () => {
       if (isSuper) {
-        throw new BadRequestException(SUPER_DRAFT_RECRUIT_ONLY_MESSAGE);
-      }
-    } else if (isSuper) {
-      const superLeft = await this.getSuperDraftsRemaining(actor.id);
-      if (superLeft <= 0) {
-        throw new HttpException(
-          'Out of Super Drafts this month. Upgrade for more Super Drafts.',
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
-    } else if (dto.direction === SwipeDirection.DRAFT) {
-      const remaining = await this.getSwipesRemaining(actor.id);
-      if (remaining === 0) {
-        throw new HttpException(
-          'Out of Drafts for today. Come back tomorrow, or upgrade for unlimited.',
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
-    }
-
-    try {
-      await this.prisma.swipes.create({
-        data: {
-          swiper_id: actor.id,
-          swiped_id: dto.targetUserId,
-          direction: dto.direction,
-          is_super: isSuper,
-        },
-      });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException('Already swiped on this user');
-      }
-      throw new BadRequestException((e as Error).message);
-    }
-
-    // Only NORMAL recruiting Drafts consume the daily allowance (passes are
-    // free; Community Drafts are unlimited; Super Drafts are metered
-    // separately by SUPER_DRAFT_LIMITS, monthly). Spend the plan quota first;
-    // if exhausted, dip into bonus_swipes (from swipe-packs).
-    if (dto.direction === SwipeDirection.DRAFT && !isSuper && !isPeer) {
-      const subForSpend = await this.prisma.subscriptions.findUnique({
-        where: { user_id: actor.id },
-        select: {
-          plan_id: true,
-          swipes_used_today: true,
-          bonus_swipes: true,
-        },
-      });
-      const limit = subForSpend
-        ? PLAN_SWIPE_LIMITS[String(subForSpend.plan_id) as PlanId] ??
-          PLAN_SWIPE_LIMITS[PlanId.BASIC]
-        : PLAN_SWIPE_LIMITS[PlanId.BASIC];
-      if (limit !== -1) {
-        const quotaLeft = Math.max(
-          0,
-          limit - (subForSpend?.swipes_used_today ?? 0),
-        );
-        if (quotaLeft > 0) {
-          await this.prisma.$executeRawUnsafe(
-            'select public.increment_swipes_used($1::uuid)',
-            actor.id,
+        const superLeft = await this.getSuperDraftsRemaining(actor.id);
+        if (superLeft <= 0) {
+          throw new HttpException(
+            'Out of Super Drafts this month. Upgrade for more Super Drafts.',
+            HttpStatus.TOO_MANY_REQUESTS,
           );
-        } else if (subForSpend && subForSpend.bonus_swipes > 0) {
-          await this.prisma.subscriptions.update({
-            where: { user_id: actor.id },
-            data: { bonus_swipes: { decrement: 1 } },
-          });
         }
       }
-    }
+
+      // Only NORMAL recruiting Drafts consume the daily allowance (passes
+      // are free; Community Drafts are unlimited; Super Drafts are metered
+      // separately by SUPER_DRAFT_LIMITS, monthly).
+      const spent =
+        dto.direction === SwipeDirection.DRAFT && !isSuper && !isPeer
+          ? await this.spendDraft(actor.id)
+          : null;
+
+      try {
+        await this.prisma.swipes.create({
+          data: {
+            swiper_id: actor.id,
+            swiped_id: dto.targetUserId,
+            direction: dto.direction,
+            is_super: isSuper,
+          },
+        });
+      } catch (e) {
+        if (spent) await this.refundDraft(actor.id, spent);
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+          throw new ConflictException('Already swiped on this user');
+        }
+        throw new BadRequestException((e as Error).message);
+      }
+    });
 
     let matched = false;
     let matchId: string | null = null;
@@ -1884,6 +1859,20 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('Already matched — cannot withdraw');
     }
 
+    // A Super Draft is not deleted but turned into a Pass. The monthly Super
+    // Draft cap is counted from these rows, so deleting one handed the Super
+    // Draft back: Super Draft, withdraw, repeat, each time pushing "Super
+    // drafted you" to the same person. As a Pass it still counts, leaves
+    // "who drafted you", and the person does not come back into the deck.
+    const superCount = await this.prisma.swipes.updateMany({
+      where: {
+        swiper_id: userId,
+        swiped_id: targetUserId,
+        direction: SwipeDirection.DRAFT,
+        is_super: true,
+      },
+      data: { direction: SwipeDirection.PASS },
+    });
     const { count } = await this.prisma.swipes.deleteMany({
       where: {
         swiper_id: userId,
@@ -1891,7 +1880,7 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
         direction: SwipeDirection.DRAFT,
       },
     });
-    if (count === 0) {
+    if (count === 0 && superCount.count === 0) {
       throw new NotFoundException('No pending draft to withdraw');
     }
 
@@ -1980,6 +1969,87 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  /** Per-user queue: one metered swipe at a time for each user (see swipe). */
+  private readonly userLocks = new Map<string, Promise<unknown>>();
+
+  /**
+   * Run `fn` after every earlier call for the same user has settled. Keeps
+   * the Super Draft count-then-save honest within this process; the normal
+   * Draft spend does not rely on it (spendDraft is atomic in the database).
+   */
+  private async withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.userLocks.get(userId) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(fn);
+    const settled = run.catch(() => undefined);
+    this.userLocks.set(userId, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.userLocks.get(userId) === settled) this.userLocks.delete(userId);
+    }
+  }
+
+  /**
+   * Spend one normal Draft: the plan's daily allowance first, then a bonus
+   * Draft from a pack. Each step is a single conditional UPDATE that checks
+   * and spends together, so parallel Drafts cannot all spend the last one,
+   * and bonus_swipes can never go below zero. 429 when nothing is left.
+   * Returns what was spent, so a failed save can give it back.
+   */
+  private async spendDraft(userId: string): Promise<'quota' | 'bonus' | 'unlimited'> {
+    // Also zeroes yesterday's counter on the first Draft of a new day.
+    await this.getSwipesRemaining(userId);
+
+    const sub = await this.prisma.subscriptions.findUnique({
+      where: { user_id: userId },
+      select: { plan_id: true },
+    });
+    const limit =
+      PLAN_SWIPE_LIMITS[String(sub?.plan_id) as PlanId] ??
+      PLAN_SWIPE_LIMITS[PlanId.BASIC];
+    if (limit === -1) return 'unlimited';
+
+    const quota = await this.prisma.subscriptions.updateMany({
+      where: { user_id: userId, swipes_used_today: { lt: limit } },
+      data: { swipes_used_today: { increment: 1 } },
+    });
+    if (quota.count > 0) return 'quota';
+
+    const bonus = await this.prisma.subscriptions.updateMany({
+      where: { user_id: userId, bonus_swipes: { gt: 0 } },
+      data: { bonus_swipes: { decrement: 1 } },
+    });
+    if (bonus.count > 0) return 'bonus';
+
+    throw new HttpException(
+      'Out of Drafts for today. Come back tomorrow, or upgrade for unlimited.',
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  /** Give back what spendDraft took when the swipe could not be saved. */
+  private async refundDraft(
+    userId: string,
+    spent: 'quota' | 'bonus' | 'unlimited',
+  ): Promise<void> {
+    if (spent === 'unlimited') return;
+    try {
+      if (spent === 'quota') {
+        await this.prisma.subscriptions.updateMany({
+          where: { user_id: userId, swipes_used_today: { gt: 0 } },
+          data: { swipes_used_today: { decrement: 1 } },
+        });
+      } else {
+        await this.prisma.subscriptions.updateMany({
+          where: { user_id: userId },
+          data: { bonus_swipes: { increment: 1 } },
+        });
+      }
+    } catch {
+      // Best effort: the user loses one Draft, never gains one.
+    }
+  }
+
   // Remaining DRAFTS today. Passes are free; the daily allowance comes from
   // the plan (PLAN_SWIPE_LIMITS) and resets at UTC midnight. -1 = unlimited.
   // swipes_used_today/swipes_reset_at are the counter and the day it counts.
@@ -1999,7 +2069,9 @@ export class DiscoverService implements OnModuleInit, OnModuleDestroy {
     const limit =
       PLAN_SWIPE_LIMITS[String(sub.plan_id) as PlanId] ??
       PLAN_SWIPE_LIMITS[PlanId.BASIC];
-    const bonus = sub.bonus_swipes ?? 0;
+    // Never below zero: a negative balance (possible before spendDraft) made
+    // "remaining" negative, which the old "=== 0" check read as Drafts left.
+    const bonus = Math.max(0, sub.bonus_swipes ?? 0);
     const UNLIMITED = UNLIMITED_DRAFTS;
 
     // Daily reset: compare YYYY-MM-DD in UTC. A row whose counter belongs to

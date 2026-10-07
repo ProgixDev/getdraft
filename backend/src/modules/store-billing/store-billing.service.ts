@@ -227,7 +227,10 @@ export class StoreBillingService {
         pack_id: productId,
         swipes_granted: swipes,
         amount_cents: params.amountCents ?? 0,
-        status: 'granted',
+        // The table's CHECK allows pending / succeeded / failed only (017,
+        // confirmed on live 2026-10-07): 'granted' failed every store pack
+        // insert, so a paid pack was never credited.
+        status: 'succeeded',
         granted_at: new Date().toISOString(),
       });
 

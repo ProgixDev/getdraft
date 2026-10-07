@@ -24,6 +24,7 @@ describe('SubscriptionsService', () => {
     customers: { create: jest.fn() },
     checkout: { sessions: { create: jest.fn() } },
     billingPortal: { sessions: { create: jest.fn() } },
+    subscriptions: { list: jest.fn(), retrieve: jest.fn() },
   };
 
   beforeEach(async () => {
@@ -208,16 +209,54 @@ describe('SubscriptionsService', () => {
       expect(mockAdminClient.from).toHaveBeenCalledWith('users');
     });
 
-    it('should handle customer.subscription.deleted (downgrade to basic)', async () => {
-      const updateBuilder = mockQueryBuilder({ data: null });
-      mockAdminClient.from.mockReturnValue(updateBuilder);
+    it('customer.subscription.deleted downgrades the user named on the sub, whatever sub id is stored', async () => {
+      // The stored id may be a later, unpaid attempt; the owner comes from
+      // the sub's own metadata.
+      const builder = mockQueryBuilder({ data: { stripe_customer_id: 'cus_1' } });
+      mockAdminClient.from.mockReturnValue(builder);
+      mockStripeClient.subscriptions.list.mockResolvedValue({ data: [] });
 
       await service.handleWebhook({
         type: 'customer.subscription.deleted',
-        data: { object: { id: 'sub_123' } },
+        data: {
+          object: { id: 'sub_123', customer: 'cus_1', metadata: { user_id: 'user-1' } },
+        },
       });
 
-      expect(mockAdminClient.from).toHaveBeenCalledWith('subscriptions');
+      expect(builder.update).toHaveBeenCalledWith(
+        expect.objectContaining({ plan_id: PlanId.BASIC, status: 'canceled' }),
+      );
+      expect(builder.eq).toHaveBeenCalledWith('user_id', 'user-1');
+    });
+
+    it('customer.subscription.deleted keeps the plan of another paid sub', async () => {
+      const builder = mockQueryBuilder({ data: { stripe_customer_id: 'cus_1' } });
+      mockAdminClient.from.mockReturnValue(builder);
+      const paid = {
+        id: 'sub_new',
+        status: 'active',
+        created: 2,
+        customer: 'cus_1',
+        metadata: { user_id: 'user-1', plan_id: PlanId.PRO },
+        items: { data: [{ price: { id: 'price_unknown' } }] },
+      };
+      mockStripeClient.subscriptions.list.mockResolvedValue({ data: [paid] });
+      mockStripeClient.subscriptions.retrieve.mockResolvedValue(paid);
+
+      await service.handleWebhook({
+        type: 'customer.subscription.deleted',
+        data: {
+          object: { id: 'sub_old', customer: 'cus_1', metadata: { user_id: 'user-1' } },
+        },
+      });
+
+      expect(mockStripeClient.subscriptions.retrieve).toHaveBeenCalledWith(
+        'sub_new',
+        expect.anything(),
+      );
+      expect(builder.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ plan_id: PlanId.BASIC }),
+      );
     });
 
     it('should handle invoice.payment_failed', async () => {

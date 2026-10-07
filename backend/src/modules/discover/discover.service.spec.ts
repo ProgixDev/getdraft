@@ -154,6 +154,7 @@ describe('DiscoverService', () => {
         create: jest.fn().mockResolvedValue({}),
         findFirst: jest.fn().mockResolvedValue(null),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         // Super Draft monthly usage counter (getSuperDraftsRemaining).
         count: jest.fn().mockResolvedValue(0),
       },
@@ -174,6 +175,20 @@ describe('DiscoverService', () => {
       subscriptions: {
         findUnique: jest.fn().mockResolvedValue(sub()),
         update: jest.fn().mockResolvedValue({}),
+        // Conditional spend (spendDraft): applies only when the row the test
+        // set up satisfies the where, like the real UPDATE ... WHERE.
+        updateMany: jest.fn(async ({ where }: any) => {
+          const row = await prisma.subscriptions.findUnique();
+          const ok =
+            !!row &&
+            (where.swipes_used_today?.lt === undefined ||
+              row.swipes_used_today < where.swipes_used_today.lt) &&
+            (where.swipes_used_today?.gt === undefined ||
+              row.swipes_used_today > where.swipes_used_today.gt) &&
+            (where.bonus_swipes?.gt === undefined ||
+              row.bonus_swipes > where.bonus_swipes.gt);
+          return { count: ok ? 1 : 0 };
+        }),
       },
       matches: {
         create: jest.fn().mockResolvedValue({ id: 'match-1' }),
@@ -1464,19 +1479,76 @@ describe('DiscoverService', () => {
         targetUserId: 'rec-1',
         direction: SwipeDirection.DRAFT,
       });
-      expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        increment,
-        'athlete-1',
-      );
+      expect(prisma.subscriptions.updateMany).toHaveBeenCalledWith({
+        where: { user_id: 'athlete-1', swipes_used_today: { lt: 10 } },
+        data: { swipes_used_today: { increment: 1 } },
+      });
 
+      prisma.subscriptions.updateMany.mockClear();
       prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10, 2));
       await service.swipe(athleteUser, {
         targetUserId: 'rec-3',
         direction: SwipeDirection.DRAFT,
       });
-      expect(prisma.subscriptions.update).toHaveBeenCalledWith({
-        where: { user_id: 'athlete-1' },
+      // The allowance UPDATE matches nothing, so the bonus one runs, and
+      // only while there is a bonus Draft to take.
+      expect(prisma.subscriptions.updateMany).toHaveBeenLastCalledWith({
+        where: { user_id: 'athlete-1', bonus_swipes: { gt: 0 } },
         data: { bonus_swipes: { decrement: 1 } },
+      });
+    });
+
+    it('withdrawing a Super Draft keeps it counted (turned into a Pass, not deleted)', async () => {
+      prisma.swipes.updateMany.mockResolvedValue({ count: 1 });
+      await expect(service.withdrawDraft(athleteUser, 'rec-7')).resolves.toEqual({
+        withdrawn: true,
+      });
+      expect(prisma.swipes.updateMany).toHaveBeenCalledWith({
+        where: {
+          swiper_id: 'athlete-1',
+          swiped_id: 'rec-7',
+          direction: SwipeDirection.DRAFT,
+          is_super: true,
+        },
+        data: { direction: SwipeDirection.PASS },
+      });
+    });
+
+    it('nothing left: 429 and no swipe saved (the spend is checked and taken in one UPDATE)', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10, 0));
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-4',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toMatchObject({ status: 429 });
+      expect(prisma.swipes.create).not.toHaveBeenCalled();
+    });
+
+    it('a negative bonus balance is not "Drafts left"', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 10, -4));
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-5',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toMatchObject({ status: 429 });
+      const feed = await service.getFeed(athleteUser, {});
+      expect(feed.swipesRemaining).toBe(0);
+    });
+
+    it('a Draft that cannot be saved gives its spend back', async () => {
+      prisma.subscriptions.findUnique.mockResolvedValue(sub('basic', 3));
+      prisma.swipes.create.mockRejectedValueOnce(new Error('db down'));
+      await expect(
+        service.swipe(athleteUser, {
+          targetUserId: 'rec-6',
+          direction: SwipeDirection.DRAFT,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.subscriptions.updateMany).toHaveBeenLastCalledWith({
+        where: { user_id: 'athlete-1', swipes_used_today: { gt: 0 } },
+        data: { swipes_used_today: { decrement: 1 } },
       });
     });
 

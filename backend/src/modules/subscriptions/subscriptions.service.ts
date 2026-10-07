@@ -148,17 +148,12 @@ export class SubscriptionsService {
       throw new BadRequestException('Could not initialize payment.');
     }
 
-    // Persist just the link to Stripe's subscription id. We DO NOT
-    // pre-flip plan_id or status — payment may still fail/cancel.
-    // The webhook (or the second leg of getMySubscription) does the
-    // final source-of-truth update once Stripe confirms the charge.
-    await supabase
-      .from('subscriptions')
-      .update({
-        stripe_subscription_id: subscription.id,
-        stripe_price_id: priceId,
-      })
-      .eq('user_id', userId);
+    // Nothing is written here. This used to store the new, unpaid sub as the
+    // user's stripe_subscription_id, replacing a paid one: when the paid sub
+    // later ended, the "deleted" event matched no row and the plan stayed
+    // forever (pay once, cancel, open the sheet, dismiss it). The sub id is
+    // stored only once it is paid (applyActiveSubscription), and confirm /
+    // the webhook find it on the Stripe customer.
 
     return {
       paymentIntentClientSecret: clientSecret,
@@ -567,22 +562,7 @@ export class SubscriptionsService {
       // invoice.payment_failed; canceled by customer.subscription.deleted.
 
       case 'customer.subscription.deleted': {
-        const sub = event.data.object;
-        await supabase
-          .from('subscriptions')
-          .update({
-            plan_id: PlanId.BASIC,
-            status: 'canceled',
-            daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
-            stripe_subscription_id: null,
-            stripe_price_id: null,
-          })
-          .eq('stripe_subscription_id', sub.id);
-
-        await supabase
-          .from('users')
-          .update({ plan_id: PlanId.BASIC, stripe_subscription_id: null })
-          .eq('stripe_subscription_id', sub.id);
+        await this.reconcileEndedSubscription(event.data.object);
         break;
       }
 
@@ -634,6 +614,21 @@ export class SubscriptionsService {
               obj.parent?.subscription_details?.subscription ??
               null;
         if (!subId) break;
+        // A sub that has ended without being paid (Stripe gave up on the
+        // card: unpaid / canceled, or a first invoice that never settled)
+        // takes its plan with it, if it was the one giving the plan.
+        if (
+          event.type === 'customer.subscription.updated' &&
+          ['unpaid', 'canceled', 'incomplete_expired'].includes(obj.status)
+        ) {
+          const { data: holder } = await supabase
+            .from('subscriptions')
+            .select('user_id')
+            .eq('stripe_subscription_id', subId)
+            .maybeSingle();
+          if (holder) await this.reconcileEndedSubscription(obj);
+          break;
+        }
         await this.applyActiveSubscription(subId);
         break;
       }
@@ -682,7 +677,21 @@ export class SubscriptionsService {
       const item = sub.items?.data?.[0];
       const priceId = item?.price?.id ?? null;
       const userId = sub.metadata?.user_id as string | undefined;
-      const planId = sub.metadata?.plan_id as PlanId | undefined;
+      // The plan is what is being PAID for: the price. The metadata is set
+      // once at creation, so after a plan switch in the billing portal
+      // (Elite -> Starter) it still said Elite, and Elite is what was
+      // re-applied for the Starter price. Metadata is only the fallback for a
+      // price this server no longer maps (an archived one).
+      const planFromPrice = (Object.keys(this.priceMap) as PlanId[]).find(
+        (p) => priceId && this.priceMap[p] === priceId,
+      );
+      if (!planFromPrice) {
+        this.logger.warn(
+          `[stripe] ${subId} price ${priceId} not in the price map; using metadata`,
+        );
+      }
+      const planId =
+        planFromPrice ?? (sub.metadata?.plan_id as PlanId | undefined);
       if (!userId || !planId) {
         this.logger.warn(
           `[stripe] ${subId} missing metadata (user_id=${userId} plan_id=${planId})`,
@@ -859,16 +868,89 @@ export class SubscriptionsService {
    * delivery. The webhook remains the backstop. Returns the fresh row.
    */
   async confirmSubscription(userId: string) {
+    // The sub the sheet just paid is not stored yet (createPaymentSheet no
+    // longer writes it), so look on the Stripe customer for this user's
+    // newest paid one.
+    const paid = await this.newestPaidSubscription(userId);
+    if (paid) await this.applyActiveSubscription(paid.id);
+    return this.getMySubscription(userId);
+  }
+
+  /** This user's newest active / trialing Stripe subscription, or null. */
+  private async newestPaidSubscription(userId: string): Promise<any | null> {
     const supabase = this.supabaseService.getAdminClient();
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .maybeSingle();
+    const customerId = userRow?.stripe_customer_id as string | undefined;
+    if (!customerId) return null;
+    const stripe = this.stripeService.getClient();
+    const list = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 20,
+    });
+    const paid = (list.data as any[])
+      .filter(
+        (s) =>
+          (s.status === 'active' || s.status === 'trialing') &&
+          (!s.metadata?.user_id || s.metadata.user_id === userId),
+      )
+      .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+    return paid[0] ?? null;
+  }
+
+  /**
+   * A subscription of this user ended (deleted, or left unpaid): keep the
+   * plan of another paid one if there is one, otherwise drop to Basic. It
+   * used to downgrade only the row whose stored sub id matched the event,
+   * which a later payment attempt could have overwritten, so the plan stayed.
+   */
+  private async reconcileEndedSubscription(sub: any): Promise<void> {
+    const supabase = this.supabaseService.getAdminClient();
+    let userId = sub.metadata?.user_id as string | undefined;
+    if (!userId && sub.customer) {
+      const { data } = await supabase
+        .from('users')
+        .select('id')
+        .eq('stripe_customer_id', sub.customer as string)
+        .maybeSingle();
+      userId = data?.id;
+    }
+    if (!userId) {
+      this.logger.warn(`[stripe] ended sub ${sub.id} has no user — skipped`);
+      return;
+    }
+    const other = await this.newestPaidSubscription(userId);
+    if (other && other.id !== sub.id) {
+      await this.applyActiveSubscription(other.id);
+      return;
+    }
+    // Store purchases are managed by the store, not by Stripe events.
     const { data: row } = await supabase
       .from('subscriptions')
-      .select('stripe_subscription_id')
+      .select('store')
       .eq('user_id', userId)
       .maybeSingle();
-    if (row?.stripe_subscription_id) {
-      await this.applyActiveSubscription(row.stripe_subscription_id);
-    }
-    return this.getMySubscription(userId);
+    if (row?.store === 'apple' || row?.store === 'google') return;
+
+    await supabase
+      .from('subscriptions')
+      .update({
+        plan_id: PlanId.BASIC,
+        status: 'canceled',
+        daily_swipe_limit: PLAN_SWIPE_LIMITS[PlanId.BASIC],
+        stripe_subscription_id: null,
+        stripe_price_id: null,
+      })
+      .eq('user_id', userId);
+    await supabase
+      .from('users')
+      .update({ plan_id: PlanId.BASIC, stripe_subscription_id: null })
+      .eq('id', userId);
+    this.logger.log(`[stripe] user ${userId} → basic (sub ${sub.id} ended)`);
   }
 
   /**
