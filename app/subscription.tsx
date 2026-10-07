@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { initStripe, useStripe } from '@stripe/stripe-react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import {
   useFonts,
   Poppins_400Regular,
@@ -258,6 +259,28 @@ export default function SubscriptionScreen() {
    * A subscription bought in the App Store or Google Play can only be changed
    * or cancelled there; our server has no say over it.
    */
+  /**
+   * A failed card renewal: open Stripe's billing portal so the card can be
+   * changed. The banner used to say "update your card" with nothing to tap.
+   */
+  const handleUpdateCard = useCallback(async () => {
+    if (pendingAction) return;
+    setPendingAction('portal');
+    try {
+      const { portalUrl } = await subscriptionsService.createPortal();
+      if (!portalUrl) throw new Error('No portal');
+      await WebBrowser.openBrowserAsync(portalUrl);
+      refresh();
+    } catch {
+      Alert.alert(
+        'Could not open billing',
+        'Please try again in a moment, or contact support@getdraft.net.',
+      );
+    } finally {
+      setPendingAction(null);
+    }
+  }, [pendingAction, refresh]);
+
   const handleManageInStore = useCallback(async () => {
     const store = apiSub?.store;
     const here =
@@ -299,6 +322,9 @@ export default function SubscriptionScreen() {
   // buy button: it is not set up in App Store Connect yet.
   const priceFor = (plan: (typeof plans)[number]) => {
     if (plan.price === 0) return 'Free';
+    // Where nothing can be bought (iOS until StoreKit products exist), a
+    // price is a sale the user cannot make. Show none.
+    if (!PURCHASES_ENABLED) return '';
     if (!USES_STORE_BILLING) return `$${plan.price}`;
     const productId = storeProductForPlan(plan.id);
     return (productId && storePrices[productId]) || '—';
@@ -345,10 +371,12 @@ export default function SubscriptionScreen() {
               <Text style={styles.currentPlanBadgeText}>CURRENT PLAN</Text>
             </View>
             <Text style={styles.currentPlanName}>{currentPlan.name}</Text>
-            <Text style={styles.currentPlanPrice}>
-              {priceFor(currentPlan)}
-              <Text style={styles.currentPlanPeriod}> {currentPlan.period}</Text>
-            </Text>
+            {priceFor(currentPlan) !== '' && (
+              <Text style={styles.currentPlanPrice}>
+                {priceFor(currentPlan)}
+                <Text style={styles.currentPlanPeriod}> {currentPlan.period}</Text>
+              </Text>
+            )}
             <View style={styles.currentPlanSwipeRow}>
               <Ionicons name="swap-horizontal" size={16} color="rgba(255,255,255,0.8)" />
               <Text style={styles.currentPlanSwipes}>{currentPlan.swipes}</Text>
@@ -377,16 +405,43 @@ export default function SubscriptionScreen() {
           {status === 'past_due' && (
             <View style={styles.pastDueCard}>
               <Ionicons name="warning" size={20} color="#E54B4B" />
-              <Text style={styles.pastDueText}>
-                Your last payment failed. Update your card to keep your plan.
-              </Text>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Text style={styles.pastDueText}>
+                  Your last payment failed. Update your card to keep your plan.
+                </Text>
+                {/* A store purchase is fixed in the store; a Stripe one in
+                    Stripe's portal, offered only where the app may handle
+                    payments at all (not iOS). */}
+                {(boughtInStore || PURCHASES_ENABLED) && (
+                  <Pressable
+                    onPress={boughtInStore ? handleManageInStore : handleUpdateCard}
+                    disabled={pendingAction !== null}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.pastDueButton,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    {pendingAction === 'portal' ? (
+                      <ActivityIndicator size="small" color={brand.white} />
+                    ) : (
+                      <Text style={styles.pastDueButtonText}>
+                        Update payment method
+                      </Text>
+                    )}
+                  </Pressable>
+                )}
+              </View>
             </View>
           )}
 
-          {/* Plan comparison */}
-          <Text style={styles.sectionHeading}>All Plans</Text>
+          {/* Plan comparison. Not shown where no plan can be bought: a list
+              of prices with no way to pay is a dead end. */}
+          {PURCHASES_ENABLED && (
+            <Text style={styles.sectionHeading}>All Plans</Text>
+          )}
 
-          {plans.filter((p) => !p.legacy || p.id === currentPlanId).map((plan) => {
+          {(PURCHASES_ENABLED ? plans : []).filter((p) => !p.legacy || p.id === currentPlanId).map((plan) => {
             const isCurrent = plan.id === currentPlanId;
             const isPending = pendingAction === plan.id;
             return (
@@ -678,6 +733,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Poppins_500Medium',
     color: theme.text,
+  },
+  pastDueButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E54B4B',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  pastDueButtonText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: brand.white,
   },
   sectionHeading: {
     fontSize: 18,

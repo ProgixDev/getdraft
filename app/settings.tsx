@@ -256,7 +256,7 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View style={[styles.switchRow, styles.switchRowLast]}>
+          <View style={styles.switchRow}>
             <View style={styles.switchCopy}>
               <Text style={styles.switchTitle}>Show Location</Text>
               <Text style={styles.switchSubtitle}>
@@ -271,6 +271,25 @@ export default function SettingsScreen() {
               thumbColor={brand.white}
             />
           </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.menuRow,
+              styles.menuRowLast,
+              pressed && styles.menuRowPressed,
+            ]}
+            onPress={() => router.push("/blocked-users")}
+            accessibilityRole="button"
+          >
+            <Ionicons name="ban-outline" size={20} color={theme.textSecondary} />
+            <View style={styles.menuRowCopy}>
+              <Text style={styles.menuRowTitle}>Blocked accounts</Text>
+              <Text style={styles.menuRowValue}>
+                See who you blocked and unblock them
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+          </Pressable>
         </View>
 
         {/* Admin tools — only shown to users with role=admin. */}

@@ -29,6 +29,9 @@ import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
 import { matchesService } from "@/services/matches";
 import { roleDisplayLabel } from "@/lib/roles";
+import { apiErrorMessage } from "@/services/api";
+import { findOptimistic, usePendingSends } from "@/hooks/use-pending-sends";
+import { openSafetyMenu } from "@/lib/safetyMenu";
 import type { Socket } from "socket.io-client";
 
 type ChatMessage = {
@@ -37,7 +40,12 @@ type ChatMessage = {
   text: string;
   sentAt: string;
   failed?: boolean;
+  /** Why the server refused it, when it said. */
+  failReason?: string;
 };
+
+const isOptimistic = (id: string) =>
+  id.startsWith("local-") || id.startsWith("call-");
 
 type ChatHeader = {
   recruiterName: string;
@@ -74,6 +82,8 @@ export default function ChatScreen() {
   const [header, setHeader] = useState<ChatHeader | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // Bumped by the Retry button on the load-error state to run the load again.
+  const [reloadKey, setReloadKey] = useState(0);
   const [otherIsTyping, setOtherIsTyping] = useState(false);
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   // recruit | peer, from the match row. A peer (Community) match is always
@@ -89,6 +99,14 @@ export default function ChatScreen() {
   // within 4s (handles missed `stop` events).
   const remoteTypingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  const markFailed = (id: string, reason?: string) =>
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, failed: true, failReason: reason } : m,
+      ),
+    );
+  const pending = usePendingSends((id) => markFailed(id));
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -168,12 +186,9 @@ export default function ChatScreen() {
       setMessages((prev) => {
         if (prev.some((m) => m.id === realId)) return prev;
         if (mine) {
-          const i = prev.findIndex(
-            (m) =>
-              !m.failed &&
-              (m.id.startsWith("local-") || m.id.startsWith("call-")),
-          );
+          const i = findOptimistic(prev, incoming.text, isOptimistic);
           if (i !== -1) {
+            pending.clear(prev[i].id);
             const copy = [...prev];
             copy[i] = incoming;
             return copy;
@@ -207,11 +222,25 @@ export default function ChatScreen() {
     // Without re-binding here, after a background cycle the socket
     // emits new_message/user_typing into a void — chat silently dies
     // until the screen remounts.
+    // The server refuses a send with an "error" event and nothing else
+    // (blocked, waiting for a guardian, too fast, too long). It refers to the
+    // oldest send still waiting; with none waiting it is about something
+    // else (a join) and changes nothing on screen.
+    const onSocketError = (err: any) => {
+      if (cancelled) return;
+      const id = pending.oldest();
+      if (!id) return;
+      pending.clear(id);
+      markFailed(id, typeof err?.message === "string" ? err.message : undefined);
+    };
+
     const bindSocket = (s: Socket) => {
       if (cancelled) return;
       activeSocket = s;
       s.off("new_message", onNewMessage);
       s.on("new_message", onNewMessage);
+      s.off("error", onSocketError);
+      s.on("error", onSocketError);
       s.off("user_typing", onUserTyping);
       s.on("user_typing", onUserTyping);
       const joinNow = () => chatService.joinThread(matchId);
@@ -239,6 +268,7 @@ export default function ChatScreen() {
       chatService.leaveThread(matchId);
       activeSocket?.off("new_message", onNewMessage);
       activeSocket?.off("user_typing", onUserTyping);
+      activeSocket?.off("error", onSocketError);
       // Clear our own typing indicator on unmount
       if (localTypingTimer.current) clearTimeout(localTypingTimer.current);
       if (remoteTypingClear.current) clearTimeout(remoteTypingClear.current);
@@ -247,7 +277,7 @@ export default function ChatScreen() {
         localIsTyping.current = false;
       }
     };
-  }, [matchId, user?.id]);
+  }, [matchId, user?.id, reloadKey]);
 
   const onDraftChange = (val: string) => {
     setDraft(val);
@@ -286,25 +316,44 @@ export default function ChatScreen() {
     deliver(optimisticId, text);
   };
 
-  // Send via socket when connected, otherwise REST. On REST failure, flag
-  // the optimistic bubble so the user can tap it to retry.
+  // Send via socket when connected, otherwise REST. A socket send waits for
+  // its echo (see usePendingSends); a REST send is confirmed by its reply.
+  // Either failure flags the bubble so the user can tap it to retry.
   const deliver = (messageId: string, text: string) => {
     if (!matchId) return;
     const socket = chatService.getSocket();
     if (socket?.connected) {
+      pending.start(messageId);
       chatService.sendSocketMessage(matchId, text);
     } else {
-      chatService.sendMessage(matchId, text).catch(() => {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, failed: true } : m)),
+      chatService
+        .sendMessage(matchId, text)
+        .then((saved: any) => {
+          if (!saved?.id) return;
+          const realId = String(saved.id);
+          setMessages((prev) =>
+            prev.some((m) => m.id === realId)
+              ? prev.filter((m) => m.id !== messageId)
+              : prev.map((m) =>
+                  m.id === messageId
+                    ? { ...m, id: realId, sentAt: formatTime(saved.created_at) }
+                    : m,
+                ),
+          );
+        })
+        .catch((err) =>
+          markFailed(messageId, apiErrorMessage(err, "") || undefined),
         );
-      });
     }
   };
 
   const handleRetry = (message: ChatMessage) => {
     setMessages((prev) =>
-      prev.map((m) => (m.id === message.id ? { ...m, failed: false } : m)),
+      prev.map((m) =>
+        m.id === message.id
+          ? { ...m, failed: false, failReason: undefined }
+          : m,
+      ),
     );
     deliver(message.id, message.text);
   };
@@ -402,20 +451,16 @@ export default function ChatScreen() {
         <Pressable
           style={styles.headerIconButton}
           disabled={!otherUserId}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
           onPress={() =>
-            Alert.alert('More', undefined, [
-              {
-                text: 'Report',
-                onPress: () =>
-                  otherUserId &&
-                  setReportTarget({
-                    targetType: 'user',
-                    reportedUserId: otherUserId,
-                    label: header?.recruiterName || undefined,
-                  }),
-              },
-              { text: 'Cancel', style: 'cancel' },
-            ])
+            otherUserId &&
+            openSafetyMenu({
+              userId: otherUserId,
+              name: header?.recruiterName,
+              onReport: setReportTarget,
+              onBlocked: () => router.back(),
+            })
           }
         >
           <Ionicons
@@ -438,6 +483,13 @@ export default function ChatScreen() {
             color={theme.textMuted}
           />
           <Text style={styles.emptyMsgTitle}>Couldn&apos;t load messages</Text>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => setReloadKey((k) => k + 1)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.backButtonText}>Retry</Text>
+          </Pressable>
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.centerWrap}>
@@ -506,6 +558,7 @@ export default function ChatScreen() {
                 >
                   <Text style={styles.failedText}>
                     Not sent — tap to retry
+                    {message.failReason ? `\n${message.failReason}` : ""}
                   </Text>
                 </Pressable>
               )}
@@ -534,6 +587,8 @@ export default function ChatScreen() {
               placeholderTextColor={theme.inputPlaceholder}
               style={styles.input}
               multiline
+              // The server's cap; longer text was refused with no sign.
+              maxLength={2000}
             />
           </View>
           <Pressable

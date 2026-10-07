@@ -138,8 +138,10 @@ export default function PreferencesCountryScreen() {
   const [globeReady, setGlobeReady] = useState(false);
   // Globe WebView died (renderer gone / load error) — drop it, keep the list.
   const [globeDead, setGlobeDead] = useState(false);
-  const [selectedCountry, setSelectedCountry] = useState<CountryOption>(
-    findCountryByName(preferences.country) ?? COUNTRY_OPTIONS[0],
+  // Nothing picked yet stays nothing: falling back to the first entry
+  // pre-selected Afghanistan for everyone who opened this with no country.
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(
+    findCountryByName(preferences.country) ?? null,
   );
   // "" means no region filter — the whole country. Persisted preferences from
   // before this screen learned about regions have no `region` key at all.
@@ -221,6 +223,7 @@ export default function PreferencesCountryScreen() {
   };
 
   const handleApplyCountry = () => {
+    if (!selectedCountry) return;
     const countryChanged = selectedCountry.name !== preferences.country;
     dispatch(
       setDiscoverPreferences({
@@ -229,6 +232,10 @@ export default function PreferencesCountryScreen() {
         region: selectedRegion,
         // Reset city when country changes so stale selections don't persist
         city: countryChanged ? "" : preferences.city,
+        // "International" means "any country", and it is on by default, so a
+        // country picked here was silently ignored. Picking one is asking
+        // for that country; the switch in Preferences turns it back on.
+        includeInternational: false,
       }),
     );
     router.back();
@@ -298,7 +305,7 @@ export default function PreferencesCountryScreen() {
             <View style={styles.activeRegionRow}>
               <Ionicons name="location" size={14} color={brand.white} />
               <Text style={styles.activeRegionText} numberOfLines={1}>
-                {selectedRegion}, {selectedCountry.name}
+                {selectedRegion}, {selectedCountry?.name}
               </Text>
               <Pressable
                 onPress={handleClearRegion}
@@ -324,7 +331,7 @@ export default function PreferencesCountryScreen() {
                 {regionResults.map((region) => {
                   const selected =
                     selectedRegion === region.name &&
-                    selectedCountry.name === region.country;
+                    selectedCountry?.name === region.country;
                   return (
                     <Pressable
                       key={`${region.country}-${region.name}`}
@@ -385,7 +392,7 @@ export default function PreferencesCountryScreen() {
 
             {filteredCountries.map((country) => {
               const selected =
-                selectedCountry.name === country.name && selectedRegion === "";
+                selectedCountry?.name === country.name && selectedRegion === "";
               return (
                 <Pressable
                   key={country.code}
@@ -449,17 +456,21 @@ export default function PreferencesCountryScreen() {
         <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
           <Pressable
             onPress={handleApplyCountry}
+            disabled={!selectedCountry}
             style={({ pressed }) => [
               styles.applyButton,
+              !selectedCountry && { opacity: 0.5 },
               pressed && styles.rowPressed,
             ]}
           >
             <Text style={styles.applyButtonText}>
-              Use{' '}
-              {flagEmoji(selectedCountry.code)
-                ? `${flagEmoji(selectedCountry.code)} `
-                : ''}
-              {selectedCountry.name}
+              {selectedCountry
+                ? `Use ${
+                    flagEmoji(selectedCountry.code)
+                      ? `${flagEmoji(selectedCountry.code)} `
+                      : ''
+                  }${selectedCountry.name}`
+                : 'Pick a country'}
             </Text>
             <Ionicons name="arrow-forward" size={18} color={theme.accentText} />
           </Pressable>

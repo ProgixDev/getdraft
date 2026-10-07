@@ -38,6 +38,7 @@ import { brand, semantic, theme } from "@/config/colors";
 import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { RootState } from "@/store";
 import type { MediaSource } from "@/constants/discoverData";
+import { PURCHASES_ENABLED } from "@/constants/purchases";
 import { profilesService } from "@/services/profiles";
 import { useDeleteAccount } from "@/hooks/use-delete-account";
 import { usersService } from "@/services/users";
@@ -777,7 +778,9 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.subscriptionTitle}>Manage Plan</Text>
               <Text style={styles.subscriptionSubtitle}>
-                View or upgrade your subscription
+                {PURCHASES_ENABLED
+                  ? "View or upgrade your subscription"
+                  : "View your plan"}
               </Text>
             </View>
             <Ionicons

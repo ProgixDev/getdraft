@@ -229,7 +229,7 @@ export default function BuySwipesScreen() {
             </View>
             <Text style={styles.heroTitle}>Top up your Drafts</Text>
             <Text style={styles.heroSubtitle}>
-              One-time purchase. Extra Drafts carry over and stack with your monthly Draft allowance.
+              One-time purchase. Extra Drafts carry over and are used after your daily Draft allowance runs out.
             </Text>
             {bonusSwipes !== null && bonusSwipes > 0 && (
               <View style={styles.bonusBadge}>

@@ -44,16 +44,6 @@ import { isRecruiterRole } from "@/lib/roles";
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const LIST_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.6);
 
-const DISTANCE_OPTIONS: { label: string; value: number | null }[] = [
-  { label: "Any", value: null },
-  { label: "25 km", value: 25 },
-  { label: "50 km", value: 50 },
-  { label: "100 km", value: 100 },
-  { label: "250 km", value: 250 },
-  { label: "500 km", value: 500 },
-  { label: "1000 km", value: 1000 },
-];
-
 const RECRUITER_TYPE_OPTIONS = [
   { label: "All Recruiters", value: "all" as const },
   { label: "Agents", value: "agent" as const },
@@ -556,44 +546,20 @@ export default function PreferencesScreen() {
           </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Distance</Text>
-          <Text style={styles.sectionSubtitle}>
-            Maximum distance from your selected country.
-          </Text>
-          <View style={styles.chipsRow}>
-            {DISTANCE_OPTIONS.map((option) => (
-              <Pressable
-                key={option.label}
-                style={({ pressed }) => [
-                  styles.distanceChip,
-                  preferences.distanceKm === option.value &&
-                    styles.distanceChipActive,
-                  pressed && styles.rowPressed,
-                ]}
-                onPress={() => setPreferences({ distanceKm: option.value })}
-              >
-                <Text
-                  style={[
-                    styles.distanceChipText,
-                    preferences.distanceKm === option.value &&
-                      styles.distanceChipTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
+        {/* No Distance filter: the server has never applied one (there is
+            no viewer position to measure from), so its chips changed
+            nothing. Country, wilaya and city are the location filters. */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Location</Text>
           <SelectorRow
             icon="globe-outline"
             label="Country"
             value={preferences.country}
-            helperText="Tap to open globe country selector"
+            helperText={
+              preferences.country && preferences.includeInternational
+                ? "Not applied while International Opportunities is on"
+                : "Tap to open globe country selector"
+            }
             onPress={() => router.push("/preferences-country")}
           />
           <SelectorRow
@@ -835,37 +801,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Poppins_600SemiBold",
     color: theme.text,
-  },
-  sectionSubtitle: {
-    marginTop: -6,
-    fontSize: 12,
-    fontFamily: "Poppins_400Regular",
-    color: theme.textSecondary,
-  },
-  chipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  distanceChip: {
-    borderWidth: 1,
-    borderColor: theme.borderLight,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: theme.surface,
-  },
-  distanceChipActive: {
-    backgroundColor: theme.accent,
-    borderColor: theme.accent,
-  },
-  distanceChipText: {
-    fontSize: 12,
-    fontFamily: "Poppins_500Medium",
-    color: theme.textSecondary,
-  },
-  distanceChipTextActive: {
-    color: theme.accentText,
   },
   selectorRow: {
     flexDirection: "row",

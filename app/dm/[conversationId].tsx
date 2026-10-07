@@ -29,6 +29,10 @@ import { RootState } from "@/store";
 import { chatService } from "@/services/chat";
 import { conversationsService } from "@/services/conversations";
 import { roleDisplayLabel } from "@/lib/roles";
+import { apiErrorMessage } from "@/services/api";
+import { findOptimistic, usePendingSends } from "@/hooks/use-pending-sends";
+import { ReportSheet, type ReportTarget } from "@/components/ReportSheet";
+import { openSafetyMenu } from "@/lib/safetyMenu";
 
 type DmMessage = {
   id: string;
@@ -36,7 +40,11 @@ type DmMessage = {
   text: string;
   sentAt: string;
   failed?: boolean;
+  /** Why the server refused it, when it said. */
+  failReason?: string;
 };
+
+const isOptimistic = (id: string) => id.startsWith("local-");
 
 function formatTime(iso?: string): string {
   if (!iso) return "Now";
@@ -76,6 +84,8 @@ export default function DmScreen() {
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  // Bumped by the Retry button on the load-error state to run the load again.
+  const [reloadKey, setReloadKey] = useState(0);
   const [otherName, setOtherName] = useState(initialOtherName);
   const [otherAvatar, setOtherAvatar] = useState<string | null>(
     initialOtherAvatar,
@@ -83,7 +93,16 @@ export default function DmScreen() {
   const [otherRole, setOtherRole] = useState(initialOtherRole);
   // Tracked so the header avatar tap routes to the right /user/[id].
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  const markFailed = (id: string, reason?: string) =>
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, failed: true, failReason: reason } : m,
+      ),
+    );
+  const pending = usePendingSends((id) => markFailed(id));
 
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
@@ -144,10 +163,9 @@ export default function DmScreen() {
       setMessages((prev) => {
         if (prev.some((m) => m.id === realId)) return prev;
         if (mine) {
-          const i = prev.findIndex(
-            (m) => !m.failed && m.id.startsWith("local-"),
-          );
+          const i = findOptimistic(prev, incoming.text, isOptimistic);
           if (i !== -1) {
+            pending.clear(prev[i].id);
             const copy = [...prev];
             copy[i] = incoming;
             return copy;
@@ -156,6 +174,17 @@ export default function DmScreen() {
         return [...prev, incoming];
       });
       if (!mine) conversationsService.markRead(conversationId).catch(() => {});
+    };
+
+    // A refused send comes back only as an "error" event (blocked, no
+    // match any more, too fast, too long); it refers to the oldest send
+    // still waiting. With none waiting it changes nothing on screen.
+    const onSocketError = (err: any) => {
+      if (cancelled) return;
+      const id = pending.oldest();
+      if (!id) return;
+      pending.clear(id);
+      markFailed(id, typeof err?.message === "string" ? err.message : undefined);
     };
 
     const joinNow = () => conversationsService.joinConversation(conversationId);
@@ -167,6 +196,8 @@ export default function DmScreen() {
       activeSocket = s;
       s.off("new_dm", onNewDm);
       s.on("new_dm", onNewDm);
+      s.off("error", onSocketError);
+      s.on("error", onSocketError);
       if (s.connected) joinNow();
       s.off("connect", joinNow);
       s.on("connect", joinNow);
@@ -189,10 +220,11 @@ export default function DmScreen() {
       appStateSub.remove();
       conversationsService.leaveConversation(conversationId);
       activeSocket?.off("new_dm", onNewDm);
+      activeSocket?.off("error", onSocketError);
       activeSocket?.off("connect", joinNow);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, user?.id]);
+  }, [conversationId, user?.id, reloadKey]);
 
   const handleSend = () => {
     const text = draft.trim();
@@ -208,25 +240,44 @@ export default function DmScreen() {
     deliver(optimisticId, text);
   };
 
-  // Send via socket when connected, otherwise REST. On REST failure, flag
-  // the optimistic bubble so the user can tap it to retry.
+  // Send via socket when connected, otherwise REST. A socket send waits for
+  // its echo (see usePendingSends); a REST send is confirmed by its reply.
+  // Either failure flags the bubble so the user can tap it to retry.
   const deliver = (messageId: string, text: string) => {
     if (!conversationId) return;
     const socket = chatService.getSocket();
     if (socket?.connected) {
+      pending.start(messageId);
       conversationsService.sendDm(conversationId, text);
     } else {
-      conversationsService.sendMessage(conversationId, text).catch(() => {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, failed: true } : m)),
+      conversationsService
+        .sendMessage(conversationId, text)
+        .then((saved: any) => {
+          if (!saved?.id) return;
+          const realId = String(saved.id);
+          setMessages((prev) =>
+            prev.some((m) => m.id === realId)
+              ? prev.filter((m) => m.id !== messageId)
+              : prev.map((m) =>
+                  m.id === messageId
+                    ? { ...m, id: realId, sentAt: formatTime(saved.createdAt) }
+                    : m,
+                ),
+          );
+        })
+        .catch((err) =>
+          markFailed(messageId, apiErrorMessage(err, "") || undefined),
         );
-      });
     }
   };
 
   const handleRetry = (message: DmMessage) => {
     setMessages((prev) =>
-      prev.map((m) => (m.id === message.id ? { ...m, failed: false } : m)),
+      prev.map((m) =>
+        m.id === message.id
+          ? { ...m, failed: false, failReason: undefined }
+          : m,
+      ),
     );
     deliver(message.id, message.text);
   };
@@ -301,7 +352,29 @@ export default function DmScreen() {
             </Text>
           ) : null}
         </View>
-        <View style={styles.headerIconButton} />
+        {/* Overflow menu. A DM had no way to report or block from inside
+            the conversation, the place abuse is actually seen. */}
+        <Pressable
+          style={styles.headerIconButton}
+          disabled={!otherUserId}
+          accessibilityRole="button"
+          accessibilityLabel="More options"
+          onPress={() =>
+            otherUserId &&
+            openSafetyMenu({
+              userId: otherUserId,
+              name: otherName,
+              onReport: setReportTarget,
+              onBlocked: () => router.back(),
+            })
+          }
+        >
+          <Ionicons
+            name="ellipsis-horizontal"
+            size={20}
+            color={otherUserId ? theme.text : "transparent"}
+          />
+        </Pressable>
       </View>
 
       {loading ? (
@@ -316,6 +389,13 @@ export default function DmScreen() {
             color={theme.textMuted}
           />
           <Text style={styles.emptyMsgTitle}>Couldn&apos;t load messages</Text>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => setReloadKey((k) => k + 1)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.backButtonText}>Retry</Text>
+          </Pressable>
         </View>
       ) : messages.length === 0 ? (
         <View style={styles.centerWrap}>
@@ -384,6 +464,7 @@ export default function DmScreen() {
                 >
                   <Text style={styles.failedText}>
                     Not sent — tap to retry
+                    {message.failReason ? `\n${message.failReason}` : ""}
                   </Text>
                 </Pressable>
               )}
@@ -402,6 +483,8 @@ export default function DmScreen() {
               placeholderTextColor={theme.inputPlaceholder}
               style={styles.input}
               multiline
+              // The server's cap; longer text was refused with no sign.
+              maxLength={2000}
             />
           </View>
           <Pressable
@@ -417,6 +500,12 @@ export default function DmScreen() {
           </Pressable>
         </View>
       </KeyboardStickyView>
+
+      <ReportSheet
+        visible={!!reportTarget}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
+      />
     </View>
   );
 }

@@ -229,7 +229,7 @@ export default function PublicProfileScreen() {
     if (!userId || blocking) return;
     Alert.alert(
       'Block this user?',
-      'They won’t be able to see your profile, draft you, or message you. You can unblock them later in Settings.',
+      'They won’t be able to see your profile, draft you, or message you. You can unblock them later in Settings, under Blocked accounts.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

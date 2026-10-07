@@ -51,6 +51,18 @@ export const usersService = {
     await api.delete(`/users/${userId}/block`);
   },
 
+  async listMyBlocks(): Promise<
+    {
+      id: string;
+      blocked_id: string;
+      created_at: string;
+      blocked: { id: string; name: string | null; avatar_url: string | null; role: string | null } | null;
+    }[]
+  > {
+    const { data } = await api.get("/users/me/blocks");
+    return data.data ?? [];
+  },
+
   async searchUsers(
     q: string,
     limit = 20,

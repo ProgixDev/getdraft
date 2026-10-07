@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -45,10 +45,13 @@ import {
   setActivationStatus,
   clearError,
   logout,
+  logoutAsync,
 } from "@/store/slices/authSlice";
 import { apiErrorMessage } from '@/services/api';
 import { authService } from "@/services/auth";
 import { usersService } from "@/services/users";
+import { profilesService } from "@/services/profiles";
+import { ageFromDob } from "@/lib/age";
 import { subscriptionsService } from "@/services/subscriptions";
 import { kycService } from "@/services/kyc";
 import { guardianLinksService } from "@/services/guardianLinks";
@@ -123,6 +126,9 @@ type SignupStep =
 // on the coach side of those checks.
 type UserRole = SignupRole;
 
+/** Thrown to release a spinner after the user has already seen an alert. */
+const ALREADY_HANDLED = "__already_handled__";
+
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLogin,
   onBack,
@@ -162,6 +168,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("basic");
+  /** The plan already paid for in this signup, if finishing failed after. */
+  const paidPlanRef = useRef<string | null>(null);
+  /** Blocks a double tap on the tutorial's last button while it looks up the age. */
+  const tutorialBusyRef = useRef(false);
   const [location, setLocation] = useState({ city: "", country: "" });
   /** Set after the OTP is verified; carried into completeSignup. */
   const [verificationToken, setVerificationToken] = useState<string | null>(
@@ -210,11 +220,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             : "role";
         switch (signupStep) {
           case "verify":
-          case "location":
             setSignupStep(roleStep);
             return true;
+          case "location":
+            handleBackAfterSignup();
+            return true;
           case "profile":
-            if (role === "parent") setSignupStep(roleStep);
+            if (role === "parent") handleBackAfterSignup();
             else setSignupStep("location");
             return true;
           case "media":
@@ -368,6 +380,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         else if (!guardianDone) resumeAt = "guardian-link";
         else if (!answeredQuestions) resumeAt = "questions";
         else resumeAt = PURCHASES_ENABLED ? "plan" : "tutorial";
+        // A minor never sees the plan step (see handleTutorialComplete);
+        // the tutorial's Continue finishes their signup on Basic.
+        if (resumeAt === "plan" && meRole === "athlete") {
+          const profile = await profilesService
+            .getAthleteProfile()
+            .catch(() => null);
+          if (cancelled) return;
+          const age = ageFromDob(profile?.date_of_birth);
+          if (age !== null && age < 18) resumeAt = "tutorial";
+        }
         setMode("signup");
         setSignupStep(resumeAt);
       } catch {
@@ -395,6 +417,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const handleBackToRoleSelection = () => {
     setSignupStep(
       isPhoneSignup ? "phone-role" : isOauthSignup ? "oauth-role" : "role",
+    );
+  };
+
+  /**
+   * Back from the first step after the account was created (location, or a
+   * parent's profile). The role step behind it cannot run again: the
+   * verification token is spent, the account exists and its type is fixed.
+   * So the only honest way back is to sign out and start over.
+   */
+  const handleBackAfterSignup = () => {
+    Alert.alert(
+      "Start over?",
+      "Your account is already created. To change your account type or details, log out and sign up again.",
+      [
+        { text: "Stay", style: "cancel" },
+        {
+          text: "Log out",
+          style: "destructive",
+          onPress: async () => {
+            await dispatch(logoutAsync()).catch(() => {});
+            dispatch(logout());
+            if (onCancel) {
+              onCancel();
+              return;
+            }
+            setPassword("");
+            setMode("signup");
+            setSignupStep("role");
+          },
+        },
+      ],
     );
   };
 
@@ -525,7 +578,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setSelectedPlan(planId);
     const plan = PLAN_CATALOG.find((p) => p.id === planId);
     if (!plan || plan.price === 0) {
-      await finishOnboarding();
+      // A failed finish has already shown its own alert; throwing the
+      // sentinel just releases the card's spinner so the user can retry.
+      if (!(await finishOnboarding())) throw new Error(ALREADY_HANDLED);
+      return;
+    }
+    // Paid already, but finishing the account failed afterwards: retrying
+    // must finish the account, never open the payment sheet a second time.
+    if (paidPlanRef.current === planId) {
+      if (!(await finishOnboarding())) throw new Error(ALREADY_HANDLED);
       return;
     }
     try {
@@ -539,9 +600,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         const result = await purchaseProduct(productId);
         // Re-throw on cancel so PlanSelectionScreen clears its per-card
         // spinner, matching what the Stripe path does on dismissal.
-        if (result.status === "cancelled") throw new Error("cancelled");
+        if (result.status === "cancelled") throw new Error("Canceled");
         if (result.status === "error") throw new Error(result.message);
-        await finishOnboarding();
+        await finishPaidOnboarding(planId);
         return;
       }
 
@@ -571,16 +632,33 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         }
         throw new Error(payErr.message || "Payment failed.");
       }
-      await finishOnboarding();
+      await finishPaidOnboarding(planId);
     } catch (err: any) {
       const msg =
         err?.response?.data?.message ?? err?.message ?? "Payment failed.";
-      if (msg !== "Canceled") {
+      // "Canceled" covers both Stripe's dismissal and the store's: closing
+      // the sheet is a choice, not an error, and gets no alert.
+      if (msg !== "Canceled" && msg !== ALREADY_HANDLED) {
         Alert.alert("Could not complete payment", String(msg));
       }
       // Re-throw so the per-card spinner on PlanSelectionScreen resets.
       throw err;
     }
+  };
+
+  /**
+   * The payment went through; now finish the account. If that fails the
+   * user has PAID, so say so plainly, remember the plan (the next tap on it
+   * only retries this step) and release the spinner without a second alert.
+   */
+  const finishPaidOnboarding = async (planId: string) => {
+    paidPlanRef.current = planId;
+    if (await finishOnboarding({ quiet: true })) return;
+    Alert.alert(
+      "Payment received",
+      "Your payment went through, but we couldn't finish setting up your account. Check your connection and tap the same plan again. You won't be charged twice.",
+    );
+    throw new Error(ALREADY_HANDLED);
   };
 
   /** X-to-skip: skip plan selection, stay on Basic, finish onboarding. */
@@ -657,7 +735,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   /** Tutorial → plan (the new last step). */
-  const handleTutorialComplete = () => {
+  const handleTutorialComplete = async () => {
+    // An under-18 athlete is not active until a guardian approves, so a
+    // paid plan would be charged to an account that cannot use it yet, and
+    // the money decision belongs with the guardian. They finish on Basic and
+    // can upgrade from Settings once activated. If the age can't be read we
+    // fall through to the plan step: the server still gates the account.
+    if (role === "athlete") {
+      if (tutorialBusyRef.current) return;
+      tutorialBusyRef.current = true;
+      try {
+        const profile = await profilesService
+          .getAthleteProfile()
+          .catch(() => null);
+        const age = ageFromDob(profile?.date_of_birth);
+        if (age !== null && age < 18) {
+          await finishOnboarding();
+          return;
+        }
+      } finally {
+        tutorialBusyRef.current = false;
+      }
+    }
     // Where purchases are disabled -- iOS -- the plan step must not appear
     // at all. Tapping a paid plan there opens the Stripe Payment Sheet: a
     // third-party purchase flow for digital goods, which is what App Store
@@ -677,13 +776,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
    * then drop the user into the main app. Called from both the
    * plan-paid success path and the X-to-skip path.
    */
-  const finishOnboarding = async () => {
+  const finishOnboarding = async (
+    opts: { quiet?: boolean } = {},
+  ): Promise<boolean> => {
     try {
       // Success path: the thunk also stores the server's activation_status,
       // so an under-18 athlete is gated on the first app frame.
       await dispatch(completeOnboardingAsync()).unwrap();
       onLogin?.();
-      return;
+      return true;
     } catch (err: any) {
       console.warn("[AuthScreen] completeOnboardingAsync failed:", err);
     }
@@ -699,16 +800,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       if (me?.is_onboarded) {
         dispatch(completeOnboarding());
         onLogin?.();
-        return;
+        return true;
       }
     } catch {
       // Server unreachable — fall through to the retry prompt below.
     }
 
-    Alert.alert(
-      "Almost there",
-      "We couldn't finish setting up your account. Please check your connection and try again.",
-    );
+    if (!opts.quiet) {
+      Alert.alert(
+        "Almost there",
+        "We couldn't finish setting up your account. Please check your connection and try again.",
+      );
+    }
+    return false;
   };
 
   const handleSubmit = async () => {
@@ -835,7 +939,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         return (
           <LocationSelectionScreen
             onLocationSelected={handleLocationSelected}
-            onBack={handleBackToRoleSelection}
+            onBack={handleBackAfterSignup}
           />
         );
       case "profile":
@@ -844,10 +948,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             role={role}
             onPayment={handleProfilePayment}
             onBack={() =>
-              // Parents skipped location, so "back" from
-              // their profile step goes to the role picker.
+              // Parents skipped location, so their profile step is the
+              // first one after the account was created.
               role === "parent"
-                ? handleBackToRoleSelection()
+                ? handleBackAfterSignup()
                 : setSignupStep("location")
             }
           />
