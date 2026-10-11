@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { isOurMediaUrl } from '@/lib/mediaUrl';
 
 /**
  * Full-screen photo viewer, the counterpart to /video.
@@ -42,13 +43,14 @@ export default function PhotoViewerScreen() {
       try {
         const parsed = JSON.parse(params.urls);
         if (Array.isArray(parsed)) {
-          return parsed.filter((u): u is string => typeof u === 'string' && !!u);
+          // Only our own storage: this screen is reachable by link.
+          return parsed.filter(isOurMediaUrl);
         }
       } catch {
         // Malformed param -- fall through to the single-url form below.
       }
     }
-    return typeof params.url === 'string' && params.url ? [params.url] : [];
+    return isOurMediaUrl(params.url) ? [params.url] : [];
   }, [params.urls, params.url]);
 
   const start = Math.min(

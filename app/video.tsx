@@ -4,13 +4,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { isOurMediaUrl } from '@/lib/mediaUrl';
 
 export default function VideoPlayerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { url, title } = useLocalSearchParams<{ url?: string; title?: string }>();
 
-  const source = typeof url === 'string' ? url : '';
+  // Only our own storage: this screen is reachable by link (lib/mediaUrl).
+  const source = isOurMediaUrl(url) ? url : '';
   const player = useVideoPlayer(source, (p) => {
     p.loop = false;
     p.muted = false;

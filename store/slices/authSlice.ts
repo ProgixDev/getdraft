@@ -98,13 +98,22 @@ export const logoutAsync = createAsyncThunk("auth/logoutAsync", async () => {
   // Revoke the server session + clear tokens, drop the authenticated realtime
   // socket (otherwise it stays connected as the previous user and is reused
   // after the next login), then wipe persisted auth.
-  await authService.logout();
+  //
+  // Every step after the server call must run even when that call fails.
+  // It used to throw offline: the socket stayed up as the previous user,
+  // the saved session stayed, and the screen stayed signed in -- on a shared
+  // phone the next person kept receiving the first one's DMs.
+  try {
+    await authService.logout();
+  } catch {
+    // Offline or server error: the local sign-out below still happens.
+  }
   try {
     chatService.disconnectSocket();
   } catch {
     // never let a socket teardown error block logout
   }
-  await clearAuth();
+  await clearAuth().catch(() => {});
 });
 
 export const completeOnboardingAsync = createAsyncThunk<

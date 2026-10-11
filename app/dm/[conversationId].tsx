@@ -124,11 +124,20 @@ export default function DmScreen() {
       .then(([msgs, inbox]) => {
         if (cancelled) return;
         const row = (inbox ?? []).find((c: any) => c.id === conversationId);
+        // The server's name, photo and role always win. The link's values
+        // are only a placeholder while this loads: they used to stay, so a
+        // link like getdraft://dm/<id>?otherName=GetDraft%20Support opened
+        // a stranger's thread dressed up as Support.
         if (row?.otherUser) {
-          if (!initialOtherName) setOtherName(row.otherUser.name ?? "");
-          if (!initialOtherAvatar) setOtherAvatar(row.otherUser.avatarUrl ?? null);
-          if (!initialOtherRole) setOtherRole(row.otherUser.role ?? "");
+          setOtherName(row.otherUser.name ?? "");
+          setOtherAvatar(row.otherUser.avatarUrl ?? null);
+          setOtherRole(row.otherUser.role ?? "");
           if (row.otherUser.id) setOtherUserId(String(row.otherUser.id));
+        } else {
+          // Not in my inbox: nothing from the link is trustworthy.
+          setOtherName("");
+          setOtherAvatar(null);
+          setOtherRole("");
         }
         setMessages(
           (msgs ?? []).map((m) => ({

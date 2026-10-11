@@ -207,6 +207,9 @@ export const authService = {
       await api.post("/auth/logout");
     } finally {
       await clearTokens();
+      // The Supabase client keeps its own copy of an Apple / Google session;
+      // drop it too, on this device only.
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
     }
   },
 };
