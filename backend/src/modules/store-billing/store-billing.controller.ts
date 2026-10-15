@@ -25,6 +25,19 @@ import {
 const OWNED_ELSEWHERE =
   'This purchase belongs to another GetDraft account on this Apple ID.';
 
+/**
+ * `settled` tells the app it may finish the store transaction: the purchase
+ * is accounted for, here or on the account that bought it. A subscription is
+ * accounted for on its owner's row; an unsettled purchase stays in the
+ * store's queue and is offered again.
+ */
+const ownedElsewhere = () => ({
+  granted: false,
+  settled: true,
+  ownedElsewhere: true,
+  reason: OWNED_ELSEWHERE,
+});
+
 @ApiTags('billing')
 @Controller('billing')
 export class StoreBillingController {
@@ -42,9 +55,10 @@ export class StoreBillingController {
    * purchase already tied to another account is refused, so one purchase
    * cannot unlock several accounts.
    *
-   * Returns `granted: false` rather than throwing when verification fails. The
-   * app uses that to leave the transaction unfinished, so the store offers it
-   * again later instead of the user losing what they paid for.
+   * Returns `granted: false` rather than throwing when verification fails,
+   * and finishes nothing unless `settled` is true. The app leaves an
+   * unsettled transaction unfinished, so the store offers it again later
+   * instead of the user losing what they paid for.
    */
   @Post('validate')
   @ApiOperation({ summary: 'Validate an App Store / Play purchase' })
@@ -91,19 +105,23 @@ export class StoreBillingController {
     const transactionId = verified.transactionId ?? dto.transactionId;
 
     // The app attaches the buyer's user id to every App Store purchase. A
-    // receipt carrying someone else's id comes from another GetDraft account
-    // signed into the same Apple ID, typically through Restore Purchases.
-    if (
-      verified.appAccountToken &&
-      verified.appAccountToken.toLowerCase() !== userId.toLowerCase()
-    ) {
-      this.logger.warn(
-        `user ${userId} presented ${productId} bought by ${verified.appAccountToken}`,
-      );
-      return { granted: false, reason: OWNED_ELSEWHERE, ownedElsewhere: true };
-    }
+    // receipt carrying another id comes from another GetDraft account signed
+    // into the same Apple ID, typically through Restore Purchases. If that
+    // account has since been deleted, nobody else can ever claim it, so it
+    // falls through to the account signed in now.
+    const token = verified.appAccountToken?.toLowerCase() ?? null;
+    const boughtByAnother =
+      !!token &&
+      token !== userId.toLowerCase() &&
+      (await this.storeBilling.userExists(token));
 
     if (STORE_PLAN_PRODUCTS[productId]) {
+      if (boughtByAnother) {
+        this.logger.warn(
+          `user ${userId} presented ${productId} bought by ${token}`,
+        );
+        return ownedElsewhere();
+      }
       // One store subscription, one account. Purchases made before the app
       // sent a user id carry no token, so ownership is checked here too.
       const owner =
@@ -112,11 +130,7 @@ export class StoreBillingController {
         this.logger.warn(
           `user ${userId} presented subscription ${transactionId} owned by ${owner}`,
         );
-        return {
-          granted: false,
-          reason: OWNED_ELSEWHERE,
-          ownedElsewhere: true,
-        };
+        return ownedElsewhere();
       }
 
       const result = await this.storeBilling.applyStoreSubscription({
@@ -127,12 +141,52 @@ export class StoreBillingController {
         periodStart: verified.purchasedAt ?? null,
         periodEnd: verified.expiresAt ?? null,
         active: verified.active !== false,
+        signedAt: verified.signedAt ?? null,
       });
-      return { granted: true, ...result };
+      if (result.reason === 'stripe' || result.reason === 'other_store') {
+        // Left unfinished on purpose: once the other plan ends, the store
+        // offers this purchase again and it applies.
+        return {
+          granted: false,
+          settled: false,
+          plan_id: result.plan_id,
+          reason:
+            result.reason === 'stripe'
+              ? 'Your plan is already billed through the web. Cancel it there first.'
+              : 'Another store subscription is already active on this account.',
+        };
+      }
+      // Anything else is accounted for, whether or not it was newer than
+      // what is stored, so the app may finish the transaction.
+      return {
+        granted: result.current && result.plan_id !== 'basic',
+        settled: true,
+        plan_id: result.plan_id,
+      };
     }
 
     if (verified.active === false) {
-      return { granted: false, reason: 'This purchase was refunded.' };
+      return {
+        granted: false,
+        settled: true,
+        reason: 'This purchase was refunded.',
+      };
+    }
+
+    if (boughtByAnother) {
+      // A pack paid for by another account whose validation never reached
+      // us (network, app killed) is credited to that account, which paid for
+      // it, so finishing the transaction here loses nothing.
+      await this.storeBilling.creditStorePack({
+        userId: token,
+        store,
+        productId,
+        transactionId,
+      });
+      this.logger.warn(
+        `pack ${transactionId} presented by ${userId} credited to its buyer ${token}`,
+      );
+      return { ...ownedElsewhere(), settled: true };
     }
 
     const result = await this.storeBilling.creditStorePack({
@@ -143,7 +197,7 @@ export class StoreBillingController {
     });
     // A duplicate is still a success from the caller's point of view: the
     // purchase is accounted for, so the app should finish the transaction.
-    return { granted: true, ...result };
+    return { granted: true, settled: true, ...result };
   }
 
   /**

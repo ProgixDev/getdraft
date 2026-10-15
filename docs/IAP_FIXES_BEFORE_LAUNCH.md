@@ -3,6 +3,8 @@
 **For:** Arselene (iOS lead), and your Claude Code.
 **Status (2026-09-29):** iPhone purchases are still OFF: `EXPO_PUBLIC_IAP_ENABLED` / `EXPO_PUBLIC_IAP_IOS` are not set in any build. So nothing below can hurt a user today. **Every item in Part A must be fixed before any build ships with purchases switched on.**
 
+**Update (2026-10-15):** Part A (A1–A8) is fixed, with service-level tests against a fake database (C2, for these paths). Migration `049_store_billing_hardening.sql` is applied in production (`subscriptions.store_signed_at`, `credit_store_pack()`, callable by `service_role` only). Still open: Part B (Play Billing), C1, C3, C4, and the full sandbox test round under "How to verify". A Pro purchase, restore, cancel and expiry were already tested in the sandbox against the new verifier before these fixes.
+
 These come from a multi-agent review of the billing commits `92905dc..28595b6`. Each finding was checked by a second agent that tried to disprove it, and most were reproduced against the real code.
 
 ---

@@ -22,6 +22,11 @@ export type VerifiedPurchase = {
   appAccountToken?: string | null;
   /** Apple only: 'Production' or 'Sandbox' (App Review and TestFlight). */
   environment?: string | null;
+  /**
+   * Apple only: when Apple signed this snapshot of the transaction. A newer
+   * stored state wins over an older snapshot (migration 049).
+   */
+  signedAt?: string | null;
 };
 
 export type AppleNotification = {
@@ -29,6 +34,8 @@ export type AppleNotification = {
   subtype: string | null;
   /** Null for notifications that carry no transaction, such as TEST. */
   purchase: VerifiedPurchase | null;
+  /** When Apple signed the notification; orders late and retried deliveries. */
+  signedAt: string | null;
 };
 
 /**
@@ -189,6 +196,9 @@ export class ReceiptVerifierService {
           notificationType: String(body.notificationType ?? ''),
           subtype: body.subtype ?? null,
           purchase,
+          signedAt: body.signedDate
+            ? new Date(body.signedDate).toISOString()
+            : null,
         },
       };
     } catch (err) {
@@ -251,6 +261,7 @@ export class ReceiptVerifierService {
       revocationDate?: number;
       appAccountToken?: string;
       environment?: string;
+      signedDate?: number;
     },
     gracePeriodExpiresMs?: number,
   ): VerifiedPurchase {
@@ -276,6 +287,9 @@ export class ReceiptVerifierService {
       active: !revoked && inForce,
       appAccountToken: payload.appAccountToken ?? null,
       environment: payload.environment ?? null,
+      signedAt: payload.signedDate
+        ? new Date(payload.signedDate).toISOString()
+        : null,
     };
   }
 

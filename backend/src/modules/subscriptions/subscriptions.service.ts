@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../config/supabase.config';
@@ -62,6 +63,7 @@ export class SubscriptionsService {
     if (planId === PlanId.BASIC) {
       throw new BadRequestException('Basic plan is free, no payment needed.');
     }
+    await this.refuseIfStorePlanActive(userId);
     const stripe = this.stripeService.getClient();
     const priceId = this.priceMap[planId];
     if (!priceId) {
@@ -247,10 +249,42 @@ export class SubscriptionsService {
     return data;
   }
 
+  /**
+   * A plan bought in the App Store or Google Play is billed there. Selling a
+   * Stripe plan on top would charge the user twice for one plan, so it is
+   * refused until the store subscription ends.
+   */
+  private async refuseIfStorePlanActive(userId: string) {
+    const { data: row, error } = await this.supabaseService
+      .getAdminClient()
+      .from('subscriptions')
+      .select('store, status, plan_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) {
+      throw new ServiceUnavailableException(
+        'Could not check your current plan; try again',
+      );
+    }
+    if (
+      row &&
+      (row.store === 'apple' || row.store === 'google') &&
+      row.status === 'active' &&
+      row.plan_id !== PlanId.BASIC
+    ) {
+      throw new BadRequestException(
+        row.store === 'apple'
+          ? 'Your plan is billed through the App Store. Manage it there.'
+          : 'Your plan is billed through Google Play. Manage it there.',
+      );
+    }
+  }
+
   async createCheckout(userId: string, email: string, planId: PlanId) {
     if (planId === PlanId.BASIC) {
       throw new BadRequestException('Basic plan is free, no checkout needed');
     }
+    await this.refuseIfStorePlanActive(userId);
 
     const stripe = this.stripeService.getClient();
     const priceId = this.priceMap[planId];
@@ -530,6 +564,7 @@ export class SubscriptionsService {
           .from('subscriptions')
           .update({
             plan_id: planId,
+            store: 'stripe',
             stripe_subscription_id: session.subscription ?? null,
             stripe_price_id: priceId,
             status: 'active',
@@ -710,6 +745,7 @@ export class SubscriptionsService {
         .from('subscriptions')
         .update({
           plan_id: planId,
+          store: 'stripe',
           stripe_subscription_id: sub.id,
           stripe_price_id: priceId,
           status: 'active',

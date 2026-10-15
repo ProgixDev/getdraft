@@ -25,6 +25,38 @@ export const STORE_PACK_PRODUCTS: Record<string, number> = {
 type Store = 'apple' | 'google';
 
 /**
+ * Notifications that say nothing about entitlement. CONSUMPTION_REQUEST and
+ * REFUND_DECLINED carry the transaction of a period someone asked to refund,
+ * not the subscription's current state, so applying them would rewrite a
+ * paying user's plan from a stale period.
+ */
+const IGNORED_NOTIFICATIONS = new Set([
+  'CONSUMPTION_REQUEST',
+  'REFUND_DECLINED',
+  'TEST',
+]);
+
+type SubscriptionRow = {
+  plan_id: string | null;
+  status: string | null;
+  store: string | null;
+  store_transaction_id: string | null;
+  stripe_subscription_id: string | null;
+  store_signed_at: string | null;
+  current_period_end: string | null;
+};
+
+export type StoreSubscriptionResult = {
+  /** The plan the account is on after this call. */
+  plan_id: string;
+  /** False when nothing was written; `reason` says why. */
+  applied: boolean;
+  reason?: 'stale' | 'not_current' | 'older_period' | 'stripe' | 'other_store';
+  /** True when the account's current store subscription is this one. */
+  current: boolean;
+};
+
+/**
  * Purchases made through StoreKit and Play Billing.
  *
  * Apple requires StoreKit for digital goods and rejects third-party payment
@@ -71,18 +103,44 @@ export class StoreBillingService {
   }
 
   /**
+   * Whether a GetDraft account exists. A purchase stamped with a deleted
+   * account's id has no owner left, so the account now signed in on that
+   * Apple ID may claim it.
+   */
+  async userExists(userId: string): Promise<boolean> {
+    const { data, error } = await this.supabaseService
+      .getAdminClient()
+      .from('users')
+      .select('id')
+      .eq('id', userId.toLowerCase())
+      .maybeSingle();
+    if (error) {
+      this.logger.error(`user lookup failed for ${userId}: ${error.message}`);
+      throw new ServiceUnavailableException(
+        'Could not check this purchase; try again',
+      );
+    }
+    return !!data;
+  }
+
+  /**
    * Apply an App Store Server Notification to the account that owns it.
    *
    * Every notification carries the subscription's latest transaction, and
    * that transaction already says whether it is in force (expiry, grace
    * period, revocation). So renewals, expiries, refunds and plan changes all
    * reduce to "write what the latest transaction says", and one code path
-   * covers them all.
+   * covers them all. Late and repeated deliveries are dropped by
+   * applyStoreSubscription's ordering checks.
    */
   async applyAppleNotification(notification: AppleNotification): Promise<void> {
-    const { notificationType, subtype, purchase } = notification;
+    const { notificationType, subtype, purchase, signedAt } = notification;
     const label = `${notificationType}${subtype ? `/${subtype}` : ''}`;
 
+    if (IGNORED_NOTIFICATIONS.has(notificationType)) {
+      this.logger.log(`[apple] ${label}: not about entitlement, ignored`);
+      return;
+    }
     if (!purchase?.ok || !purchase.productId || !purchase.transactionId) {
       this.logger.log(`[apple] ${label}: no transaction, nothing to apply`);
       return;
@@ -116,7 +174,7 @@ export class StoreBillingService {
       return;
     }
 
-    await this.applyStoreSubscription({
+    const result = await this.applyStoreSubscription({
       userId,
       store: 'apple',
       productId: purchase.productId,
@@ -124,14 +182,29 @@ export class StoreBillingService {
       periodStart: purchase.purchasedAt ?? null,
       periodEnd: purchase.expiresAt ?? null,
       active: purchase.active !== false,
+      signedAt: signedAt ?? purchase.signedAt ?? null,
     });
+    if (!result.applied) {
+      this.logger.log(
+        `[apple] ${label} for ${purchase.transactionId}: not applied (${result.reason})`,
+      );
+    }
   }
 
   /**
-   * Grant or renew a subscription bought in a store.
+   * Grant, renew or end a subscription bought in a store.
    *
-   * Idempotent by store_transaction_id: stores retry notifications, and a
-   * retry must not double-apply anything.
+   * Store data arrives late, out of order, repeated, and sometimes replayed
+   * by the user, and the Stripe path writes the same row. So a write is
+   * skipped when:
+   *   - it was signed before the state already stored (`stale`);
+   *   - it ends a subscription that is no longer the account's current one
+   *     (`not_current`), or describes a period older than the stored one
+   *     (`older_period`) -- refunding January must not downgrade someone who
+   *     paid for February;
+   *   - it grants a plan while another one is in force: a Stripe plan
+   *     (`stripe`) or a different store subscription (`other_store`).
+   *     Overwriting either would bill the user twice for one plan.
    */
   async applyStoreSubscription(params: {
     userId: string;
@@ -141,9 +214,12 @@ export class StoreBillingService {
     periodStart: string | null;
     periodEnd: string | null;
     active: boolean;
-  }) {
+    /** When the store signed this state; null for Google, which has none. */
+    signedAt?: string | null;
+  }): Promise<StoreSubscriptionResult> {
     const { userId, store, productId, transactionId, periodStart, periodEnd } =
       params;
+    const signedAt = params.signedAt ?? null;
     const supabase = this.supabaseService.getAdminClient();
 
     const planId = STORE_PLAN_PRODUCTS[productId];
@@ -156,49 +232,125 @@ export class StoreBillingService {
       throw new BadRequestException(`Unknown product: ${productId}`);
     }
 
+    const { data: row, error: readErr } = await supabase
+      .from('subscriptions')
+      .select(
+        'plan_id, status, store, store_transaction_id, stripe_subscription_id, store_signed_at, current_period_end',
+      )
+      .eq('user_id', userId)
+      .maybeSingle<SubscriptionRow>();
+    if (readErr || !row) {
+      this.logger.error(
+        `subscription read failed for ${userId}: ${readErr?.message ?? 'no row'}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not apply the subscription; try again',
+      );
+    }
+
+    const paid = !!row.plan_id && row.plan_id !== String(PlanId.BASIC);
+    const current =
+      row.store !== 'stripe' && row.store_transaction_id === transactionId;
+    const unchanged = (
+      reason: StoreSubscriptionResult['reason'],
+    ): StoreSubscriptionResult => ({
+      plan_id: row.plan_id ?? PlanId.BASIC,
+      applied: false,
+      reason,
+      current,
+    });
+
+    if (params.active) {
+      const stripeInForce =
+        paid &&
+        row.store === 'stripe' &&
+        !!row.stripe_subscription_id &&
+        ['active', 'trialing', 'past_due'].includes(row.status ?? '');
+      if (stripeInForce) return unchanged('stripe');
+      const otherStoreInForce =
+        paid &&
+        row.status === 'active' &&
+        (row.store === 'apple' || row.store === 'google') &&
+        !!row.store_transaction_id &&
+        row.store_transaction_id !== transactionId;
+      if (otherStoreInForce) return unchanged('other_store');
+    } else if (!current) {
+      return unchanged('not_current');
+    }
+
+    if (
+      current &&
+      periodEnd &&
+      row.current_period_end &&
+      new Date(periodEnd).getTime() < new Date(row.current_period_end).getTime()
+    ) {
+      return unchanged('older_period');
+    }
+
     // Expiry, cancellation or refund: drop to the free tier rather than
     // deleting the row, so history and bonus_swipes survive.
     const effectivePlan = params.active ? planId : PlanId.BASIC;
     const swipeLimit = PLAN_SWIPE_LIMITS[effectivePlan] ?? 20;
 
-    const { error } = await supabase
+    const update: Record<string, unknown> = {
+      plan_id: effectivePlan,
+      status: params.active ? 'active' : 'canceled',
+      store,
+      store_product_id: productId,
+      store_transaction_id: transactionId,
+      daily_swipe_limit: swipeLimit,
+      current_period_start: periodStart,
+      current_period_end: periodEnd,
+    };
+    if (signedAt) update.store_signed_at = signedAt;
+    if (params.active) {
+      // No Stripe plan is in force (checked above), so drop the link to any
+      // lapsed one: its later customer.subscription.deleted must not find
+      // this row and reset a store subscriber to Basic.
+      update.stripe_subscription_id = null;
+      update.stripe_price_id = null;
+    }
+
+    // The ordering check sits in the UPDATE itself, so two deliveries racing
+    // cannot both pass it.
+    let query = supabase
       .from('subscriptions')
-      .update({
-        plan_id: effectivePlan,
-        status: params.active ? 'active' : 'canceled',
-        store,
-        store_product_id: productId,
-        store_transaction_id: transactionId,
-        daily_swipe_limit: swipeLimit,
-        current_period_start: periodStart,
-        current_period_end: periodEnd,
-      })
+      .update(update)
       .eq('user_id', userId);
+    if (signedAt) {
+      query = query.or(
+        `store_signed_at.is.null,store_signed_at.lt."${signedAt}"`,
+      );
+    }
+    const { data: written, error } = await query.select('user_id');
     if (error) {
       this.logger.error(
         `subscription update failed for ${userId}: ${error.message}`,
       );
-      throw new BadRequestException('Could not apply the subscription.');
+      throw new ServiceUnavailableException(
+        'Could not apply the subscription; try again',
+      );
     }
+    if (!written?.length) return unchanged('stale');
 
-    await supabase
-      .from('users')
-      .update({ plan_id: effectivePlan })
-      .eq('id', userId);
+    const userUpdate: Record<string, unknown> = { plan_id: effectivePlan };
+    if (params.active) userUpdate.stripe_subscription_id = null;
+    await supabase.from('users').update(userUpdate).eq('id', userId);
 
     this.logger.log(
       `[${store}] user ${userId} -> plan ${effectivePlan} (${productId})`,
     );
-    return { plan_id: effectivePlan };
+    return { plan_id: effectivePlan, applied: true, current: true };
   }
 
   /**
    * Credit a Draft pack bought in a store.
    *
-   * The ledger insert carries the idempotency: store_transaction_id is unique
-   * (migration 043), so a duplicate notification hits 23505 and is ignored
-   * BEFORE any Drafts are added. Crediting first and recording afterwards
-   * would double-credit on a retry.
+   * credit_store_pack (migration 049) records the purchase and adds the
+   * Drafts in one transaction, keyed on the store transaction id, so a retry
+   * is a no-op and two packs credited at once both count. Any failure throws
+   * a 5xx: the app then leaves the transaction unfinished and the store
+   * offers it again, instead of the user paying for Drafts never credited.
    */
   async creditStorePack(params: {
     userId: string;
@@ -206,9 +358,8 @@ export class StoreBillingService {
     productId: string;
     transactionId: string;
     amountCents?: number;
-  }) {
+  }): Promise<{ credited: boolean; duplicate: boolean; bonus_swipes: number }> {
     const { userId, store, productId, transactionId } = params;
-    const supabase = this.supabaseService.getAdminClient();
 
     const swipes = STORE_PACK_PRODUCTS[productId];
     if (!swipes) {
@@ -218,52 +369,35 @@ export class StoreBillingService {
       throw new BadRequestException(`Unknown product: ${productId}`);
     }
 
-    const { error: ledgerErr } = await supabase
-      .from('swipe_pack_purchases')
-      .insert({
-        user_id: userId,
-        store,
-        store_transaction_id: transactionId,
-        pack_id: productId,
-        swipes_granted: swipes,
-        amount_cents: params.amountCents ?? 0,
-        // The table's CHECK allows pending / succeeded / failed only (017,
-        // confirmed on live 2026-10-07): 'granted' failed every store pack
-        // insert, so a paid pack was never credited.
-        status: 'succeeded',
-        granted_at: new Date().toISOString(),
+    const { data, error } = await this.supabaseService
+      .getAdminClient()
+      .rpc('credit_store_pack', {
+        p_user_id: userId,
+        p_store: store,
+        p_transaction_id: transactionId,
+        p_pack_id: productId,
+        p_swipes: swipes,
+        p_amount_cents: params.amountCents ?? 0,
       });
-
-    if (ledgerErr) {
-      if ((ledgerErr as { code?: string }).code === '23505') {
-        this.logger.log(
-          `[${store}] duplicate pack notification ${transactionId} ignored`,
-        );
-        return { credited: false, duplicate: true };
-      }
-      this.logger.error(`pack ledger insert failed: ${ledgerErr.message}`);
-      throw new BadRequestException('Could not record the purchase.');
+    if (error || !data) {
+      this.logger.error(
+        `pack credit failed for ${userId} (${transactionId}): ${error?.message ?? 'no result'}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not record the purchase; try again',
+      );
     }
 
-    // Read-modify-write rather than a raw increment: bonus_swipes has no
-    // atomic helper, and this runs once per purchase behind the unique index
-    // above, so the race window that would normally matter cannot be reached
-    // twice for the same transaction.
-    const { data: row } = await supabase
-      .from('subscriptions')
-      .select('bonus_swipes')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    const next = (row?.bonus_swipes ?? 0) + swipes;
-    await supabase
-      .from('subscriptions')
-      .update({ bonus_swipes: next })
-      .eq('user_id', userId);
-
+    const result = data as { credited: boolean; bonus_swipes: number };
     this.logger.log(
-      `[${store}] user ${userId} +${swipes} Drafts (${productId}) -> ${next}`,
+      result.credited
+        ? `[${store}] user ${userId} +${swipes} Drafts (${productId}) -> ${result.bonus_swipes}`
+        : `[${store}] pack ${transactionId} already credited, ignored`,
     );
-    return { credited: true, duplicate: false, bonus_swipes: next };
+    return {
+      credited: result.credited,
+      duplicate: !result.credited,
+      bonus_swipes: result.bonus_swipes,
+    };
   }
 }
