@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { Alert } from "react-native";
 import { useDispatch } from "react-redux";
 import { usersService } from "@/services/users";
+import { subscriptionsService } from "@/services/subscriptions";
+import { openManageSubscriptions } from "@/services/billing";
 import { chatService } from "@/services/chat";
 import { clearTokens } from "@/services/api";
 import { clearAuth } from "@/store/authStorage";
@@ -24,9 +26,7 @@ export function useDeleteAccount() {
   const dispatch = useDispatch();
   const [deleting, setDeleting] = useState(false);
 
-  const confirmDelete = useCallback(() => {
-    if (deleting) return;
-
+  const askToDelete = useCallback(() => {
     Alert.alert(
       "Delete Account",
       "Are you sure? This action cannot be undone. All your data, matches, and messages will be permanently deleted.",
@@ -76,7 +76,55 @@ export function useDeleteAccount() {
         },
       ],
     );
-  }, [deleting, dispatch]);
+  }, [dispatch]);
+
+  // Deleting the account cannot cancel a subscription billed by Apple or
+  // Google: only the store can. Without this warning the store keeps
+  // charging a user who believes they left, which Apple's account-deletion
+  // rules ask apps to prevent.
+  const confirmDelete = useCallback(async () => {
+    if (deleting) return;
+    const store = await activeStoreSubscription();
+    if (!store) {
+      askToDelete();
+      return;
+    }
+    const where = store === "apple" ? "the App Store" : "Google Play";
+    const Where = store === "apple" ? "The App Store" : "Google Play";
+    Alert.alert(
+      `Your subscription is billed by ${where}`,
+      `Deleting your account does not cancel it. ${Where} keeps charging you until you cancel it there.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Manage subscription",
+          onPress: () => {
+            openManageSubscriptions().catch(() => {});
+          },
+        },
+        { text: "Delete anyway", style: "destructive", onPress: askToDelete },
+      ],
+    );
+  }, [deleting, askToDelete]);
 
   return { confirmDelete, deleting };
+}
+
+/** "apple" / "google" when a store-billed plan is in force, else null. */
+async function activeStoreSubscription(): Promise<"apple" | "google" | null> {
+  try {
+    const sub = await subscriptionsService.getMySubscription();
+    const store = sub?.store;
+    if (
+      (store === "apple" || store === "google") &&
+      sub?.status === "active" &&
+      sub?.plan_id &&
+      sub.plan_id !== "basic"
+    ) {
+      return store;
+    }
+  } catch {
+    // Unknown: deletion is not blocked on a failed lookup.
+  }
+  return null;
 }

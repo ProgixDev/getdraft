@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import {
   initConnection,
   endConnection,
@@ -6,6 +6,7 @@ import {
   requestPurchase,
   finishTransaction,
   getAvailablePurchases,
+  getPendingTransactionsIOS,
   purchaseUpdatedListener,
   purchaseErrorListener,
   deepLinkToSubscriptions,
@@ -108,20 +109,30 @@ let waiting: { productId: string; resolve: (o: Outcome) => void } | null =
   null;
 
 /**
- * Idempotent; safe to call from several screens.
+ * Idempotent; safe to call from several screens at once: they all share one
+ * connection attempt, so the store is never connected (or listened to) twice.
  *
  * The store reports purchases through listeners, not through the return value
- * of requestPurchase -- on iOS that value is always an empty list. The same
- * listener also receives purchases nobody is waiting for: a renewal, an
- * Ask to Buy approval, one interrupted by the app being killed. Those are
- * settled in the background.
+ * of requestPurchase -- on iOS that value is always an empty list. The
+ * listeners are attached BEFORE connecting, because StoreKit replays
+ * unfinished transactions as soon as the connection opens and an event with
+ * no listener yet is lost. The same listener receives purchases nobody is
+ * waiting for: a renewal, an Ask to Buy approval, one interrupted by the app
+ * being killed. Those are settled in the background.
  */
-export async function initBilling(): Promise<boolean> {
-  if (!BILLING_CONFIGURED) return false;
-  if (connected) return true;
-  try {
-    await initConnection();
-    connected = true;
+let connecting: Promise<boolean> | null = null;
+
+export function initBilling(): Promise<boolean> {
+  if (!BILLING_CONFIGURED) return Promise.resolve(false);
+  if (connected) return Promise.resolve(true);
+  connecting ??= connect().finally(() => {
+    connecting = null;
+  });
+  return connecting;
+}
+
+async function connect(): Promise<boolean> {
+  if (!subscriptions.length) {
     subscriptions = [
       purchaseUpdatedListener((purchase) => {
         if (waiting?.productId === purchase.productId) {
@@ -142,6 +153,10 @@ export async function initBilling(): Promise<boolean> {
         w.resolve({ error });
       }),
     ];
+  }
+  try {
+    await initConnection();
+    connected = true;
     return true;
   } catch {
     return false;
@@ -160,9 +175,21 @@ export async function closeBilling() {
   connected = false;
 }
 
-/** Apple's own screen for changing or cancelling an App Store subscription. */
+/**
+ * The store's own screen for changing or cancelling a subscription. Falls
+ * back to the store's web page when StoreKit / Play is not connected, e.g. in
+ * a build with purchases switched off.
+ */
 export async function openManageSubscriptions() {
-  await deepLinkToSubscriptions();
+  try {
+    await deepLinkToSubscriptions();
+  } catch {
+    await Linking.openURL(
+      Platform.OS === "ios"
+        ? "https://apps.apple.com/account/subscriptions"
+        : "https://play.google.com/store/account/subscriptions",
+    );
+  }
 }
 
 /** Store-localised subscription details — real prices, not hard-coded ones. */
@@ -190,14 +217,21 @@ export type PurchaseResult =
   | { status: "cancelled" }
   | { status: "error"; message: string };
 
-type Validation = { granted: boolean; ownedElsewhere: boolean; reason?: string };
+type Validation = {
+  granted: boolean;
+  /** The server has accounted for the purchase, so it may be finished. */
+  settled: boolean;
+  ownedElsewhere: boolean;
+  reason?: string;
+};
 
 /**
  * Send a receipt to our backend for validation.
  *
  * `granted` is true only if the server confirmed the purchase with
- * Apple/Google and applied it. The caller uses that to decide whether it is
- * safe to finish the transaction.
+ * Apple/Google and gave this account what it paid for. `settled` says the
+ * purchase is accounted for -- here, on the account that bought it, or as a
+ * refund -- which is what decides whether the transaction may be finished.
  */
 async function validateWithServer(purchase: Purchase): Promise<Validation> {
   // purchaseToken is the unified receipt in v16: the StoreKit 2 JWS on iOS,
@@ -213,6 +247,7 @@ async function validateWithServer(purchase: Purchase): Promise<Validation> {
   const body = data?.data ?? data ?? {};
   return {
     granted: !!body.granted,
+    settled: !!body.settled,
     ownedElsewhere: !!body.ownedElsewhere,
     reason: body.reason,
   };
@@ -221,20 +256,33 @@ async function validateWithServer(purchase: Purchase): Promise<Validation> {
 /**
  * Validate a purchase, then finish it.
  *
- * Finished only once the server has applied it, or when it already belongs to
- * another account (it is accounted for there, and leaving it open would
- * replay it on every launch). Anything else stays unfinished so the store
- * hands it back later and the user does not lose what they paid for.
+ * Finished only when the server says it is settled. Anything else -- a
+ * network failure, a server error, a plan still billed elsewhere -- stays
+ * unfinished so the store hands it back later and the user does not lose what
+ * they paid for.
+ *
+ * One at a time: the launch replay, a restore and the listener can all hand
+ * over purchases together, and each must see the server's answer to the one
+ * before it.
  */
-async function settle(purchase: Purchase): Promise<Validation> {
-  const result = await validateWithServer(purchase);
-  if (result.granted || result.ownedElsewhere) {
-    const isSubscription = SUBSCRIPTION_IDS.includes(purchase.productId as any);
-    // Consumables are consumed so they can be bought again; subscriptions are
-    // acknowledged, which Google requires within 3 days or it auto-refunds.
-    await finishTransaction({ purchase, isConsumable: !isSubscription });
-  }
-  return result;
+let settling: Promise<unknown> = Promise.resolve();
+
+function settle(purchase: Purchase): Promise<Validation> {
+  const run = settling.then(async () => {
+    const result = await validateWithServer(purchase);
+    if (result.settled) {
+      const isSubscription = SUBSCRIPTION_IDS.includes(
+        purchase.productId as any,
+      );
+      // Consumables are consumed so they can be bought again; subscriptions
+      // are acknowledged, which Google requires within 3 days or it
+      // auto-refunds.
+      await finishTransaction({ purchase, isConsumable: !isSubscription });
+    }
+    return result;
+  });
+  settling = run.catch(() => {});
+  return run;
 }
 
 function failure(error: { code?: string; message?: string }): PurchaseResult {
@@ -296,14 +344,7 @@ export async function purchaseProduct(
   try {
     const result = await settle(purchase);
     if (result.granted) return { status: "purchased" };
-    if (result.ownedElsewhere) {
-      return {
-        status: "error",
-        message:
-          result.reason ??
-          "This purchase belongs to another GetDraft account on this Apple ID.",
-      };
-    }
+    if (result.reason) return { status: "error", message: result.reason };
   } catch {
     // Falls through: the purchase stays unfinished and is retried on launch.
   }
@@ -332,6 +373,14 @@ export async function restorePurchases(): Promise<RestoreResult> {
   if (!(await initBilling())) return result;
   try {
     const purchases = await getAvailablePurchases();
+    // Current entitlements never include consumables, so a Draft pack paid
+    // for but never validated is only found among the unfinished ones.
+    if (Platform.OS === "ios") {
+      const seen = new Set(purchases.map((p) => p.id));
+      for (const pending of await getPendingTransactionsIOS()) {
+        if (!seen.has(pending.id)) purchases.push(pending);
+      }
+    }
     for (const purchase of purchases) {
       try {
         const r = await settle(purchase);

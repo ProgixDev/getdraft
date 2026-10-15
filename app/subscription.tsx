@@ -315,7 +315,12 @@ export default function SubscriptionScreen() {
   const periodEnd = formatPeriodEnd(apiSub?.current_period_end);
   const isPaidPlan = currentPlanId !== 'basic';
   const showManage = isPaidPlan;
-  const boughtInStore = apiSub?.store === 'apple' || apiSub?.store === 'google';
+  // An App Store / Play plan in force. The `store` column alone is sticky: it
+  // still says "apple" after that plan ended and the user moved to Stripe.
+  const boughtInStore =
+    isPaidPlan &&
+    status === 'active' &&
+    (apiSub?.store === 'apple' || apiSub?.store === 'google');
 
   // On the store path the price comes from StoreKit / Play, localised to the
   // buyer's storefront. A plan the store did not return has no price, and no
@@ -329,11 +334,13 @@ export default function SubscriptionScreen() {
     const productId = storeProductForPlan(plan.id);
     return (productId && storePrices[productId]) || '—';
   };
+  // A plan is sold only through the channel that bills the current one: a
+  // Stripe subscriber buying in the store, or a store subscriber buying
+  // through Stripe, would be billed twice for one plan.
   const canBuy = (plan: (typeof plans)[number]) => {
-    if (!USES_STORE_BILLING) return true;
-    const productId = storeProductForPlan(plan.id);
-    // A web (Stripe) subscriber buying in the store would be billed twice.
+    if (!USES_STORE_BILLING) return !boughtInStore;
     if (isPaidPlan && !boughtInStore) return false;
+    const productId = storeProductForPlan(plan.id);
     return !!productId && !!storePrices[productId];
   };
 
