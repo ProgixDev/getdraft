@@ -61,10 +61,11 @@ export const TERMS_HTML = `<!DOCTYPE html>
 
   <h2>4. Subscriptions and payments</h2>
   <ul>
-    <li>GetDraft offers a free tier and paid subscription plans. Payments are processed by <strong>Stripe</strong> — we never see or store your card number.</li>
-    <li>Paid plans renew automatically at the end of each billing period until you cancel. Cancelling stops the next renewal; your plan remains active until the end of the period already paid.</li>
+    <li>GetDraft offers a free tier, paid subscription plans (Starter, Pro and Elite) and one-time packs of extra Drafts.</li>
+    <li>In the iPhone and iPad app, purchases are made with Apple's In-App Purchase and charged to your Apple ID. Purchases on other platforms are handled by that platform's payment provider. We never see or store your card number.</li>
+    <li>Paid plans renew automatically at the end of each billing period until you cancel. Cancel at least 24 hours before the end of the period to avoid the next renewal; your plan remains active until the end of the period already paid. For a plan bought in the app, manage or cancel it in your Apple ID's subscription settings.</li>
     <li>Prices may change; we will notify you in the app before a change affects your renewal.</li>
-    <li>Except where the law requires otherwise, payments are non-refundable.</li>
+    <li>Refunds for App Store purchases are handled by Apple under its policies (reportaproblem.apple.com). Other purchases are non-refundable, except where the law requires otherwise.</li>
   </ul>
 
   <h2>5. Your content</h2>

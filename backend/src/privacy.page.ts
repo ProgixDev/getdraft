@@ -51,7 +51,7 @@ export const PRIVACY_HTML = `<!DOCTYPE html>
     <tr><td>Profile content</td><td>Sport, position, level, bio, height/weight, photos, highlight videos, posts and comments</td><td>Present your athletic profile to other users — this is the core purpose of the app</td></tr>
     <tr><td>Location</td><td>City/country you provide; precise location only if you grant permission</td><td>Show where you're based, power local discovery and the talent map</td></tr>
     <tr><td>Identity verification</td><td>Government ID and a face/liveness check, processed by our verification partner Didit</td><td>Keep the community safe by verifying adult users are who they say they are. <strong>We never store your ID document</strong> — we only keep the approval result.</td></tr>
-    <tr><td>Payments</td><td>Subscription and purchase details, processed by Stripe</td><td>Provide paid plans. <strong>We never see or store your card number</strong> — payments are handled by Stripe.</td></tr>
+    <tr><td>Payments</td><td>Subscription and purchase details: which plan or Draft pack you bought, when, and its store transaction id</td><td>Provide paid plans and Draft packs. <strong>We never see or store your card number</strong>: purchases in the iPhone and iPad app are processed by Apple, and purchases on other platforms by that platform's payment provider.</td></tr>
     <tr><td>Messages</td><td>Chat messages you exchange after connecting with another user</td><td>Deliver the in-app messaging feature</td></tr>
     <tr><td>Usage &amp; device data</td><td>App interactions, device type, push notification token</td><td>Operate, secure, and improve the app; send notifications you've enabled</td></tr>
   </table>
@@ -74,7 +74,8 @@ export const PRIVACY_HTML = `<!DOCTYPE html>
       <ul>
         <li>Supabase (database, authentication &amp; storage)</li>
         <li>Railway (application hosting)</li>
-        <li>Stripe (payments)</li>
+        <li>Apple (App Store purchases)</li>
+        <li>Stripe (payments outside the App Store)</li>
         <li>Prelude (SMS verification codes)</li>
         <li>Resend (email delivery)</li>
         <li>Didit (identity verification)</li>
