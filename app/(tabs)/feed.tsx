@@ -35,7 +35,7 @@ import {
 } from "@expo-google-fonts/poppins";
 
 import { brand, theme } from "@/config/colors";
-import { READABLE_MAX_WIDTH, getContentWidth } from "@/lib/responsive";
+import { readableColumn } from "@/lib/responsive";
 import { postsService, type PostItem, type PostKind } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
@@ -43,10 +43,6 @@ import { useRoleHomeRedirect } from "@/lib/roleRoutes";
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 // Phone-width app frame, not the raw window: on tablets the frame is narrower
 // than the screen, so reels/pages must size against the frame.
-const SCREEN_WIDTH = getContentWidth();
-// Posts sit in a centred column on a tablet: a full-width square photo on an
-// iPad is ~800pt tall. Reels stay full screen.
-const POST_WIDTH = Math.min(SCREEN_WIDTH, READABLE_MAX_WIDTH);
 
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
@@ -485,7 +481,7 @@ function PostsList({
     <FlatList
       data={posts}
       keyExtractor={(p) => p.id}
-      contentContainerStyle={{ paddingBottom: insetsBottom + 90 }}
+      contentContainerStyle={[readableColumn, { paddingBottom: insetsBottom + 90 }]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -1119,8 +1115,6 @@ const styles = StyleSheet.create({
     color: "#FF7675",
   },
   card: {
-    width: POST_WIDTH,
-    alignSelf: "center",
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 10,
@@ -1161,8 +1155,10 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
   },
   cardMediaWrap: {
-    width: POST_WIDTH - 28,
-    height: POST_WIDTH - 28,
+    // Square, as wide as the post column (the list is a readable column, so
+    // ~610pt on an iPad rather than a full-width ~800pt square).
+    width: "100%",
+    aspectRatio: 1,
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: theme.surface,
@@ -1213,7 +1209,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   reelItem: {
-    width: SCREEN_WIDTH,
+    width: "100%",
     backgroundColor: "#000",
   },
   reelOverlay: {

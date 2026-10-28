@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -184,7 +185,7 @@ export default function RankingsScreen() {
       <FlatList
         data={rows}
         keyExtractor={(r) => r.user_id}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={[readableColumn, { paddingBottom: insets.bottom + 24 }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

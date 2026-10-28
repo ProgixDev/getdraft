@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -230,6 +231,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    ...readableColumn,
     padding: 16,
     gap: 16,
   },

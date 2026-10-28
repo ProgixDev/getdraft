@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -269,6 +270,7 @@ export const PhoneInputScreen: React.FC<PhoneInputScreenProps> = ({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContainer: {
+    ...readableColumn,
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 60,

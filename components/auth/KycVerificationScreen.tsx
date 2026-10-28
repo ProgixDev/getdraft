@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -286,6 +287,7 @@ function Bullet({ text }: { text: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContainer: {
+    ...readableColumn,
     flexGrow: 1,
     paddingHorizontal: 24,
   },

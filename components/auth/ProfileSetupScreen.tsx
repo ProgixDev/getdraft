@@ -37,7 +37,7 @@ import {
 import { brand, neutral } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS, sportEmoji } from "@/constants/sportsData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { PHONE_MAX_WIDTH, readableColumn } from "@/lib/responsive";
 import { ORG_TYPE_OPTIONS, websiteHref, type OrgType } from "@/lib/roles";
 import { profilesService } from "@/services/profiles";
 import { usersService } from "@/services/users";
@@ -2044,6 +2044,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   scrollContent: {
+    ...readableColumn,
     paddingHorizontal: 24,
     paddingBottom: 40,
   },

@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React from "react";
 import {
   View,
@@ -185,6 +186,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    ...readableColumn,
     alignItems: "center",
     padding: 24,
   },

@@ -2,12 +2,8 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
-import { getContentWidth } from "@/lib/responsive";
 import { brand, neutral } from "@/config/colors";
 import type { UserRole } from "@/lib/roles";
-
-// Phone-width app frame, not the raw window (tablets are wider than the frame).
-const width = getContentWidth();
 
 /** The account types a person can sign up as (admins are created by hand). */
 export type SignupRole = Exclude<UserRole, "admin">;
@@ -186,7 +182,11 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   roleCard: {
-    width: (width - 60) / 2,
+    // Two per row at any width: each card starts at 40% and grows to share
+    // the row equally. It used to be (screen width - 60) / 2, which on a
+    // tablet was wider than the form column the grid sits in.
+    flexBasis: "40%",
+    flexGrow: 1,
     backgroundColor: neutral.gray50,
     borderRadius: 16,
     padding: 16,

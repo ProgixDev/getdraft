@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -563,7 +564,7 @@ const styles = StyleSheet.create({
   },
   filterPillTextActive: { color: theme.accentText },
 
-  listContent: { paddingHorizontal: 14 },
+  listContent: { ...readableColumn, paddingHorizontal: 14 },
   divider: { height: 1, backgroundColor: theme.border, marginVertical: 4 },
 
   userRow: {

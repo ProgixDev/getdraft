@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -200,7 +201,7 @@ export default function MoreScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={[readableColumn, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {user && (

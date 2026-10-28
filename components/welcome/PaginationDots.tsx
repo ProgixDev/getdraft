@@ -9,8 +9,6 @@ import Animated, {
 import { brand } from "@/config/colors";
 import { getContentWidth } from "@/lib/responsive";
 
-// Must match the carousel's page width (the phone-width app frame), otherwise
-// the dot interpolation drifts out of sync with the slides on tablets.
 // Must equal the slide width (the window) or the dots page out of step.
 const SCREEN_WIDTH = getContentWidth();
 

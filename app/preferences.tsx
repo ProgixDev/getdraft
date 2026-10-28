@@ -24,7 +24,7 @@ import {
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral, theme } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { PHONE_MAX_WIDTH, readableColumn } from "@/lib/responsive";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { getCitiesForCountry } from "@/constants/citiesData";
 import { findCountryByName, fold } from "@/constants/countryData";
@@ -768,6 +768,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    ...readableColumn,
     paddingHorizontal: 16,
     paddingTop: 14,
     gap: 12,

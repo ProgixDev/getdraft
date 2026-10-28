@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, {
   useCallback,
   useEffect,
@@ -2026,6 +2027,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   header: {
+    ...readableColumn,
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
@@ -2112,6 +2114,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   searchRow: {
+    ...readableColumn,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -2120,6 +2123,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   modeRow: {
+    ...readableColumn,
     paddingHorizontal: 20,
     paddingTop: 4,
   },

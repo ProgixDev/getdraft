@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -533,6 +534,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   searchContainer: {
+    ...readableColumn,
     height: 50,
     borderRadius: 12,
     borderWidth: 1,
@@ -550,6 +552,7 @@ const styles = StyleSheet.create({
     color: theme.inputText,
   },
   results: {
+    ...readableColumn,
     marginTop: 12,
   },
   countryRow: {
@@ -631,6 +634,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   activeRegionRow: {
+    ...readableColumn,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -656,6 +660,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   applyButton: {
+    ...readableColumn,
     height: 50,
     borderRadius: 25,
     backgroundColor: theme.accent,

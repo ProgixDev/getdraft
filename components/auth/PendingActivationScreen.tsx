@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -266,7 +267,7 @@ export default PendingActivationScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  content: { padding: 20, gap: 14, alignItems: "stretch" },
+  content: { ...readableColumn, padding: 20, gap: 14, alignItems: "stretch" },
   lockBadge: {
     alignSelf: "center",
     width: 52,

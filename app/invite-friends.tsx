@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, Text, Pressable, Share } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -149,6 +150,7 @@ const styles = StyleSheet.create({
     color: theme.text,
   },
   content: {
+    ...readableColumn,
     flex: 1,
     alignItems: "center",
     justifyContent: "center",

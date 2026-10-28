@@ -35,7 +35,7 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, semantic, theme } from "@/config/colors";
-import { getContentWidth } from "@/lib/responsive";
+import { readableColumn, useResponsive } from "@/lib/responsive";
 import { RootState } from "@/store";
 import type { MediaSource } from "@/constants/discoverData";
 import { PURCHASES_ENABLED } from "@/constants/purchases";
@@ -63,10 +63,6 @@ import {
   type MyCardData,
 } from "@/components/profile/MyCardPreview";
 
-// Phone-width app frame, not the raw window: the app renders inside a capped
-// column, so grids must measure against that — not the tablet's full width.
-const width = getContentWidth();
-const PHOTO_SIZE = (width - 48) / 3 - 8;
 const VIDEO_HEIGHT = 180;
 const BANNER_HEIGHT = 140;
 
@@ -185,6 +181,10 @@ function getCompleteness(profile: NormalizedAthleteProfile) {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  // Three photo tiles per row across the content column, which is the window
+  // on a phone and a centred readable column on a tablet (lib/responsive).
+  const { readableWidth } = useResponsive();
+  const photoSize = (readableWidth - 48) / 3 - 8;
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
 
@@ -1087,6 +1087,7 @@ export default function ProfileScreen() {
                     key={i}
                     style={({ pressed }) => [
                       styles.photoItem,
+                      { width: photoSize, height: photoSize },
                       pressed && uri ? styles.photoPressed : null,
                     ]}
                     disabled={!uri}
@@ -1528,6 +1529,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    ...readableColumn,
     padding: 20,
     gap: 16,
   },
@@ -1774,8 +1776,6 @@ const styles = StyleSheet.create({
   },
   photoPressed: { opacity: 0.7 },
   photoItem: {
-    width: PHOTO_SIZE,
-    height: PHOTO_SIZE,
     borderRadius: 12,
     overflow: "hidden",
     backgroundColor: theme.surface,

@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     View,
@@ -445,7 +446,7 @@ export const OnboardingQuestionsScreen: React.FC<OnboardingQuestionsScreenProps>
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    scrollContent: { paddingTop: 48, paddingHorizontal: 22, paddingBottom: 32 },
+    scrollContent: { ...readableColumn, paddingTop: 48, paddingHorizontal: 22, paddingBottom: 32 },
     topBar: {
         flexDirection: 'row',
         alignItems: 'center',

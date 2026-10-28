@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -374,6 +375,7 @@ const styles = StyleSheet.create({
     color: theme.accentText,
   },
   scrollContent: {
+    ...readableColumn,
     padding: 14,
     gap: 14,
   },

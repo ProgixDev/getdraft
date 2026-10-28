@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     View,
@@ -1046,7 +1047,7 @@ function UnlockRow({ icon, title, body }: {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    scrollContent: { paddingTop: 48, paddingHorizontal: 22, paddingBottom: 32 },
+    scrollContent: { ...readableColumn, paddingTop: 48, paddingHorizontal: 22, paddingBottom: 32 },
     topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
     iconButton: {
         width: 36, height: 36, borderRadius: 18,

@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -528,7 +529,7 @@ const styles = StyleSheet.create({
   },
   tabPillTextActive: { color: theme.accentText },
 
-  scrollContent: { paddingHorizontal: 14 },
+  scrollContent: { ...readableColumn, paddingHorizontal: 14 },
 
   card: {
     backgroundColor: theme.surface,

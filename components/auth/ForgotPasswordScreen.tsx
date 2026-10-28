@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useState } from 'react';
 import {
   View,
@@ -307,6 +308,7 @@ export const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContainer: {
+    ...readableColumn,
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 60,

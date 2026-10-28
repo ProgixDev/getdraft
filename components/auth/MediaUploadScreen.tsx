@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useState } from "react";
 import {
   View,
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     color: brand.white,
   },
-  scroll: { paddingBottom: 16 },
+  scroll: { ...readableColumn, paddingBottom: 16 },
   title: {
     fontSize: 26,
     fontFamily: "Poppins_800ExtraBold",

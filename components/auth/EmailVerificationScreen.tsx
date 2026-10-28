@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useState, useRef, useEffect } from "react";
 import {
   View,
@@ -231,6 +232,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    ...readableColumn,
     flexGrow: 1,
     paddingTop: 60,
     paddingHorizontal: 24,

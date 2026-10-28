@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -332,7 +333,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: theme.text },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16, gap: 12 },
+  scrollContent: { ...readableColumn, padding: 16, gap: 12 },
   heroCard: {
     backgroundColor: brand.primary,
     borderRadius: 18,

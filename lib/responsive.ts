@@ -26,6 +26,18 @@ export const PHONE_MAX_WIDTH = 500;
 export const READABLE_MAX_WIDTH = 640;
 export const TABLET_BREAKPOINT = 600;
 
+/**
+ * Spread into a vertical ScrollView / FlatList contentContainerStyle, or a
+ * row of content: a centred column of readable width on a tablet, with the
+ * screen's background and header still edge to edge. A no-op on a phone,
+ * which is narrower than READABLE_MAX_WIDTH.
+ */
+export const readableColumn = {
+  width: "100%",
+  maxWidth: READABLE_MAX_WIDTH,
+  alignSelf: "center",
+} as const;
+
 /** The real window width (see above). Read at module scope by many files. */
 export function getContentWidth(): number {
   return Dimensions.get("window").width;

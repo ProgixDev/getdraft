@@ -1,3 +1,4 @@
+import { readableColumn } from "@/lib/responsive";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -1817,6 +1818,7 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_700Bold",
   },
   inboxContent: {
+    ...readableColumn,
     paddingHorizontal: 14,
     paddingTop: 14,
     gap: 6,
@@ -1919,10 +1921,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    ...readableColumn,
     padding: 16,
     gap: 14,
   },
   emptyScroll: {
+    ...readableColumn,
     flexGrow: 1,
   },
   athleteHero: {
@@ -2303,6 +2307,7 @@ const styles = StyleSheet.create({
     color: theme.textSecondary,
   },
   threadContent: {
+    ...readableColumn,
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 16,

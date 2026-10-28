@@ -22,6 +22,7 @@ import { theme } from "@/config/colors";
 import { usersService } from "@/services/users";
 import { apiErrorMessage } from "@/services/api";
 import { roleDisplayLabel } from "@/lib/roles";
+import { readableColumn } from "@/lib/responsive";
 
 type BlockedRow = {
   userId: string;
@@ -139,10 +140,10 @@ export default function BlockedUsersScreen() {
         <FlatList
           data={rows}
           keyExtractor={(r) => r.userId}
-          contentContainerStyle={{
-            padding: 16,
-            paddingBottom: insets.bottom + 24,
-          }}
+          contentContainerStyle={[
+            readableColumn,
+            { padding: 16, paddingBottom: insets.bottom + 24 },
+          ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
             <View style={styles.row}>

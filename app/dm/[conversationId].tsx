@@ -1,3 +1,4 @@
+import { READABLE_MAX_WIDTH, readableColumn, useResponsive } from "@/lib/responsive";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -63,6 +64,10 @@ function formatTime(iso?: string): string {
 
 export default function DmScreen() {
   const insets = useSafeAreaInsets();
+  // On a tablet the composer bar stays edge to edge but its input lines up
+  // with the centred message column above it.
+  const { windowWidth } = useResponsive();
+  const composerSidePad = Math.max(12, (windowWidth - READABLE_MAX_WIDTH) / 2 + 12);
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
   const params = useLocalSearchParams<{
@@ -483,7 +488,7 @@ export default function DmScreen() {
       )}
 
       <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
-        <View style={[styles.composer, { paddingBottom: insets.bottom + 10 }]}>
+        <View style={[styles.composer, { paddingBottom: insets.bottom + 10, paddingHorizontal: composerSidePad }]}>
           <View style={styles.inputWrap}>
             <TextInput
               value={draft}
@@ -593,6 +598,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
+    ...readableColumn,
     paddingHorizontal: 12,
     paddingTop: 12,
     gap: 8,

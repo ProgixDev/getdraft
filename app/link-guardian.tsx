@@ -1,3 +1,4 @@
+import { readableColumn } from '@/lib/responsive';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
@@ -267,7 +268,7 @@ const styles = StyleSheet.create({
   headerButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: theme.text },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scrollContent: { padding: 16, gap: 14 },
+  scrollContent: { ...readableColumn, padding: 16, gap: 14 },
   qrCard: {
     backgroundColor: theme.cardBg,
     borderRadius: 18,

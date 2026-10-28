@@ -40,7 +40,7 @@ import { brand, theme } from "@/config/colors";
 import { SPORTS_WITH_POSITIONS } from "@/constants/sportsData";
 import { fold } from "@/constants/countryData";
 import { POPULAR_AGENCIES } from "@/constants/agenciesData";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { PHONE_MAX_WIDTH, readableColumn } from "@/lib/responsive";
 import {
   isRecruiterRole,
   ORG_TYPE_OPTIONS,
@@ -1699,6 +1699,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    ...readableColumn,
     paddingHorizontal: 16,
     paddingTop: 18,
     gap: 14,

@@ -34,7 +34,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
-import { PHONE_MAX_WIDTH, getContentWidth } from '@/lib/responsive';
+import { PHONE_MAX_WIDTH, readableColumn, useResponsive } from '@/lib/responsive';
 import { ageFromDob } from '@/lib/age';
 import {
   isRecruiterRole,
@@ -62,8 +62,6 @@ import {
 } from '@/services/rankings';
 
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
-const SCREEN_WIDTH = getContentWidth();
-const PHOTO_SIZE = (SCREEN_WIDTH - 48) / 3 - 8;
 const VIDEO_HEIGHT = 180;
 const BANNER_HEIGHT = 140;
 
@@ -163,6 +161,9 @@ function roleLabel(role: Role | undefined, sub: any): string {
 
 export default function PublicProfileScreen() {
   const insets = useSafeAreaInsets();
+  // Three photo tiles per row across the content column (lib/responsive).
+  const { readableWidth } = useResponsive();
+  const photoSize = (readableWidth - 48) / 3 - 8;
   const router = useRouter();
   const { userId } = useLocalSearchParams<{ userId?: string }>();
 
@@ -598,6 +599,7 @@ export default function PublicProfileScreen() {
                     key={i}
                     style={({ pressed }) => [
                       styles.photoItem,
+                      { width: photoSize, height: photoSize },
                       pressed && styles.photoPressed,
                     ]}
                     onPress={() =>
@@ -815,7 +817,7 @@ const styles = StyleSheet.create({
     color: theme.accentText,
   },
   scroll: { flex: 1 },
-  scrollContent: { padding: 20, gap: 16 },
+  scrollContent: { ...readableColumn, padding: 20, gap: 16 },
   avatarSection: {
     backgroundColor: theme.cardBg,
     borderRadius: 16,
@@ -1037,8 +1039,6 @@ const styles = StyleSheet.create({
   },
   photoPressed: { opacity: 0.7 },
   photoItem: {
-    width: PHOTO_SIZE,
-    height: PHOTO_SIZE,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: theme.surface,
