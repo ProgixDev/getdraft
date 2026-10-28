@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, StyleSheet, Dimensions } from "react-native";
+import { View, StyleSheet } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,10 +10,10 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { theme } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { getDecorWidth } from "@/lib/responsive";
 
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
-const SCREEN_WIDTH = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+const SCREEN_WIDTH = getDecorWidth();
 const LOGO_SIZE = SCREEN_WIDTH * 0.45;
 
 interface LogoAnimationProps {

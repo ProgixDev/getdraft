@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { StyleSheet, Dimensions } from "react-native";
+import { StyleSheet } from "react-native";
 import Svg, {
   Circle,
   Ellipse,
@@ -19,10 +19,10 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { theme } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { getDecorWidth } from "@/lib/responsive";
 
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
-const SCREEN_WIDTH = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+const SCREEN_WIDTH = getDecorWidth();
 const GLOBE_SIZE = Math.min(SCREEN_WIDTH * 0.7, 320);
 const R = GLOBE_SIZE / 2;
 const CX = R;

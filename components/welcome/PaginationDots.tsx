@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, Dimensions } from "react-native";
+import { View, StyleSheet } from "react-native";
 import Animated, {
   useAnimatedStyle,
   interpolate,
@@ -7,11 +7,12 @@ import Animated, {
   SharedValue,
 } from "react-native-reanimated";
 import { brand } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { getContentWidth } from "@/lib/responsive";
 
 // Must match the carousel's page width (the phone-width app frame), otherwise
 // the dot interpolation drifts out of sync with the slides on tablets.
-const SCREEN_WIDTH = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+// Must equal the slide width (the window) or the dots page out of step.
+const SCREEN_WIDTH = getContentWidth();
 
 interface PaginationDotsProps {
   count: number;

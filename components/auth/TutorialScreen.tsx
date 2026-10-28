@@ -22,8 +22,7 @@ import { brand, neutral } from "@/config/colors";
 import { getContentWidth } from "@/lib/responsive";
 
 const { height } = Dimensions.get("window");
-// Phone-width app frame, not the raw window — otherwise the slide paging math
-// breaks on tablets (slides sized wider than the frame they live in).
+// Slides are exactly one window wide, or the paging math breaks.
 const width = getContentWidth();
 
 interface TutorialScreenProps {

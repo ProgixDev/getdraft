@@ -35,7 +35,7 @@ import { getContentWidth } from "@/lib/responsive";
 import { getMapboxToken, loadMapboxToken } from "@/lib/mapbox-token";
 
 const { height } = Dimensions.get("window");
-// Phone-width app frame, not the raw window (tablets are wider than the frame).
+// The window width (see lib/responsive).
 const width = getContentWidth();
 const GLOBE_HEIGHT = height * 0.4;
 

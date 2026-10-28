@@ -35,7 +35,7 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, semantic, theme } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { getContentWidth } from "@/lib/responsive";
 import { RootState } from "@/store";
 import type { MediaSource } from "@/constants/discoverData";
 import { PURCHASES_ENABLED } from "@/constants/purchases";
@@ -65,7 +65,7 @@ import {
 
 // Phone-width app frame, not the raw window: the app renders inside a capped
 // column, so grids must measure against that — not the tablet's full width.
-const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+const width = getContentWidth();
 const PHOTO_SIZE = (width - 48) / 3 - 8;
 const VIDEO_HEIGHT = 180;
 const BANNER_HEIGHT = 140;

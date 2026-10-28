@@ -7,7 +7,6 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Dimensions,
   Linking,
   Modal,
   TextInput,
@@ -35,7 +34,7 @@ import {
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
 import { brand, semantic, theme } from '@/config/colors';
-import { PHONE_MAX_WIDTH } from '@/lib/responsive';
+import { PHONE_MAX_WIDTH, getContentWidth } from '@/lib/responsive';
 import { ageFromDob } from '@/lib/age';
 import {
   isRecruiterRole,
@@ -63,7 +62,7 @@ import {
 } from '@/services/rankings';
 
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
-const SCREEN_WIDTH = Math.min(Dimensions.get('window').width, PHONE_MAX_WIDTH);
+const SCREEN_WIDTH = getContentWidth();
 const PHOTO_SIZE = (SCREEN_WIDTH - 48) / 3 - 8;
 const VIDEO_HEIGHT = 180;
 const BANNER_HEIGHT = 140;

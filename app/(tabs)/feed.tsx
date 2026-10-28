@@ -35,7 +35,7 @@ import {
 } from "@expo-google-fonts/poppins";
 
 import { brand, theme } from "@/config/colors";
-import { getContentWidth } from "@/lib/responsive";
+import { READABLE_MAX_WIDTH, getContentWidth } from "@/lib/responsive";
 import { postsService, type PostItem, type PostKind } from "@/services/posts";
 import CommentsSheet from "@/components/posts/CommentsSheet";
 import { useRoleHomeRedirect } from "@/lib/roleRoutes";
@@ -44,6 +44,9 @@ const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 // Phone-width app frame, not the raw window: on tablets the frame is narrower
 // than the screen, so reels/pages must size against the frame.
 const SCREEN_WIDTH = getContentWidth();
+// Posts sit in a centred column on a tablet: a full-width square photo on an
+// iPad is ~800pt tall. Reels stay full screen.
+const POST_WIDTH = Math.min(SCREEN_WIDTH, READABLE_MAX_WIDTH);
 
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
@@ -1116,6 +1119,8 @@ const styles = StyleSheet.create({
     color: "#FF7675",
   },
   card: {
+    width: POST_WIDTH,
+    alignSelf: "center",
     paddingHorizontal: 14,
     paddingTop: 14,
     paddingBottom: 10,
@@ -1156,8 +1161,8 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
   },
   cardMediaWrap: {
-    width: SCREEN_WIDTH - 28,
-    height: SCREEN_WIDTH - 28,
+    width: POST_WIDTH - 28,
+    height: POST_WIDTH - 28,
     borderRadius: 14,
     overflow: "hidden",
     backgroundColor: theme.surface,

@@ -5,7 +5,6 @@ import {
   Text,
   Pressable,
   ScrollView,
-  Dimensions,
   ActivityIndicator,
 } from "react-native";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
@@ -20,15 +19,12 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { brand, neutral } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { Plan, plans } from "@/constants/plansData";
 import { USES_STORE_BILLING } from "@/constants/purchases";
 import { storeProductForPlan } from "@/services/billing";
 import { useStorePrices } from "@/hooks/use-store-prices";
 import { SubscriptionTerms } from "@/components/billing/SubscriptionTerms";
 
-// Phone-width app frame, not the raw window (tablets are wider than the frame).
-const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
 
 interface PlanSelectionScreenProps {
   /**

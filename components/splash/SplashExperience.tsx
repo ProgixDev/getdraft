@@ -16,12 +16,13 @@ import {
   Poppins_800ExtraBold,
 } from "@expo-google-fonts/poppins";
 import { theme } from "@/config/colors";
-import { getContentWidth } from "@/lib/responsive";
+import { getDecorWidth } from "@/lib/responsive";
 import { statsService } from "@/services/stats";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
-const SCREEN_WIDTH = getContentWidth();
+// Logo and globe stay phone-sized on a tablet.
+const SCREEN_WIDTH = getDecorWidth();
 const LOGO_SIZE = SCREEN_WIDTH * 0.45;
 const GLOBE_SIZE = SCREEN_WIDTH * 0.68;
 

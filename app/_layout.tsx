@@ -28,7 +28,6 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useDiscoverModePersistence } from "@/hooks/use-discover-mode-persistence";
 import { theme } from "@/config/colors";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
 import { store, RootState } from "@/store";
 import { useAppDispatch } from "@/store/hooks";
 import { SplashScreen, WelcomeScreen } from "@/components";
@@ -325,10 +324,9 @@ export default function RootLayout() {
         >
           <GestureHandlerRootView style={styles.container}>
             <KeyboardProvider>
-              {/* Phone-width frame: on tablets the whole app renders as a
-                  centred phone-sized column with neutral gutters, so every
-                  screen looks like the mobile layout instead of a stretched
-                  one. No-op on phones (screen width < PHONE_MAX_WIDTH). */}
+              {/* Full window on every device. A tablet used to get a centred
+                  500pt phone column with black gutters, which App Review
+                  rejected (see lib/responsive.ts). */}
               <View style={styles.appFrame}>
                 <RootLayoutContent />
               </View>
@@ -355,8 +353,6 @@ const styles = StyleSheet.create({
   appFrame: {
     flex: 1,
     width: "100%",
-    maxWidth: PHONE_MAX_WIDTH,
-    alignSelf: "center",
   },
   centered: {
     justifyContent: "center",

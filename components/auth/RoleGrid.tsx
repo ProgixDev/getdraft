@@ -1,13 +1,13 @@
 import React from "react";
-import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
-import { PHONE_MAX_WIDTH } from "@/lib/responsive";
+import { getContentWidth } from "@/lib/responsive";
 import { brand, neutral } from "@/config/colors";
 import type { UserRole } from "@/lib/roles";
 
 // Phone-width app frame, not the raw window (tablets are wider than the frame).
-const width = Math.min(Dimensions.get("window").width, PHONE_MAX_WIDTH);
+const width = getContentWidth();
 
 /** The account types a person can sign up as (admins are created by hand). */
 export type SignupRole = Exclude<UserRole, "admin">;
